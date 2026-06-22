@@ -523,9 +523,16 @@ tailwind.config = {
             Connecte-toi avec un vrai compte pour voir les études et idées hebdomadaires (générées automatiquement chaque semaine).
           </div>
           <div x-show="db && user && !user.skip">
+            <div class="flex items-center justify-between mb-4">
+              <p class="text-muted text-sm">Alimenté automatiquement chaque semaine — ou à la demande.</p>
+              <button @click="generateManualIdea()" class="bg-accent text-white text-sm font-medium px-3 py-1.5 rounded-lg flex items-center gap-2">
+                <span x-show="manualIdeaLoading" class="spinner"></span> Générer maintenant
+              </button>
+            </div>
+            <p x-show="manualIdeaError" class="text-xs text-accent mb-3" x-text="manualIdeaError"></p>
             <div x-show="ideasLoading" class="text-muted text-sm mb-4">Chargement…</div>
             <div x-show="!ideasLoading && ideasList.length===0" class="text-center py-20 text-muted">
-              Aucune étude pour l'instant. La tâche hebdomadaire alimentera cet onglet automatiquement.
+              Aucune étude pour l'instant. La tâche hebdomadaire alimentera cet onglet automatiquement, ou clique "Générer maintenant".
             </div>
             <div class="space-y-4">
               <template x-for="entry in ideasList" :key="entry.id">
@@ -781,6 +788,7 @@ function app() {
     projects: [],
     allClients: [],
     ideasList: [], ideasLoading: false,
+    manualIdeaLoading: false, manualIdeaError: '',
     db: null,
     statusFilter: 'Tous',
     searchQuery: '',
@@ -982,6 +990,38 @@ function app() {
         this.toast('Étude supprimée');
       } catch(e) {
         this.toast('Erreur de suppression', 'error');
+      }
+    },
+    weekLabelNow() {
+      const now = new Date();
+      const monday = new Date(now);
+      monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      const fmt = (d) => d.toLocaleDateString('fr-FR', { day:'numeric', month:'long' });
+      return { weekStart: monday.toISOString().slice(0,10), weekLabel: `Semaine du ${fmt(monday)} au ${fmt(sunday)}` };
+    },
+    // Génère à la demande la même étude + idées que la tâche Cowork hebdomadaire,
+    // en se basant sur les projets et clients actuels, écrit directement dans Firestore.
+    async generateManualIdea() {
+      this.manualIdeaLoading = true; this.manualIdeaError = '';
+      try {
+        const ctx = this.projects.map(p => `${p.title} (${p.client}) — ${p.type}, statut: ${p.status}`).join('\n') || 'Aucun projet en cours.';
+        const text = await this.callClaude(
+          `Tu es analyste stratégique pour Moustikprod, agence vidéo freelance. Fais une courte étude (tendances du moment, opportunités pour les projets en cours) et propose 3 à 5 idées concrètes de contenu ou de prospection.\nRéponds en JSON avec ces clés exactes : etude (string, 4-6 phrases), idees (array de strings).`,
+          `Projets en cours:\n${ctx}`
+        );
+        const j = this.extractJson(text);
+        const { weekStart, weekLabel } = this.weekLabelNow();
+        const id = 'idea_' + Date.now();
+        const entry = { id, weekStart, weekLabel, etude: j.etude || '', idees: j.idees || [], createdAt: new Date().toISOString() };
+        await this.db.collection('users').doc(this.user.uid).collection('idees').doc(id).set(entry);
+        this.ideasList.unshift(entry);
+        this.toast('Étude générée');
+      } catch(e) {
+        this.manualIdeaError = 'Erreur Claude. Réessaie.';
+      } finally {
+        this.manualIdeaLoading = false;
       }
     },
     projetDocToStudio(data) {
