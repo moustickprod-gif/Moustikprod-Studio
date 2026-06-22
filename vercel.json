@@ -3,7 +3,6 @@
     { "source": "/api/(.*)", "destination": "/api/$1" }
   ],
   "functions": {
-    "api/claude.js": { "memory": 256 },
-    "api/notion.js": { "memory": 256 }
+    "api/claude.js": { "memory": 256 }
   }
 }

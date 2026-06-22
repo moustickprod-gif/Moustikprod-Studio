@@ -13,6 +13,7 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
 <script>
 tailwind.config = {
@@ -130,7 +131,8 @@ tailwind.config = {
     <header class="h-16 border-b border-line flex items-center justify-between px-6 shrink-0">
       <div class="flex items-center gap-3">
         <h1 class="font-display font-bold text-lg" x-text="navItems.find(n=>n.id===view)?.label"></h1>
-        <span x-show="!notionConfigured" class="text-xs font-mono px-2 py-0.5 rounded bg-accent2/15 text-accent2 border border-accent2/30">Mode hors-ligne Notion</span>
+        <span x-show="user && user.skip" class="text-xs font-mono px-2 py-0.5 rounded bg-accent2/15 text-accent2 border border-accent2/30">Mode démo local</span>
+        <span x-show="db && user && !user.skip" class="text-xs font-mono px-2 py-0.5 rounded bg-accent/15 text-accent border border-accent/30">Synchronisé avec le CRM</span>
       </div>
       <div class="flex items-center gap-3">
         <div class="relative" x-show="view==='projets'">
@@ -515,16 +517,9 @@ tailwind.config = {
       <template x-if="view==='reglages'">
         <div class="max-w-2xl space-y-5" x-transition.opacity.duration.150ms>
           <div class="bg-surface border border-line rounded-xl p-5">
-            <h3 class="font-display font-bold mb-3">Notion</h3>
-            <div class="space-y-2">
-              <input x-model="settings.notionProjectsDb" placeholder="Database ID projets" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
-              <input x-model="settings.notionClientsDb" placeholder="Database ID clients" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
-              <input x-model="settings.notionToken" placeholder="Token d'intégration (côté serveur via env)" class="w-full text-sm px-3 py-2 rounded-lg border border-line" disabled>
-              <button @click="testNotionConnection()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg flex items-center gap-2">
-                <span x-show="notionTestLoading" class="spinner"></span> Tester la connexion
-              </button>
-              <p x-show="notionTestResult" class="text-xs" :class="notionTestOk ? 'text-accent2' : 'text-accent'" x-text="notionTestResult"></p>
-            </div>
+            <h3 class="font-display font-bold mb-3">Données partagées</h3>
+            <p class="text-xs text-muted" x-show="db && user && !user.skip">✓ Connecté au même projet Firebase que le CRM Moustikprod — clients et projets sont synchronisés automatiquement entre les deux apps.</p>
+            <p class="text-xs text-muted" x-show="user && user.skip">Mode démo local : connecte-toi avec un compte pour synchroniser tes données avec le CRM.</p>
           </div>
 
           <div class="bg-surface border border-line rounded-xl p-5">
@@ -661,11 +656,12 @@ function app() {
 
     // data
     projects: [],
+    allClients: [],
+    db: null,
     statusFilter: 'Tous',
     searchQuery: '',
     currentProject: null,
     detailTab: 'brief',
-    notionConfigured: false,
 
     // dashboard ai
     aiSuggestLoading: false, aiSuggestions: [], aiSuggestError: '',
@@ -701,20 +697,21 @@ function app() {
     clientSearch: '', currentClient: null,
 
     // settings
-    settings: { notionProjectsDb:'', notionClientsDb:'', notionToken:'', profileName:'Moustikprod', billingInfo:'' },
-    notionTestLoading: false, notionTestResult: '', notionTestOk: false,
+    settings: { profileName:'Moustikprod', billingInfo:'' },
 
     // toasts
     toasts: [],
 
     init() {
       this.loadSettings();
-      this.loadProjects();
       this.bindShortcuts();
       this.initFirebase();
     },
 
     // ---------- AUTH ----------
+    // Studio partage le projet Firebase du CRM (mêmes comptes, mêmes données
+    // clients/projets en sous-collections Firestore). "Continuer sans connexion"
+    // reste un mode démo 100% local (localStorage), sans synchronisation.
     async initFirebase() {
       try {
         const res = await fetch('/api/firebase-config');
@@ -722,22 +719,26 @@ function app() {
         if (cfg.apiKey && window.firebase) {
           firebase.initializeApp(cfg);
           this.firebaseEnabled = true;
-          firebase.auth().onAuthStateChanged(u => {
+          firebase.auth().onAuthStateChanged(async u => {
             this.user = u;
             this.authReady = true;
-            if (u) this.loadSuggestions();
+            if (u) {
+              this.db = firebase.firestore();
+              await this.loadData();
+              this.loadSuggestions();
+            }
           });
         } else {
           this.authReady = true;
           const saved = localStorage.getItem('mp_studio_skip_auth');
           this.user = saved ? { skip:true } : null;
-          if (this.user) this.loadSuggestions();
+          if (this.user) { this.loadProjectsLocal(); this.loadSuggestions(); }
         }
       } catch(e) {
         this.authReady = true;
         const saved = localStorage.getItem('mp_studio_skip_auth');
         this.user = saved ? { skip:true } : null;
-        if (this.user) this.loadSuggestions();
+        if (this.user) { this.loadProjectsLocal(); this.loadSuggestions(); }
       }
     },
     doLogin() {
@@ -757,6 +758,7 @@ function app() {
     skipAuth() {
       localStorage.setItem('mp_studio_skip_auth','1');
       this.user = { skip:true };
+      this.loadProjectsLocal();
       this.loadSuggestions();
     },
     logout() {
@@ -789,26 +791,108 @@ function app() {
     loadSettings() {
       const s = localStorage.getItem('mp_studio_settings');
       if (s) this.settings = { ...this.settings, ...JSON.parse(s) };
-      this.notionConfigured = !!(this.settings.notionProjectsDb && this.settings.notionClientsDb);
     },
     saveSettings() {
       localStorage.setItem('mp_studio_settings', JSON.stringify(this.settings));
-      this.notionConfigured = !!(this.settings.notionProjectsDb && this.settings.notionClientsDb);
       this.toast('Réglages enregistrés');
     },
-    loadProjects() {
+    // Mode démo local (bouton "Continuer sans connexion") — aucune synchronisation.
+    loadProjectsLocal() {
       const s = localStorage.getItem('mp_studio_projects');
-      if (s) {
-        this.projects = JSON.parse(s);
-      } else {
-        this.projects = this.demoProjects();
-        this.saveProjects();
-      }
+      this.projects = s ? JSON.parse(s) : this.demoProjects();
+      if (!s) this.saveProjects();
       const h = localStorage.getItem('mp_studio_history');
       if (h) this.studioHistory = JSON.parse(h);
     },
     saveProjects() {
-      localStorage.setItem('mp_studio_projects', JSON.stringify(this.projects));
+      if (this.db && this.user && !this.user.skip) {
+        if (this.currentProject) this.saveProjectDoc(this.currentProject);
+      } else {
+        localStorage.setItem('mp_studio_projects', JSON.stringify(this.projects));
+      }
+    },
+    // Mode connecté — clients et projets partagés avec le CRM via Firestore
+    // (users/{uid}/clients/{id} et users/{uid}/projets/{id}), chaque fiche dans
+    // son propre document pour ne jamais écraser les données de l'autre app.
+    async loadData() {
+      const uid = this.user.uid;
+      try {
+        const [clientsSnap, projetsSnap] = await Promise.all([
+          this.db.collection('users').doc(uid).collection('clients').get(),
+          this.db.collection('users').doc(uid).collection('projets').get(),
+        ]);
+        this.allClients = clientsSnap.docs.map(d => d.data());
+        this.projects = projetsSnap.docs.map(d => this.projetDocToStudio(d.data()));
+        const h = localStorage.getItem('mp_studio_history');
+        if (h) this.studioHistory = JSON.parse(h);
+      } catch(e) {
+        console.error('Firestore loadData error', e);
+        this.toast('Erreur de chargement des données', 'error');
+      }
+    },
+    projetDocToStudio(data) {
+      const client = this.allClients.find(c => c.id === data.clientId);
+      return {
+        id: data.id,
+        title: data.titre || '',
+        client: client ? client.nom : '',
+        clientId: data.clientId || '',
+        type: data.typeVideo || 'Autre',
+        budget: data.budgetStudio || '',
+        deadline: data.deadlineStudio || '',
+        status: data.statutStudio || 'Brief',
+        progress: data.progress || 0,
+        brief: data.brief || null,
+        shotlist: data.shotlist || [],
+        script: data.script || '',
+        captions: data.captions || {},
+        checklist: data.checklist || [],
+        notes: data.notes || '',
+        statutCrm: data.statut || 'prospection',
+        dateCreation: data.dateCreation || new Date().toISOString(),
+      };
+    },
+    async resolveClientId(name) {
+      const trimmed = (name||'').trim();
+      if (!trimmed) return '';
+      const existing = this.allClients.find(c => (c.nom||'').toLowerCase() === trimmed.toLowerCase());
+      if (existing) return existing.id;
+      const newClient = { id:'c'+Date.now(), nom:trimmed, entreprise:'', email:'', telephone:'', adresse:'', codePostal:'', ville:'', siret:'', notes:'', typeClient:'b2b', contacts:[], dateCreation:new Date().toISOString() };
+      await this.db.collection('users').doc(this.user.uid).collection('clients').doc(newClient.id).set(newClient);
+      this.allClients.push(newClient);
+      return newClient.id;
+    },
+    // Persiste un projet : en mode connecté vers Firestore (partagé avec le CRM),
+    // sinon juste en local. Appelé après chaque modification de currentProject.
+    async saveProjectDoc(project) {
+      if (!this.db || !this.user || this.user.skip) return;
+      try {
+        let clientId = project.clientId;
+        if (!clientId && project.client) clientId = await this.resolveClientId(project.client);
+        project.clientId = clientId || '';
+        const docData = {
+          id: project.id,
+          titre: project.title,
+          clientId: project.clientId,
+          statut: project.statutCrm || 'prospection',
+          statutStudio: project.status,
+          typeVideo: project.type,
+          budgetStudio: project.budget,
+          deadlineStudio: project.deadline,
+          progress: project.progress,
+          brief: project.brief || null,
+          shotlist: project.shotlist || [],
+          script: project.script || '',
+          captions: project.captions || {},
+          checklist: project.checklist || [],
+          notes: project.notes || '',
+          dateCreation: project.dateCreation || new Date().toISOString(),
+        };
+        await this.db.collection('users').doc(this.user.uid).collection('projets').doc(project.id).set(docData, { merge:true });
+      } catch(e) {
+        console.error('Firestore saveProjectDoc error', e);
+        this.toast('Erreur de synchronisation', 'error');
+      }
     },
     demoProjects() {
       return [
@@ -935,23 +1019,14 @@ function app() {
         script: '',
         captions: {},
         checklist: [],
-        notes: ''
+        notes: '',
+        statutCrm: 'prospection',
       };
       this.projects.unshift(project);
-      this.saveProjects();
-      if (this.notionConfigured) {
-        try {
-          await fetch(`/api/notion.js?endpoint=pages`, {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({
-              parent: { database_id: this.settings.notionProjectsDb },
-              properties: {
-                Name: { title: [{ text: { content: project.title } }] }
-              }
-            })
-          });
-        } catch(e) {}
+      if (this.db && this.user && !this.user.skip) {
+        await this.saveProjectDoc(project);
+      } else {
+        this.saveProjects();
       }
       this.creatingProject = false;
       this.projectModalOpen = false;
@@ -1097,37 +1172,22 @@ function app() {
 
     // ---------- CLIENTS ----------
     get filteredClients() {
+      const q = this.clientSearch.toLowerCase();
+      if (this.db && this.user && !this.user.skip) {
+        return this.allClients
+          .map(c => ({ name: c.nom, id: c.id, count: this.projects.filter(p => p.clientId === c.id).length }))
+          .filter(c => !q || c.name.toLowerCase().includes(q));
+      }
       const map = {};
       this.projects.forEach(p => {
         if (!map[p.client]) map[p.client] = { name:p.client, count:0 };
         map[p.client].count++;
       });
-      const list = Object.values(map);
-      const q = this.clientSearch.toLowerCase();
-      return list.filter(c => !q || c.name.toLowerCase().includes(q));
+      return Object.values(map).filter(c => !q || c.name.toLowerCase().includes(q));
     },
     openClient(c) { this.currentClient = c; },
 
     // ---------- SETTINGS / DATA ----------
-    async testNotionConnection() {
-      this.notionTestLoading = true; this.notionTestResult='';
-      try {
-        const res = await fetch(`/api/notion.js?endpoint=databases/${this.settings.notionProjectsDb}`);
-        const data = await res.json();
-        if (data.object === 'database') {
-          this.notionTestOk = true;
-          this.notionTestResult = 'Connexion Notion réussie.';
-        } else {
-          this.notionTestOk = false;
-          this.notionTestResult = 'Connexion échouée: ' + (data.message || 'vérifie tes identifiants.');
-        }
-      } catch(e) {
-        this.notionTestOk = false;
-        this.notionTestResult = 'Erreur réseau.';
-      } finally {
-        this.notionTestLoading = false;
-      }
-    },
     exportData() {
       const blob = new Blob([JSON.stringify({ projects:this.projects, settings:this.settings }, null, 2)], { type:'application/json' });
       const url = URL.createObjectURL(blob);
