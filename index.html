@@ -275,60 +275,53 @@ tailwind.config = {
           </div>
 
           <div class="flex gap-1 border-b border-line mb-5 overflow-x-auto">
-            <template x-for="t in ['brief','shotlist','script','captions','suivi']" :key="t">
-              <button @click="detailTab=t" :class="detailTab===t ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-ink'" class="px-4 py-2 text-sm font-medium border-b-2 transition whitespace-nowrap" x-text="{brief:'Brief',shotlist:'Shot List',script:'Script',captions:'Captions / Réseaux',suivi:'Suivi'}[t]"></button>
+            <template x-for="t in ['pitch','scenario','decoupage','logistique','captions','suivi']" :key="t">
+              <button @click="detailTab=t" :class="detailTab===t ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-ink'" class="px-4 py-2 text-sm font-medium border-b-2 transition whitespace-nowrap" x-text="{pitch:'Pitch',scenario:'Scénario',decoupage:'Découpage technique',logistique:'Logistique',captions:'Captions / Réseaux',suivi:'Suivi'}[t]"></button>
             </template>
           </div>
 
-          <!-- BRIEF TAB -->
-          <div x-show="detailTab==='brief'" class="space-y-4">
-            <div x-show="currentProject.brief" class="bg-surface border border-line rounded-xl p-5 space-y-4 text-sm">
-              <template x-for="key in ['contexte','objectif','cible','ton','contraintes']" :key="key">
-                <div x-show="currentProject.brief && currentProject.brief[key]">
-                  <p class="text-accent font-mono text-xs mb-1 uppercase" x-text="key"></p>
-                  <p class="text-ink/90" x-text="currentProject.brief && currentProject.brief[key]"></p>
-                </div>
-              </template>
-              <div x-show="currentProject.brief && currentProject.brief.suggestions && currentProject.brief.suggestions.length">
-                <p class="text-accent font-mono text-xs mb-1 uppercase">suggestions</p>
-                <ul class="list-disc pl-5 space-y-1">
-                  <template x-for="(s,i) in (currentProject.brief?.suggestions||[])" :key="i">
-                    <li x-text="s"></li>
-                  </template>
-                </ul>
-              </div>
+          <!-- PITCH TAB -->
+          <div x-show="detailTab==='pitch'" class="space-y-4">
+            <div class="bg-surface border-l-4 border-accent2 rounded-xl p-5">
+              <p class="text-accent2 font-mono text-xs mb-2 uppercase">Pitch</p>
+              <textarea x-model="currentProject.pitch" @blur="saveProjects()" rows="4" placeholder="Le pitch généré apparaîtra ici..." class="w-full bg-transparent border-0 text-sm p-0"></textarea>
             </div>
-            <div x-show="!currentProject.brief" class="text-muted text-sm">Aucun brief généré pour ce projet.</div>
-            <button @click="regenerateBrief()" class="bg-surface border border-line rounded-lg px-4 py-2 text-sm hover:border-accent/50 transition flex items-center gap-2">
-              <span x-show="briefLoading" class="spinner"></span> Régénérer avec Claude
+            <div class="bg-accent2/10 border-l-4 border-accent2 rounded-xl p-5">
+              <p class="text-accent2 font-mono text-xs mb-2 uppercase">💡 Idées</p>
+              <textarea x-model="currentProject.idees" @blur="saveProjects()" rows="3" placeholder="Idées créatives..." class="w-full bg-transparent border-0 text-sm p-0"></textarea>
+            </div>
+            <div class="bg-accent/10 border-l-4 border-accent rounded-xl p-5">
+              <p class="text-accent font-mono text-xs mb-2 uppercase">❗ À penser</p>
+              <textarea x-model="currentProject.aPenser" @blur="saveProjects()" rows="3" placeholder="Points de vigilance..." class="w-full bg-transparent border-0 text-sm p-0"></textarea>
+            </div>
+            <button @click="regeneratePitch()" class="bg-surface border border-line rounded-lg px-4 py-2 text-sm hover:border-accent/50 transition flex items-center gap-2">
+              <span x-show="pitchLoading" class="spinner"></span> Régénérer avec Claude
             </button>
-            <p x-show="briefError" class="text-xs text-accent" x-text="briefError"></p>
+            <p x-show="pitchError" class="text-xs text-accent" x-text="pitchError"></p>
           </div>
 
-          <!-- SHOTLIST TAB -->
-          <div x-show="detailTab==='shotlist'" class="space-y-4">
+          <!-- DÉCOUPAGE TAB -->
+          <div x-show="detailTab==='decoupage'" class="space-y-4">
             <div class="flex gap-2">
-              <button @click="generateShotlist()" class="bg-accent text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2">
-                <span x-show="shotlistLoading" class="spinner"></span> Générer avec Claude
+              <button @click="generateDecoupage()" class="bg-accent text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2">
+                <span x-show="decoupageLoading" class="spinner"></span> Générer avec Claude
               </button>
-              <button @click="copyShotlist()" x-show="currentProject.shotlist && currentProject.shotlist.length" class="bg-surface border border-line text-sm px-4 py-2 rounded-lg">Copier en texte</button>
+              <button @click="copyDecoupage()" x-show="currentProject.decoupage && currentProject.decoupage.length" class="bg-surface border border-line text-sm px-4 py-2 rounded-lg">Copier en texte</button>
             </div>
-            <p x-show="shotlistError" class="text-xs text-accent" x-text="shotlistError"></p>
-            <div x-show="currentProject.shotlist && currentProject.shotlist.length" class="overflow-x-auto bg-surface border border-line rounded-xl">
+            <p x-show="decoupageError" class="text-xs text-accent" x-text="decoupageError"></p>
+            <div x-show="currentProject.decoupage && currentProject.decoupage.length" class="overflow-x-auto bg-surface border border-line rounded-xl">
               <table class="w-full text-sm">
                 <thead><tr class="text-muted text-xs font-mono border-b border-line">
-                  <th class="text-left p-2">N°</th><th class="text-left p-2">Plan</th><th class="text-left p-2">Cadrage</th><th class="text-left p-2">Mouvement</th><th class="text-left p-2">Description</th><th class="text-left p-2">Durée</th><th class="text-left p-2">Notes</th>
+                  <th class="text-left p-2">Plan</th><th class="text-left p-2">Focale / Angle</th><th class="text-left p-2">Description</th><th class="text-left p-2">Heure</th><th class="text-left p-2">Fait</th>
                 </tr></thead>
                 <tbody>
-                  <template x-for="(shot,i) in (currentProject.shotlist||[])" :key="i">
-                    <tr class="border-b border-line/50">
-                      <td class="p-2 font-mono text-xs" x-text="shot.numero"></td>
-                      <td class="p-2"><input x-model="shot.plan" @blur="saveProjects()" class="bg-transparent border-0 w-full text-sm"></td>
-                      <td class="p-2"><input x-model="shot.cadrage" @blur="saveProjects()" class="bg-transparent border-0 w-20 text-sm"></td>
-                      <td class="p-2"><input x-model="shot.mouvement" @blur="saveProjects()" class="bg-transparent border-0 w-24 text-sm"></td>
-                      <td class="p-2"><input x-model="shot.description" @blur="saveProjects()" class="bg-transparent border-0 w-full text-sm"></td>
-                      <td class="p-2"><input x-model="shot.duree" @blur="saveProjects()" class="bg-transparent border-0 w-16 text-sm"></td>
-                      <td class="p-2"><input x-model="shot.notes" @blur="saveProjects()" class="bg-transparent border-0 w-full text-sm"></td>
+                  <template x-for="(s,i) in (currentProject.decoupage||[])" :key="i">
+                    <tr class="border-b border-line/50" :class="s.transition ? 'bg-bg' : ''">
+                      <td class="p-2 font-mono text-xs"><input x-model="s.plan" @blur="saveProjects()" class="bg-transparent border-0 w-16 text-xs font-mono"></td>
+                      <td class="p-2"><input x-model="s.focale" @blur="saveProjects()" class="bg-transparent border-0 w-24 text-sm"></td>
+                      <td class="p-2"><input x-model="s.description" @blur="saveProjects()" class="bg-transparent border-0 w-full text-sm"></td>
+                      <td class="p-2"><input x-model="s.heure" @blur="saveProjects()" class="bg-transparent border-0 w-20 text-sm"></td>
+                      <td class="p-2"><input type="checkbox" x-model="s.fait" @change="saveProjects()" class="accent-accent"></td>
                     </tr>
                   </template>
                 </tbody>
@@ -336,13 +329,44 @@ tailwind.config = {
             </div>
           </div>
 
-          <!-- SCRIPT TAB -->
-          <div x-show="detailTab==='script'" class="space-y-3">
-            <button @click="generateScript()" class="bg-accent text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2">
-              <span x-show="scriptLoading" class="spinner"></span> Générer avec Claude
+          <!-- LOGISTIQUE TAB -->
+          <div x-show="detailTab==='logistique'" class="space-y-4">
+            <button @click="generateLogistique()" class="bg-accent text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2">
+              <span x-show="logistiqueLoading" class="spinner"></span> Suggérer avec Claude
             </button>
-            <p x-show="scriptError" class="text-xs text-accent" x-text="scriptError"></p>
-            <textarea x-model="currentProject.script" @blur="saveProjects()" rows="16" placeholder="Le script généré apparaîtra ici..." class="w-full bg-surface border border-line rounded-xl p-4 text-sm font-mono leading-relaxed"></textarea>
+            <p x-show="logistiqueError" class="text-xs text-accent" x-text="logistiqueError"></p>
+            <div class="bg-surface border border-line rounded-xl p-5">
+              <p class="font-display font-bold text-sm mb-3">Matos à louer</p>
+              <div class="space-y-2">
+                <template x-for="(m,i) in (currentProject.matos||[])" :key="i">
+                  <div class="flex items-center gap-2 text-sm">
+                    <input x-model="currentProject.matos[i]" @blur="saveProjects()" class="flex-1 bg-bg border border-line rounded-lg px-2 py-1 text-sm">
+                    <button @click="currentProject.matos.splice(i,1); saveProjects()" class="text-muted hover:text-accent text-xs">✕</button>
+                  </div>
+                </template>
+              </div>
+              <div class="flex gap-2 mt-3">
+                <input x-model="newMatosItem" @keydown.enter="addMatosItem()" placeholder="Ajouter du matériel..." class="flex-1 text-sm px-3 py-1.5 rounded-lg border border-line">
+                <button @click="addMatosItem()" class="text-sm bg-bg border border-line px-3 py-1.5 rounded-lg">Ajouter</button>
+              </div>
+            </div>
+            <div class="bg-surface border border-line rounded-xl p-5">
+              <p class="font-display font-bold text-sm mb-3">Lieu de tournage</p>
+              <textarea x-model="currentProject.lieu" @blur="saveProjects()" rows="3" placeholder="Lieu de tournage..." class="w-full bg-bg border border-line rounded-lg p-3 text-sm"></textarea>
+            </div>
+            <div class="bg-surface border border-line rounded-xl p-5">
+              <p class="font-display font-bold text-sm mb-3">Moodboard — notes & références</p>
+              <textarea x-model="currentProject.moodboardNotes" @blur="saveProjects()" rows="3" placeholder="Palette de couleurs, films de référence, ambiance visuelle..." class="w-full bg-bg border border-line rounded-lg p-3 text-sm"></textarea>
+            </div>
+          </div>
+
+          <!-- SCÉNARIO TAB -->
+          <div x-show="detailTab==='scenario'" class="space-y-3">
+            <button @click="generateScenario()" class="bg-accent text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2">
+              <span x-show="scenarioLoading" class="spinner"></span> Générer avec Claude
+            </button>
+            <p x-show="scenarioError" class="text-xs text-accent" x-text="scenarioError"></p>
+            <textarea x-model="currentProject.scenario" @blur="saveProjects()" rows="16" placeholder="Le scénario généré apparaîtra ici..." class="w-full bg-surface border border-line rounded-xl p-4 text-sm font-mono leading-relaxed"></textarea>
           </div>
 
           <!-- CAPTIONS TAB -->
@@ -576,13 +600,14 @@ tailwind.config = {
     </div>
 
     <div class="flex gap-1 mb-5">
-      <template x-for="n in [1,2,3]" :key="n">
+      <template x-for="n in [1,2,3,4,5,6]" :key="n">
         <div class="flex-1 h-1 rounded" :class="newProjectStep>=n ? 'bg-accent' : 'bg-line'"></div>
       </template>
     </div>
 
-    <!-- step 1 -->
+    <!-- step 1 — infos de base -->
     <div x-show="newProjectStep===1" class="space-y-3">
+      <p class="text-xs text-muted font-mono uppercase">Étape 1 — Infos de base</p>
       <input x-model="newProject.title" placeholder="Titre du projet" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
       <input x-model="newProject.client" placeholder="Nom du client" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
       <select x-model="newProject.type" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
@@ -593,31 +618,84 @@ tailwind.config = {
       <button @click="newProjectStep=2" :disabled="!newProject.title" class="w-full bg-accent text-white text-sm font-medium py-2 rounded-lg disabled:opacity-40">Suivant</button>
     </div>
 
-    <!-- step 2 -->
+    <!-- step 2 — pitch & idées -->
     <div x-show="newProjectStep===2" class="space-y-3">
-      <textarea x-model="newProject.briefRaw" rows="5" placeholder="Décris le projet en quelques phrases (objectif, cible, ton, contraintes)" class="w-full text-sm px-3 py-2 rounded-lg border border-line"></textarea>
-      <button @click="generateProjectBrief()" class="w-full bg-surface border border-line text-sm py-2 rounded-lg flex items-center justify-center gap-2">
-        <span x-show="newProjectBriefLoading" class="spinner"></span> Claude structure le brief
+      <p class="text-xs text-muted font-mono uppercase">Étape 2 — Pitch & idées</p>
+      <textarea x-model="newProject.briefRaw" rows="4" placeholder="Décris le projet en quelques phrases (objectif, cible, ton, contraintes)" class="w-full text-sm px-3 py-2 rounded-lg border border-line"></textarea>
+      <button @click="generatePitch()" class="w-full bg-surface border border-line text-sm py-2 rounded-lg flex items-center justify-center gap-2">
+        <span x-show="newProjectPitchLoading" class="spinner"></span> Claude propose un pitch
       </button>
-      <p x-show="newProjectBriefError" class="text-xs text-accent" x-text="newProjectBriefError"></p>
+      <p x-show="newProjectPitchError" class="text-xs text-accent" x-text="newProjectPitchError"></p>
+      <div x-show="newProject.pitch" class="bg-bg border border-line rounded-lg p-3 text-xs space-y-2 max-h-56 overflow-y-auto">
+        <div><p class="text-accent font-mono uppercase">Pitch</p><textarea x-model="newProject.pitch" rows="3" class="w-full bg-transparent border-0 text-ink text-xs p-0"></textarea></div>
+        <div><p class="text-accent font-mono uppercase">💡 Idées</p><textarea x-model="newProject.idees" rows="2" class="w-full bg-transparent border-0 text-ink text-xs p-0"></textarea></div>
+        <div><p class="text-accent font-mono uppercase">❗ À penser</p><textarea x-model="newProject.aPenser" rows="2" class="w-full bg-transparent border-0 text-ink text-xs p-0"></textarea></div>
+      </div>
       <div class="flex gap-2">
         <button @click="newProjectStep=1" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
         <button @click="newProjectStep=3" class="flex-1 bg-accent text-white text-sm py-2 rounded-lg">Suivant</button>
       </div>
     </div>
 
-    <!-- step 3 -->
+    <!-- step 3 — scénario -->
     <div x-show="newProjectStep===3" class="space-y-3">
-      <div x-show="newProject.brief" class="bg-bg border border-line rounded-lg p-3 text-xs space-y-2 max-h-64 overflow-y-auto">
-        <template x-for="key in ['contexte','objectif','cible','ton','contraintes']" :key="key">
-          <div x-show="newProject.brief && newProject.brief[key]">
-            <p class="text-accent font-mono uppercase">{{key}}</p>
-            <textarea x-model="newProject.brief[key]" rows="2" class="w-full bg-transparent border-0 text-ink text-xs p-0"></textarea>
-          </div>
-        </template>
-      </div>
+      <p class="text-xs text-muted font-mono uppercase">Étape 3 — Scénario</p>
+      <button @click="generateScenarioNew()" class="w-full bg-surface border border-line text-sm py-2 rounded-lg flex items-center justify-center gap-2">
+        <span x-show="newProjectScenarioLoading" class="spinner"></span> Claude propose un scénario
+      </button>
+      <p x-show="newProjectScenarioError" class="text-xs text-accent" x-text="newProjectScenarioError"></p>
+      <textarea x-model="newProject.scenario" rows="8" placeholder="Le scénario apparaîtra ici, modifiable..." class="w-full text-sm px-3 py-2 rounded-lg border border-line font-mono"></textarea>
       <div class="flex gap-2">
         <button @click="newProjectStep=2" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
+        <button @click="newProjectStep=4" class="flex-1 bg-accent text-white text-sm py-2 rounded-lg">Suivant</button>
+      </div>
+    </div>
+
+    <!-- step 4 — découpage technique -->
+    <div x-show="newProjectStep===4" class="space-y-3">
+      <p class="text-xs text-muted font-mono uppercase">Étape 4 — Découpage technique</p>
+      <button @click="generateDecoupageNew()" class="w-full bg-surface border border-line text-sm py-2 rounded-lg flex items-center justify-center gap-2">
+        <span x-show="newProjectDecoupageLoading" class="spinner"></span> Claude génère le découpage
+      </button>
+      <p x-show="newProjectDecoupageError" class="text-xs text-accent" x-text="newProjectDecoupageError"></p>
+      <p x-show="newProject.decoupage && newProject.decoupage.length" class="text-xs text-muted" x-text="(newProject.decoupage||[]).length + ' plans générés — modifiables après création'"></p>
+      <div class="flex gap-2">
+        <button @click="newProjectStep=3" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
+        <button @click="newProjectStep=5" class="flex-1 bg-accent text-white text-sm py-2 rounded-lg">Suivant</button>
+      </div>
+    </div>
+
+    <!-- step 5 — logistique -->
+    <div x-show="newProjectStep===5" class="space-y-3">
+      <p class="text-xs text-muted font-mono uppercase">Étape 5 — Logistique</p>
+      <button @click="generateLogistiqueNew()" class="w-full bg-surface border border-line text-sm py-2 rounded-lg flex items-center justify-center gap-2">
+        <span x-show="newProjectLogistiqueLoading" class="spinner"></span> Claude suggère matos & lieu
+      </button>
+      <p x-show="newProjectLogistiqueError" class="text-xs text-accent" x-text="newProjectLogistiqueError"></p>
+      <div x-show="newProject.matos && newProject.matos.length" class="bg-bg border border-line rounded-lg p-3 text-xs space-y-2 max-h-48 overflow-y-auto">
+        <p class="text-accent font-mono uppercase">Matos à louer</p>
+        <ul class="list-disc pl-4"><template x-for="(m,i) in (newProject.matos||[])" :key="i"><li x-text="m"></li></template></ul>
+      </div>
+      <textarea x-model="newProject.lieu" rows="2" placeholder="Lieu de tournage" class="w-full text-sm px-3 py-2 rounded-lg border border-line"></textarea>
+      <div class="flex gap-2">
+        <button @click="newProjectStep=4" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
+        <button @click="newProjectStep=6" class="flex-1 bg-accent text-white text-sm py-2 rounded-lg">Suivant</button>
+      </div>
+    </div>
+
+    <!-- step 6 — récap -->
+    <div x-show="newProjectStep===6" class="space-y-3">
+      <p class="text-xs text-muted font-mono uppercase">Étape 6 — Récapitulatif</p>
+      <div class="bg-bg border border-line rounded-lg p-3 text-xs space-y-2 max-h-64 overflow-y-auto">
+        <p><span class="text-accent font-mono uppercase">Titre</span> — <span x-text="newProject.title"></span></p>
+        <p><span class="text-accent font-mono uppercase">Client</span> — <span x-text="newProject.client"></span></p>
+        <p x-show="newProject.pitch"><span class="text-accent font-mono uppercase">Pitch</span> — <span x-text="newProject.pitch"></span></p>
+        <p x-show="newProject.scenario"><span class="text-accent font-mono uppercase">Scénario</span> — rédigé ✓</p>
+        <p x-show="newProject.decoupage && newProject.decoupage.length"><span class="text-accent font-mono uppercase">Découpage</span> — <span x-text="(newProject.decoupage||[]).length + ' plans'"></span></p>
+        <p x-show="newProject.lieu"><span class="text-accent font-mono uppercase">Lieu</span> — <span x-text="newProject.lieu"></span></p>
+      </div>
+      <div class="flex gap-2">
+        <button @click="newProjectStep=5" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
         <button @click="createProject()" class="flex-1 bg-accent text-white text-sm py-2 rounded-lg flex items-center justify-center gap-2">
           <span x-show="creatingProject" class="spinner"></span> Créer le projet
         </button>
@@ -671,22 +749,27 @@ function app() {
     statusFilter: 'Tous',
     searchQuery: '',
     currentProject: null,
-    detailTab: 'brief',
+    detailTab: 'pitch',
 
     // dashboard ai
     aiSuggestLoading: false, aiSuggestions: [], aiSuggestError: '',
 
-    // project modal
+    // project modal — assistant pas-à-pas (6 étapes, miroir du template Notion)
     projectModalOpen: false, newProjectStep: 1,
-    newProject: { title:'', client:'', type:'Corporate', budget:'', deadline:'', briefRaw:'', brief:null },
-    newProjectBriefLoading: false, newProjectBriefError: '', creatingProject: false,
+    newProject: { title:'', client:'', type:'Corporate', budget:'', deadline:'', briefRaw:'', pitch:'', idees:'', aPenser:'', scenario:'', decoupage:[], matos:[], lieu:'' },
+    newProjectPitchLoading: false, newProjectPitchError: '',
+    newProjectScenarioLoading: false, newProjectScenarioError: '',
+    newProjectDecoupageLoading: false, newProjectDecoupageError: '',
+    newProjectLogistiqueLoading: false, newProjectLogistiqueError: '',
+    creatingProject: false,
 
     // detail generation states
-    briefLoading: false, briefError: '',
-    shotlistLoading: false, shotlistError: '',
-    scriptLoading: false, scriptError: '',
+    pitchLoading: false, pitchError: '',
+    decoupageLoading: false, decoupageError: '',
+    scenarioLoading: false, scenarioError: '',
+    logistiqueLoading: false, logistiqueError: '',
     captionsLoading: false, captionsError: '',
-    newChecklistItem: '',
+    newChecklistItem: '', newMatosItem: '',
     notionExportLoading: false, notionExportError: '',
 
     // studio
@@ -853,9 +936,14 @@ function app() {
         deadline: data.deadlineStudio || '',
         status: data.statutStudio || 'Brief',
         progress: data.progress || 0,
-        brief: data.brief || null,
-        shotlist: data.shotlist || [],
-        script: data.script || '',
+        pitch: data.pitch || '',
+        idees: data.idees || '',
+        aPenser: data.aPenser || '',
+        scenario: data.scenario || '',
+        decoupage: data.decoupage || [],
+        matos: data.matos || [],
+        lieu: data.lieu || '',
+        moodboardNotes: data.moodboardNotes || '',
         captions: data.captions || {},
         checklist: data.checklist || [],
         notes: data.notes || '',
@@ -893,9 +981,14 @@ function app() {
           budgetStudio: project.budget,
           deadlineStudio: project.deadline,
           progress: project.progress,
-          brief: project.brief || null,
-          shotlist: project.shotlist || [],
-          script: project.script || '',
+          pitch: project.pitch || '',
+          idees: project.idees || '',
+          aPenser: project.aPenser || '',
+          scenario: project.scenario || '',
+          decoupage: project.decoupage || [],
+          matos: project.matos || [],
+          lieu: project.lieu || '',
+          moodboardNotes: project.moodboardNotes || '',
           captions: project.captions || {},
           checklist: project.checklist || [],
           notes: project.notes || '',
@@ -910,10 +1003,11 @@ function app() {
       }
     },
     demoProjects() {
+      const base = { pitch:'', idees:'', aPenser:'', scenario:'', decoupage:[], matos:[], lieu:'', moodboardNotes:'', captions:{}, notes:'' };
       return [
-        { id:'p1', title:'Aftermovie Festival Electronique', client:'Nova Events', type:'Court-métrage', status:'Montage', progress:75, deadline:'2026-07-10', budget:'3500', brief:null, shotlist:[], script:'', captions:{}, checklist:[{label:'Montage final',done:false},{label:'Color grading',done:false}], notes:'' },
-        { id:'p2', title:'Interview CEO Startup', client:'TechLab', type:'Interview', status:'Brief', progress:15, deadline:'2026-08-02', budget:'1200', brief:null, shotlist:[], script:'', captions:{}, checklist:[{label:'Brief validé',done:false}], notes:'' },
-        { id:'p3', title:'TikTok série Recettes', client:'RestoBio', type:'TikTok/Reels', status:'Livraison', progress:95, deadline:'2026-06-25', budget:'900', brief:null, shotlist:[], script:'', captions:{}, checklist:[{label:'Export vertical',done:true},{label:'Sous-titres',done:true}], notes:'' },
+        { ...base, id:'p1', title:'Aftermovie Festival Electronique', client:'Nova Events', type:'Court-métrage', status:'Montage', progress:75, deadline:'2026-07-10', budget:'3500', checklist:[{label:'Montage final',done:false},{label:'Color grading',done:false}] },
+        { ...base, id:'p2', title:'Interview CEO Startup', client:'TechLab', type:'Interview', status:'Brief', progress:15, deadline:'2026-08-02', budget:'1200', checklist:[{label:'Brief validé',done:false}] },
+        { ...base, id:'p3', title:'TikTok série Recettes', client:'RestoBio', type:'TikTok/Reels', status:'Livraison', progress:95, deadline:'2026-06-25', budget:'900', checklist:[{label:'Export vertical',done:true},{label:'Sous-titres',done:true}] },
       ];
     },
 
@@ -993,29 +1087,66 @@ function app() {
     },
     openProject(p) {
       this.currentProject = p;
-      this.detailTab = 'brief';
+      this.detailTab = 'pitch';
       this.view = 'detail';
     },
 
-    // ---------- NEW PROJECT MODAL ----------
+    // ---------- NEW PROJECT MODAL — assistant pas-à-pas ----------
     openProjectModal(prefillClient) {
       this.newProjectStep = 1;
-      this.newProject = { title:'', client: prefillClient||'', type:'Corporate', budget:'', deadline:'', briefRaw:'', brief:null };
-      this.newProjectBriefError='';
+      this.newProject = { title:'', client: prefillClient||'', type:'Corporate', budget:'', deadline:'', briefRaw:'', pitch:'', idees:'', aPenser:'', scenario:'', decoupage:[], matos:[], lieu:'' };
+      this.newProjectPitchError=''; this.newProjectScenarioError=''; this.newProjectDecoupageError=''; this.newProjectLogistiqueError='';
       this.projectModalOpen = true;
     },
-    async generateProjectBrief() {
-      this.newProjectBriefLoading = true; this.newProjectBriefError='';
+    async generatePitch() {
+      this.newProjectPitchLoading = true; this.newProjectPitchError='';
       try {
         const text = await this.callClaude(
-          `Tu es expert en production vidéo. L'utilisateur décrit un projet.\nGénère un brief structuré professionnel avec ces sections :\n- Contexte client\n- Objectif de la vidéo\n- Cible et message clé\n- Ton et style recommandés\n- Contraintes techniques\n- Suggestions créatives (3 angles différents)\nRéponds en JSON avec ces clés exactes : contexte, objectif, cible, ton, contraintes, suggestions[]`,
+          `Tu es producteur vidéo expert, co-pilote créatif sur une préproduction. L'utilisateur décrit un projet.\nPropose : un pitch percutant (3-4 phrases), des idées créatives (angles, références), et les points de vigilance à anticiper (contraintes, risques).\nRéponds en JSON avec ces clés exactes : pitch (string), idees (string), aPenser (string).`,
           `Projet: ${this.newProject.title}\nClient: ${this.newProject.client}\nType: ${this.newProject.type}\nBudget: ${this.newProject.budget}€\nDeadline: ${this.newProject.deadline}\n\nDescription: ${this.newProject.briefRaw}`
         );
-        this.newProject.brief = this.extractJson(text);
+        const j = this.extractJson(text);
+        this.newProject.pitch = j.pitch || ''; this.newProject.idees = j.idees || ''; this.newProject.aPenser = j.aPenser || '';
       } catch(e) {
-        this.newProjectBriefError = 'Erreur Claude. Réessaie.';
+        this.newProjectPitchError = 'Erreur Claude. Réessaie.';
       } finally {
-        this.newProjectBriefLoading = false;
+        this.newProjectPitchLoading = false;
+      }
+    },
+    async generateScenarioNew() {
+      this.newProjectScenarioLoading = true; this.newProjectScenarioError='';
+      try {
+        this.newProject.scenario = await this.callClaude(
+          `Tu es scénariste vidéo professionnel. ${this.scenarioPromptFor(this.newProject.type)}`,
+          `Pitch: ${this.newProject.pitch}\nIdées: ${this.newProject.idees}\nType: ${this.newProject.type}`
+        );
+      } catch(e) {
+        this.newProjectScenarioError = 'Erreur Claude. Réessaie.';
+      } finally {
+        this.newProjectScenarioLoading = false;
+      }
+    },
+    async generateDecoupageNew() {
+      this.newProjectDecoupageLoading = true; this.newProjectDecoupageError='';
+      try {
+        const text = await this.callClaude(this.decoupagePrompt(), `Pitch: ${this.newProject.pitch}\nScénario: ${this.newProject.scenario}`);
+        this.newProject.decoupage = this.extractJson(text);
+      } catch(e) {
+        this.newProjectDecoupageError = 'Erreur Claude. Réessaie.';
+      } finally {
+        this.newProjectDecoupageLoading = false;
+      }
+    },
+    async generateLogistiqueNew() {
+      this.newProjectLogistiqueLoading = true; this.newProjectLogistiqueError='';
+      try {
+        const text = await this.callClaude(this.logistiquePrompt(), `Pitch: ${this.newProject.pitch}\nType: ${this.newProject.type}\nNombre de plans: ${(this.newProject.decoupage||[]).length}`);
+        const j = this.extractJson(text);
+        this.newProject.matos = j.matos || []; this.newProject.lieu = j.lieu || '';
+      } catch(e) {
+        this.newProjectLogistiqueError = 'Erreur Claude. Réessaie.';
+      } finally {
+        this.newProjectLogistiqueLoading = false;
       }
     },
     async createProject() {
@@ -1029,9 +1160,14 @@ function app() {
         deadline: this.newProject.deadline,
         status: 'Brief',
         progress: 5,
-        brief: this.newProject.brief,
-        shotlist: [],
-        script: '',
+        pitch: this.newProject.pitch,
+        idees: this.newProject.idees,
+        aPenser: this.newProject.aPenser,
+        scenario: this.newProject.scenario,
+        decoupage: this.newProject.decoupage || [],
+        matos: this.newProject.matos || [],
+        lieu: this.newProject.lieu,
+        moodboardNotes: '',
         captions: {},
         checklist: [],
         notes: '',
@@ -1049,79 +1185,102 @@ function app() {
       this.openProject(project);
     },
 
-    // ---------- DETAIL GENERATIONS ----------
-    briefContext() {
+    // ---------- DETAIL GENERATIONS — mêmes sections que le template Notion ----------
+    projectContext() {
       const p = this.currentProject;
-      const b = p.brief;
-      return b ? `Contexte: ${b.contexte}\nObjectif: ${b.objectif}\nCible: ${b.cible}\nTon: ${b.ton}` : `Projet: ${p.title}, client ${p.client}, type ${p.type}`;
+      return `Projet: ${p.title}, client ${p.client}, type ${p.type}${p.pitch ? '\nPitch: ' + p.pitch : ''}${p.scenario ? '\nScénario: ' + p.scenario : ''}`;
     },
-    async regenerateBrief() {
-      this.briefLoading = true; this.briefError='';
+    async regeneratePitch() {
+      this.pitchLoading = true; this.pitchError='';
       try {
         const text = await this.callClaude(
-          `Tu es expert en production vidéo. Génère un brief structuré professionnel.\nRéponds en JSON avec ces clés exactes : contexte, objectif, cible, ton, contraintes, suggestions[]`,
-          `Projet: ${this.currentProject.title}\nClient: ${this.currentProject.client}\nType: ${this.currentProject.type}`
+          `Tu es producteur vidéo expert. Propose un pitch percutant, des idées créatives, et les points de vigilance.\nRéponds en JSON avec ces clés exactes : pitch (string), idees (string), aPenser (string).`,
+          this.projectContext()
         );
-        this.currentProject.brief = this.extractJson(text);
+        const j = this.extractJson(text);
+        this.currentProject.pitch = j.pitch || ''; this.currentProject.idees = j.idees || ''; this.currentProject.aPenser = j.aPenser || '';
         this.saveProjects();
-        this.toast('Brief régénéré');
+        this.toast('Pitch régénéré');
       } catch(e) {
-        this.briefError = 'Erreur Claude. Réessaie.';
+        this.pitchError = 'Erreur Claude. Réessaie.';
       } finally {
-        this.briefLoading = false;
+        this.pitchLoading = false;
       }
     },
-    async generateShotlist() {
-      this.shotlistLoading = true; this.shotlistError='';
+    decoupagePrompt() {
+      return `Tu es 1er assistant réalisateur. Génère un découpage technique professionnel pour ce projet vidéo, groupé par scène (numérotation type 1.1, 1.2, 2.1...).\nFormat JSON : array d'objets avec les clés exactes : plan (ex: "1.1"), focale (GE/PE/GP/PM/PA/PL ou type d'angle), description, heure (ambiance lumière, ex: "golden hour"), fait (toujours false), transition (true seulement pour une ligne de transition entre deux scènes, sinon false).`;
+    },
+    async generateDecoupage() {
+      this.decoupageLoading = true; this.decoupageError='';
       try {
-        const text = await this.callClaude(
-          `Tu es 1er assistant réalisateur. Génère une shot list professionnelle pour ce projet vidéo.\nFormat JSON : array d'objets avec les clés : numero, plan, cadrage, mouvement, description, duree, notes\nCadrage : GE/PE/GP/PM/PA/PL (plans standard français)\nMouvement : Fixe/Pan/Tilt/Travelling/Steadicam/Drone/Main levée`,
-          this.briefContext()
-        );
-        this.currentProject.shotlist = this.extractJson(text);
+        const text = await this.callClaude(this.decoupagePrompt(), this.projectContext());
+        this.currentProject.decoupage = this.extractJson(text);
         this.saveProjects();
-        this.toast('Shot list générée');
+        this.toast('Découpage technique généré');
       } catch(e) {
-        this.shotlistError = 'Erreur Claude. Réessaie.';
+        this.decoupageError = 'Erreur Claude. Réessaie.';
       } finally {
-        this.shotlistLoading = false;
+        this.decoupageLoading = false;
       }
     },
-    copyShotlist() {
-      const rows = (this.currentProject.shotlist||[]).map(s => `${s.numero}. ${s.plan} | ${s.cadrage} | ${s.mouvement} | ${s.description} | ${s.duree} | ${s.notes}`);
+    copyDecoupage() {
+      const rows = (this.currentProject.decoupage||[]).map(s => `${s.plan} — ${s.focale} — ${s.description} (${s.heure})`);
       this.copyText(rows.join('\n'));
     },
-    scriptPromptFor(type) {
+    scenarioPromptFor(type) {
       const map = {
-        'Corporate': 'Génère un script voix-off professionnel pour une vidéo corporate.',
-        'TikTok/Reels': 'Génère un script format 5C (Contexte, Cap, Conflit, Changement, Conclusion) pour TikTok/Reels.',
+        'Corporate': 'Génère un scénario / script voix-off professionnel pour une vidéo corporate.',
+        'TikTok/Reels': 'Génère un scénario format 5C (Contexte, Cap, Conflit, Changement, Conclusion) pour TikTok/Reels.',
         'Interview': 'Génère un guide de questions structuré pour une interview.',
         'Vlog': 'Génère une trame narrative avec temps forts pour un vlog.',
       };
-      return map[type] || 'Génère un script vidéo professionnel adapté au type de vidéo.';
+      return map[type] || 'Génère un scénario vidéo professionnel adapté au type de vidéo.';
     },
-    async generateScript() {
-      this.scriptLoading = true; this.scriptError='';
+    async generateScenario() {
+      this.scenarioLoading = true; this.scenarioError='';
       try {
-        const text = await this.callClaude(
-          `Tu es scénariste vidéo professionnel. ${this.scriptPromptFor(this.currentProject.type)}`,
-          this.briefContext()
+        this.currentProject.scenario = await this.callClaude(
+          `Tu es scénariste vidéo professionnel. ${this.scenarioPromptFor(this.currentProject.type)}`,
+          this.projectContext()
         );
-        this.currentProject.script = text;
         this.saveProjects();
-        this.toast('Script généré');
+        this.toast('Scénario généré');
       } catch(e) {
-        this.scriptError = 'Erreur Claude. Réessaie.';
+        this.scenarioError = 'Erreur Claude. Réessaie.';
       } finally {
-        this.scriptLoading = false;
+        this.scenarioLoading = false;
       }
+    },
+    logistiquePrompt() {
+      return `Tu es chef de production vidéo. Suggère le matériel à louer et un lieu de tournage adapté à ce projet.\nRéponds en JSON avec ces clés exactes : matos (array de strings, ex: "Steadicam", "Drone DJI"), lieu (string, description du lieu suggéré).`;
+    },
+    async generateLogistique() {
+      this.logistiqueLoading = true; this.logistiqueError='';
+      try {
+        const text = await this.callClaude(this.logistiquePrompt(), this.projectContext() + `\nNombre de plans: ${(this.currentProject.decoupage||[]).length}`);
+        const j = this.extractJson(text);
+        this.currentProject.matos = j.matos || []; this.currentProject.lieu = j.lieu || this.currentProject.lieu;
+        this.saveProjects();
+        this.toast('Logistique suggérée');
+      } catch(e) {
+        this.logistiqueError = 'Erreur Claude. Réessaie.';
+      } finally {
+        this.logistiqueLoading = false;
+      }
+    },
+    addMatosItem() {
+      if (!this.newMatosItem.trim()) return;
+      if (!this.currentProject.matos) this.currentProject.matos = [];
+      this.currentProject.matos.push(this.newMatosItem);
+      this.newMatosItem = '';
+      this.saveProjects();
     },
     async generateCaptions() {
       this.captionsLoading = true; this.captionsError='';
       try {
         const text = await this.callClaude(
           `Tu es expert réseaux sociaux. Génère 4 captions adaptées à ce projet vidéo.\nRéponds en JSON avec les clés exactes : instagram, tiktok, linkedin, twitter.\ninstagram: avec emojis, hashtags, CTA. tiktok: accroche + corps + hashtags. linkedin: ton pro. twitter: 280 caractères max.`,
-          this.briefContext()
+          this.projectContext()
         );
         this.currentProject.captions = this.extractJson(text);
         this.saveProjects();
@@ -1152,34 +1311,47 @@ function app() {
     notionParagraph(text) { return { object:'block', type:'paragraph', paragraph:{ rich_text: this.notionRichText(text) } }; },
     notionHeading(text) { return { object:'block', type:'heading_2', heading_2:{ rich_text: this.notionRichText(text) } }; },
     notionBullet(text) { return { object:'block', type:'bulleted_list_item', bulleted_list_item:{ rich_text: this.notionRichText(text) } }; },
+    notionToggle(title, color, children) {
+      return { object:'block', type:'toggle', toggle:{ rich_text: this.notionRichText(title), color, children: children.length ? children : [this.notionParagraph('')] } };
+    },
+    notionCallout(emoji, text, color) {
+      return { object:'block', type:'callout', callout:{ rich_text: this.notionRichText(text), icon:{ type:'emoji', emoji }, color } };
+    },
+    notionTableRow(cells) {
+      return { object:'block', type:'table_row', table_row:{ cells: cells.map(c => this.notionRichText(c)) } };
+    },
+    // Reproduit la structure exacte du template de préproduction : toggles
+    // PITCH/SCÉNARIO/MATOS À LOUER/LIEU DE TOURNAGE, callouts Idées/À penser,
+    // tableau Découpage Technique, section Moodboard.
     buildNotionBlocks(p) {
       const blocks = [];
-      if (p.brief) {
-        blocks.push(this.notionHeading('Brief'));
-        const labels = { contexte:'Contexte client', objectif:'Objectif', cible:'Cible et message clé', ton:'Ton et style', contraintes:'Contraintes' };
-        for (const key of Object.keys(labels)) {
-          if (p.brief[key]) blocks.push(this.notionParagraph(labels[key] + ' — ' + p.brief[key]));
+      blocks.push(this.notionToggle('PITCH', 'yellow_background', p.pitch ? [this.notionParagraph(p.pitch)] : []));
+      blocks.push(this.notionToggle('SCÉNARIO', 'green_background', p.scenario ? p.scenario.split('\n').map(l => this.notionParagraph(l)) : []));
+      blocks.push(this.notionToggle('MATOS À LOUER', 'gray_background', (p.matos||[]).map(m => this.notionBullet(m))));
+      blocks.push(this.notionToggle('LIEU DE TOURNAGE', 'blue_background', p.lieu ? [this.notionParagraph(p.lieu)] : []));
+
+      if (p.idees) blocks.push(this.notionCallout('💡', p.idees, 'yellow_background'));
+      if (p.aPenser) blocks.push(this.notionCallout('❗', p.aPenser, 'red_background'));
+
+      if (p.decoupage && p.decoupage.length) {
+        blocks.push(this.notionHeading('Découpage Technique'));
+        const rows = [this.notionTableRow(['Plan','Focale / Angle','Description','heure','Fait'])];
+        for (const s of p.decoupage) {
+          rows.push(this.notionTableRow([s.plan || '', s.transition ? 'TRANSITION' : (s.focale||''), s.description||'', s.heure||'', s.fait ? '✓' : '']));
         }
-        if (Array.isArray(p.brief.suggestions)) {
-          for (const s of p.brief.suggestions) blocks.push(this.notionBullet(s));
-        }
+        blocks.push({ object:'block', type:'table', table:{ table_width:5, has_column_header:true, has_row_header:false, children:rows } });
       }
-      if (p.shotlist && p.shotlist.length) {
-        blocks.push(this.notionHeading('Shot List'));
-        for (const s of p.shotlist) {
-          blocks.push(this.notionBullet(`${s.numero}. ${s.plan} — ${s.cadrage} / ${s.mouvement} — ${s.description} (${s.duree})${s.notes ? ' — ' + s.notes : ''}`));
-        }
-      }
-      if (p.script) {
-        blocks.push(this.notionHeading('Script'));
-        for (const line of p.script.split('\n')) blocks.push(this.notionParagraph(line));
-      }
+
       if (p.captions && Object.keys(p.captions).length) {
         blocks.push(this.notionHeading('Captions / Réseaux'));
         for (const [net, text] of Object.entries(p.captions)) {
           if (text) blocks.push(this.notionParagraph(net.toUpperCase() + ' — ' + text));
         }
       }
+
+      blocks.push(this.notionHeading('Moodboard'));
+      blocks.push(this.notionParagraph(p.moodboardNotes || 'Palette, références visuelles, ambiance — à compléter dans Notion.'));
+
       return blocks.slice(0, 100);
     },
     async exportToNotion() {
