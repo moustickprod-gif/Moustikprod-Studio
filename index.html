@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moustikprod Studio</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        bg: '#F4FAFB',
+        surface: '#FFFFFF',
+        accent: '#024059',
+        accent2: '#3CD6D1',
+        ink: '#024059',
+        muted: '#5C7D87',
+        line: '#DCE6E9'
+      },
+      fontFamily: {
+        display: ['Poppins', 'sans-serif'],
+        body: ['Poppins', 'sans-serif'],
+        mono: ['Poppins', 'sans-serif']
+      }
+    }
+  }
+}
+</script>
+
+<style>
+  body { background:#F4FAFB; color:#024059; font-family:'Poppins',sans-serif; }
+  .font-display { font-family:'Poppins',sans-serif; font-weight:600; }
+  .font-mono { font-family:'Poppins',sans-serif; font-weight:500; }
+  ::-webkit-scrollbar { width:8px; height:8px; }
+  ::-webkit-scrollbar-thumb { background:#DCE6E9; border-radius:4px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+
+  [x-cloak] { display:none !important; }
+
+  .fade-enter { transition: opacity .15s ease; }
+  .card-slide-enter { animation: cardSlide .25s ease both; }
+  @keyframes cardSlide { from { opacity:0; transform:translateX(24px); } to { opacity:1; transform:translateX(0); } }
+
+  .modal-slide-enter { animation: modalSlide .2s ease both; }
+  @keyframes modalSlide { from { opacity:0; transform:translateY(16px) scale(.98); } to { opacity:1; transform:translateY(0) scale(1); } }
+
+  .timeline-track { display:flex; height:6px; border-radius:4px; overflow:hidden; background:#DCE6E9; }
+  .timeline-seg { height:100%; }
+
+  .skeleton { background:linear-gradient(90deg,#DCE6E9 25%,#eef5f6 37%,#DCE6E9 63%); background-size:400% 100%; animation: sk 1.4s ease infinite; border-radius:6px; }
+  @keyframes sk { 0%{background-position:100% 50%} 100%{background-position:0 50%} }
+
+  .spinner { width:16px; height:16px; border:2px solid color-mix(in srgb, currentColor 25%, transparent); border-top-color:currentColor; border-radius:50%; animation:spin .6s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  textarea, input, select { background:#FFFFFF; }
+  textarea:focus, input:focus, select:focus { outline:none; box-shadow:0 0 0 2px #3CD6D1; }
+</style>
+</head>
+<body class="font-body antialiased" x-data="app()" x-init="init()" x-cloak>
+
+<!-- ===================== LOGIN ===================== -->
+<div x-show="!authReady || !user" class="min-h-screen flex items-center justify-center px-4">
+  <div class="w-full max-w-sm">
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center gap-2 mb-2">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><rect x="2" y="6" width="20" height="14" rx="2" stroke="#3CD6D1" stroke-width="2"/><path d="M2 10h20M6 6v4M11 6v4M16 6v4" stroke="#3CD6D1" stroke-width="2"/></svg>
+        <span class="font-display font-bold text-2xl">Moustikprod <span class="text-accent">Studio</span></span>
+      </div>
+      <p class="text-muted text-sm font-mono">Gestion de production vidéo</p>
+    </div>
+
+    <div class="bg-surface border border-line rounded-xl p-6" x-show="authReady">
+      <h2 class="font-display font-bold text-lg mb-4" x-text="authMode==='login' ? 'Connexion' : 'Créer un compte'"></h2>
+      <form @submit.prevent="authMode==='login' ? doLogin() : doSignup()" class="space-y-3">
+        <input type="email" x-model="authEmail" placeholder="Email" required class="w-full px-3 py-2 rounded-lg border border-line text-sm">
+        <input type="password" x-model="authPassword" placeholder="Mot de passe" required class="w-full px-3 py-2 rounded-lg border border-line text-sm">
+        <p x-show="authError" x-text="authError" class="text-xs text-accent"></p>
+        <button type="submit" class="w-full bg-accent text-white font-medium py-2 rounded-lg hover:opacity-90 transition flex items-center justify-center gap-2">
+          <span x-show="authLoading" class="spinner"></span>
+          <span x-text="authMode==='login' ? 'Se connecter' : 'Créer le compte'"></span>
+        </button>
+      </form>
+      <button @click="authMode = authMode==='login' ? 'signup' : 'login'" class="text-xs text-muted mt-4 hover:text-ink transition w-full text-center">
+        <span x-text="authMode==='login' ? 'Pas de compte ? Créer un compte' : 'Déjà un compte ? Se connecter'"></span>
+      </button>
+      <button @click="skipAuth()" class="text-xs text-accent2 mt-2 w-full text-center hover:underline">Continuer sans connexion (démo)</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== APP SHELL ===================== -->
+<div x-show="authReady && user" class="flex h-screen overflow-hidden">
+
+  <!-- SIDEBAR -->
+  <aside :class="sidebarOpen ? 'w-56' : 'w-16'" class="bg-surface border-r border-line flex flex-col transition-all duration-200 shrink-0">
+    <div class="flex items-center gap-2 px-4 h-16 border-b border-line shrink-0">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="shrink-0"><rect x="2" y="6" width="20" height="14" rx="2" stroke="#3CD6D1" stroke-width="2"/><path d="M2 10h20M6 6v4M11 6v4M16 6v4" stroke="#3CD6D1" stroke-width="2"/></svg>
+      <span x-show="sidebarOpen" class="font-display font-bold text-sm whitespace-nowrap">Moustikprod</span>
+    </div>
+    <nav class="flex-1 py-4 space-y-1 px-2">
+      <template x-for="item in navItems" :key="item.id">
+        <button @click="view = item.id" :class="view===item.id ? 'bg-accent/15 text-accent border-l-2 border-accent' : 'text-muted hover:text-ink hover:bg-bg border-l-2 border-transparent'"
+          class="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition">
+          <span x-html="item.icon" class="shrink-0 w-5 h-5"></span>
+          <span x-show="sidebarOpen" class="whitespace-nowrap" x-text="item.label"></span>
+        </button>
+      </template>
+    </nav>
+    <div class="p-2 border-t border-line">
+      <button @click="sidebarOpen = !sidebarOpen" class="w-full flex items-center justify-center py-2 text-muted hover:text-ink transition">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" :style="sidebarOpen ? '' : 'transform:rotate(180deg)'"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="flex-1 flex flex-col overflow-hidden">
+    <!-- TOPBAR -->
+    <header class="h-16 border-b border-line flex items-center justify-between px-6 shrink-0">
+      <div class="flex items-center gap-3">
+        <h1 class="font-display font-bold text-lg" x-text="navItems.find(n=>n.id===view)?.label"></h1>
+        <span x-show="!notionConfigured" class="text-xs font-mono px-2 py-0.5 rounded bg-accent2/15 text-accent2 border border-accent2/30">Mode hors-ligne Notion</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="relative" x-show="view==='projets'">
+          <input x-model="searchQuery" id="search-input" placeholder="Rechercher... (/)" class="text-sm px-3 py-1.5 rounded-lg border border-line w-56">
+        </div>
+        <button @click="openProjectModal()" class="bg-accent text-white text-sm font-medium px-3 py-1.5 rounded-lg hover:opacity-90 transition flex items-center gap-1.5">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+          Nouveau projet
+        </button>
+        <button @click="logout()" class="text-muted hover:text-ink text-sm">Déconnexion</button>
+      </div>
+    </header>
+
+    <main class="flex-1 overflow-y-auto p-6">
+
+      <!-- ============ DASHBOARD ============ -->
+      <template x-if="view==='dashboard'">
+        <div class="space-y-6" x-transition.opacity.duration.150ms>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="bg-surface border border-line rounded-xl p-5">
+              <p class="text-muted text-xs font-mono mb-1">EN COURS</p>
+              <p class="font-display font-bold text-3xl" x-text="projects.filter(p=>!['Livraison','Archivé'].includes(p.status)).length"></p>
+            </div>
+            <div class="bg-surface border border-line rounded-xl p-5">
+              <p class="text-muted text-xs font-mono mb-1">LIVRÉS CE MOIS</p>
+              <p class="font-display font-bold text-3xl" x-text="projects.filter(p=>p.status==='Livraison' && isThisMonth(p.deadline)).length"></p>
+            </div>
+            <div class="bg-surface border border-line rounded-xl p-5">
+              <p class="text-muted text-xs font-mono mb-1">EN ATTENTE VALIDATION</p>
+              <p class="font-display font-bold text-3xl" x-text="projects.filter(p=>p.status==='Brief').length"></p>
+            </div>
+          </div>
+
+          <div class="bg-surface border border-line rounded-xl p-5">
+            <div class="flex items-center gap-2 mb-3">
+              <span class="text-accent text-lg">✦</span>
+              <h3 class="font-display font-bold">Claude suggère</h3>
+              <span x-show="aiSuggestLoading" class="spinner"></span>
+            </div>
+            <div x-show="!aiSuggestLoading && aiSuggestions.length" class="space-y-2">
+              <template x-for="(s,i) in aiSuggestions" :key="i">
+                <div class="text-sm flex gap-2 p-2 rounded-lg bg-bg border border-line">
+                  <span class="text-accent font-mono">→</span>
+                  <span x-text="s"></span>
+                </div>
+              </template>
+            </div>
+            <div x-show="!aiSuggestLoading && !aiSuggestions.length && aiSuggestError" class="text-sm text-muted">
+              <span x-text="aiSuggestError"></span>
+              <button @click="loadSuggestions()" class="text-accent hover:underline ml-2">Réessayer</button>
+            </div>
+          </div>
+
+          <div>
+            <h3 class="font-display font-bold mb-3">Projets récents</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <template x-for="p in projects.slice(0,3)" :key="p.id">
+                <div @click="openProject(p)" class="bg-surface border border-line rounded-xl p-4 cursor-pointer hover:border-accent/50 transition">
+                  <div class="timeline-track mb-3" x-html="renderTimeline(p)"></div>
+                  <p class="font-display font-bold text-sm truncate" x-text="p.title"></p>
+                  <p class="text-muted text-xs mt-1" x-text="p.client"></p>
+                  <span class="text-xs font-mono px-2 py-0.5 rounded mt-2 inline-block" :style="statusStyle(p.status)" x-text="p.status"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="flex gap-3">
+            <button @click="openProjectModal()" class="bg-surface border border-line rounded-lg px-4 py-2 text-sm hover:border-accent/50 transition">+ Nouveau projet</button>
+            <button @click="view='studio'; studioType='script'" class="bg-surface border border-line rounded-lg px-4 py-2 text-sm hover:border-accent/50 transition">+ Nouveau script</button>
+            <button @click="view='studio'; studioType='shotlist'" class="bg-surface border border-line rounded-lg px-4 py-2 text-sm hover:border-accent/50 transition">+ Nouvelle shot list</button>
+          </div>
+        </div>
+      </template>
+
+      <!-- ============ PROJETS ============ -->
+      <template x-if="view==='projets'">
+        <div x-transition.opacity.duration.150ms>
+          <div class="flex gap-2 mb-5 flex-wrap">
+            <template x-for="f in ['Tous','Brief','Pré-production','Tournage','Montage','Livraison','Archivé']" :key="f">
+              <button @click="statusFilter=f" :class="statusFilter===f ? 'bg-accent text-white' : 'bg-surface text-muted border border-line'" class="text-xs font-mono px-3 py-1.5 rounded-lg transition" x-text="f"></button>
+            </template>
+          </div>
+
+          <div x-show="filteredProjects.length===0" class="text-center py-20 text-muted">
+            <p class="mb-3">Aucun projet pour le moment.</p>
+            <button @click="openProjectModal()" class="bg-accent text-white px-4 py-2 rounded-lg text-sm">Créer mon premier projet</button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <template x-for="p in filteredProjects" :key="p.id">
+              <div @click="openProject(p)" class="card-slide-enter bg-surface border border-line rounded-xl p-5 cursor-pointer hover:border-accent/50 transition">
+                <div class="timeline-track mb-4" x-html="renderTimeline(p)"></div>
+                <div class="flex items-start justify-between">
+                  <div>
+                    <p class="font-display font-bold" x-text="p.title"></p>
+                    <p class="text-muted text-sm" x-text="p.client + ' · ' + p.type"></p>
+                  </div>
+                  <span class="text-xs font-mono px-2 py-0.5 rounded shrink-0" :style="statusStyle(p.status)" x-text="p.status"></span>
+                </div>
+                <div class="flex items-center justify-between mt-4 text-xs text-muted font-mono">
+                  <span x-text="'Deadline: ' + (p.deadline || '—')"></span>
+                  <span x-text="p.progress + '%'"></span>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- ============ DETAIL PROJET ============ -->
+      <template x-if="view==='detail' && currentProject">
+        <div x-transition.opacity.duration.150ms class="max-w-4xl">
+          <button @click="view='projets'" class="text-muted text-sm mb-4 hover:text-ink flex items-center gap-1">← Retour aux projets</button>
+
+          <div class="bg-surface border border-line rounded-xl p-5 mb-5">
+            <div class="timeline-track mb-4" x-html="renderTimeline(currentProject)"></div>
+            <div class="flex items-start justify-between gap-4">
+              <input x-model="currentProject.title" @blur="saveProjects()" class="font-display font-bold text-xl bg-transparent border-0 focus:ring-0 w-full px-0">
+              <div class="flex items-center gap-2 shrink-0">
+                <select x-model="currentProject.status" @change="saveProjects()" class="text-xs font-mono px-2 py-1.5 rounded-lg border border-line">
+                  <template x-for="s in ['Brief','Pré-production','Tournage','Montage','Livraison','Archivé']" :key="s">
+                    <option :value="s" x-text="s"></option>
+                  </template>
+                </select>
+                <button @click="currentProject.status='Livraison'; currentProject.progress=100; saveProjects()" class="text-xs bg-accent2 text-ink font-medium px-3 py-1.5 rounded-lg">Marquer livré</button>
+              </div>
+            </div>
+            <p class="text-muted text-sm mt-2" x-text="currentProject.client + ' · ' + currentProject.type + ' · Deadline: ' + (currentProject.deadline || '—')"></p>
+          </div>
+
+          <div class="flex gap-1 border-b border-line mb-5 overflow-x-auto">
+            <template x-for="t in ['brief','shotlist','script','captions','suivi']" :key="t">
+              <button @click="detailTab=t" :class="detailTab===t ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-ink'" class="px-4 py-2 text-sm font-medium border-b-2 transition whitespace-nowrap" x-text="{brief:'Brief',shotlist:'Shot List',script:'Script',captions:'Captions / Réseaux',suivi:'Suivi'}[t]"></button>
+            </template>
+          </div>
+
+          <!-- BRIEF TAB -->
+          <div x-show="detailTab==='brief'" class="space-y-4">
+            <div x-show="currentProject.brief" class="bg-surface border border-line rounded-xl p-5 space-y-4 text-sm">
+              <template x-for="key in ['contexte','objectif','cible','ton','contraintes']" :key="key">
+                <div x-show="currentProject.brief && currentProject.brief[key]">
+                  <p class="text-accent font-mono text-xs mb-1 uppercase" x-text="key"></p>
+                  <p class="text-ink/90" x-text="currentProject.brief && currentProject.brief[key]"></p>
+                </div>
+              </template>
+              <div x-show="currentProject.brief && currentProject.brief.suggestions && currentProject.brief.suggestions.length">
+                <p class="text-accent font-mono text-xs mb-1 uppercase">suggestions</p>
+                <ul class="list-disc pl-5 space-y-1">
+                  <template x-for="(s,i) in (currentProject.brief?.suggestions||[])" :key="i">
+                    <li x-text="s"></li>
+                  </template>
+                </ul>
+              </div>
+            </div>
+            <div x-show="!currentProject.brief" class="text-muted text-sm">Aucun brief généré pour ce projet.</div>
+            <button @click="regenerateBrief()" class="bg-surface border border-line rounded-lg px-4 py-2 text-sm hover:border-accent/50 transition flex items-center gap-2">
+              <span x-show="briefLoading" class="spinner"></span> Régénérer avec Claude
+            </button>
+            <p x-show="briefError" class="text-xs text-accent" x-text="briefError"></p>
+          </div>
+
+          <!-- SHOTLIST TAB -->
+          <div x-show="detailTab==='shotlist'" class="space-y-4">
+            <div class="flex gap-2">
+              <button @click="generateShotlist()" class="bg-accent text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2">
+                <span x-show="shotlistLoading" class="spinner"></span> Générer avec Claude
+              </button>
+              <button @click="copyShotlist()" x-show="currentProject.shotlist && currentProject.shotlist.length" class="bg-surface border border-line text-sm px-4 py-2 rounded-lg">Copier en texte</button>
+            </div>
+            <p x-show="shotlistError" class="text-xs text-accent" x-text="shotlistError"></p>
+            <div x-show="currentProject.shotlist && currentProject.shotlist.length" class="overflow-x-auto bg-surface border border-line rounded-xl">
+              <table class="w-full text-sm">
+                <thead><tr class="text-muted text-xs font-mono border-b border-line">
+                  <th class="text-left p-2">N°</th><th class="text-left p-2">Plan</th><th class="text-left p-2">Cadrage</th><th class="text-left p-2">Mouvement</th><th class="text-left p-2">Description</th><th class="text-left p-2">Durée</th><th class="text-left p-2">Notes</th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="(shot,i) in (currentProject.shotlist||[])" :key="i">
+                    <tr class="border-b border-line/50">
+                      <td class="p-2 font-mono text-xs" x-text="shot.numero"></td>
+                      <td class="p-2"><input x-model="shot.plan" @blur="saveProjects()" class="bg-transparent border-0 w-full text-sm"></td>
+                      <td class="p-2"><input x-model="shot.cadrage" @blur="saveProjects()" class="bg-transparent border-0 w-20 text-sm"></td>
+                      <td class="p-2"><input x-model="shot.mouvement" @blur="saveProjects()" class="bg-transparent border-0 w-24 text-sm"></td>
+                      <td class="p-2"><input x-model="shot.description" @blur="saveProjects()" class="bg-transparent border-0 w-full text-sm"></td>
+                      <td class="p-2"><input x-model="shot.duree" @blur="saveProjects()" class="bg-transparent border-0 w-16 text-sm"></td>
+                      <td class="p-2"><input x-model="shot.notes" @blur="saveProjects()" class="bg-transparent border-0 w-full text-sm"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- SCRIPT TAB -->
+          <div x-show="detailTab==='script'" class="space-y-3">
+            <button @click="generateScript()" class="bg-accent text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2">
+              <span x-show="scriptLoading" class="spinner"></span> Générer avec Claude
+            </button>
+            <p x-show="scriptError" class="text-xs text-accent" x-text="scriptError"></p>
+            <textarea x-model="currentProject.script" @blur="saveProjects()" rows="16" placeholder="Le script généré apparaîtra ici..." class="w-full bg-surface border border-line rounded-xl p-4 text-sm font-mono leading-relaxed"></textarea>
+          </div>
+
+          <!-- CAPTIONS TAB -->
+          <div x-show="detailTab==='captions'" class="space-y-4">
+            <button @click="generateCaptions()" class="bg-accent text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2">
+              <span x-show="captionsLoading" class="spinner"></span> Générer les captions
+            </button>
+            <p x-show="captionsError" class="text-xs text-accent" x-text="captionsError"></p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <template x-for="net in ['instagram','tiktok','linkedin','twitter']" :key="net">
+                <div x-show="currentProject.captions && currentProject.captions[net]" class="bg-surface border border-line rounded-xl p-4">
+                  <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-mono text-accent uppercase" x-text="net"></span>
+                    <button @click="copyText(currentProject.captions[net])" class="text-xs text-muted hover:text-ink">Copier</button>
+                  </div>
+                  <p class="text-sm whitespace-pre-wrap" x-text="currentProject.captions && currentProject.captions[net]"></p>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- SUIVI TAB -->
+          <div x-show="detailTab==='suivi'" class="space-y-5">
+            <div class="bg-surface border border-line rounded-xl p-5">
+              <p class="font-display font-bold text-sm mb-3">Checklist livrables</p>
+              <div class="space-y-2">
+                <template x-for="(item,i) in (currentProject.checklist||[])" :key="i">
+                  <label class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" x-model="item.done" @change="saveProjects()" class="accent-accent">
+                    <span :class="item.done ? 'line-through text-muted' : ''" x-text="item.label"></span>
+                  </label>
+                </template>
+              </div>
+              <div class="flex gap-2 mt-3">
+                <input x-model="newChecklistItem" @keydown.enter="addChecklistItem()" placeholder="Ajouter un livrable..." class="flex-1 text-sm px-3 py-1.5 rounded-lg border border-line">
+                <button @click="addChecklistItem()" class="text-sm bg-surface border border-line px-3 py-1.5 rounded-lg">Ajouter</button>
+              </div>
+            </div>
+            <div class="bg-surface border border-line rounded-xl p-5">
+              <p class="font-display font-bold text-sm mb-3">Notes</p>
+              <textarea x-model="currentProject.notes" @blur="saveProjects()" rows="5" placeholder="Notes et commentaires..." class="w-full bg-bg border border-line rounded-lg p-3 text-sm"></textarea>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- ============ STUDIO IA ============ -->
+      <template x-if="view==='studio'">
+        <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6" x-transition.opacity.duration.150ms>
+          <div class="space-y-2">
+            <template x-for="t in studioTypes" :key="t.id">
+              <button @click="studioType=t.id; studioResult=''" :class="studioType===t.id ? 'bg-accent/15 border-accent text-accent' : 'bg-surface border-line text-ink'" class="w-full text-left border rounded-lg p-3 transition">
+                <p class="font-medium text-sm" x-text="t.label"></p>
+                <p class="text-xs text-muted mt-0.5" x-text="t.desc"></p>
+              </button>
+            </template>
+
+            <div class="pt-4">
+              <p class="text-xs font-mono text-muted mb-2">HISTORIQUE</p>
+              <div class="space-y-1">
+                <template x-for="(h,i) in studioHistory.slice(0,5)" :key="i">
+                  <button @click="studioResult=h.result; studioType=h.type" class="w-full text-left text-xs text-muted hover:text-ink p-2 rounded bg-surface border border-line truncate" x-text="h.label"></button>
+                </template>
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <!-- Script -->
+            <div x-show="studioType==='script'" class="bg-surface border border-line rounded-xl p-5 space-y-3">
+              <select x-model="studioForm.scriptKind" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+                <option>Corporate</option><option>Vlog</option><option>TikTok</option><option>Interview</option><option>Podcast</option><option>Docu</option>
+              </select>
+              <input x-model="studioForm.duree" placeholder="Durée cible (ex: 2 min)" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+              <input x-model="studioForm.theme" placeholder="Thème / sujet" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+              <select x-model="studioForm.ton" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+                <option>Inspirant</option><option>Informatif</option><option>Humour</option><option>Émotion</option><option>Éducatif</option>
+              </select>
+            </div>
+
+            <!-- Shotlist -->
+            <div x-show="studioType==='shotlist'" class="bg-surface border border-line rounded-xl p-5 space-y-3">
+              <input x-model="studioForm.typeVideo" placeholder="Type de vidéo" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+              <input x-model="studioForm.nbPlans" type="number" placeholder="Nombre de plans" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+              <select x-model="studioForm.lieu" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+                <option>Intérieur</option><option>Extérieur</option><option>Les deux</option>
+              </select>
+              <div class="flex gap-3 text-sm flex-wrap">
+                <template x-for="eq in ['Steadicam','Drone','Trépied','Main levée']" :key="eq">
+                  <label class="flex items-center gap-1.5"><input type="checkbox" :value="eq" @change="toggleEquip(eq)" class="accent-accent"> <span x-text="eq"></span></label>
+                </template>
+              </div>
+            </div>
+
+            <!-- Idées -->
+            <div x-show="studioType==='idees'" class="bg-surface border border-line rounded-xl p-5 space-y-3">
+              <input x-model="studioForm.secteur" placeholder="Secteur client" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+              <select x-model="studioForm.objectif" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+                <option>Notoriété</option><option>Conversion</option><option>Fidélisation</option>
+              </select>
+              <input x-model="studioForm.plateforme" placeholder="Plateforme cible" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+            </div>
+
+            <!-- Captions -->
+            <div x-show="studioType==='captions'" class="bg-surface border border-line rounded-xl p-5 space-y-3">
+              <textarea x-model="studioForm.descriptionVideo" rows="4" placeholder="Description de la vidéo..." class="w-full text-sm px-3 py-2 rounded-lg border border-line"></textarea>
+              <input x-model="studioForm.plateforme2" placeholder="Plateforme" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+              <select x-model="studioForm.ton2" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+                <option>Inspirant</option><option>Informatif</option><option>Humour</option><option>Émotion</option>
+              </select>
+            </div>
+
+            <!-- Interview -->
+            <div x-show="studioType==='interview'" class="bg-surface border border-line rounded-xl p-5 space-y-3">
+              <input x-model="studioForm.profil" placeholder="Profil de l'interviewé" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+              <input x-model="studioForm.themeInterview" placeholder="Thème" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+              <input x-model="studioForm.dureeInterview" placeholder="Durée de l'interview" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+              <select x-model="studioForm.styleInterview" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+                <option>Journalistique</option><option>Conversationnel</option><option>Inspirant</option>
+              </select>
+            </div>
+
+            <!-- Email -->
+            <div x-show="studioType==='email'" class="bg-surface border border-line rounded-xl p-5 space-y-3">
+              <select x-model="studioForm.contexteEmail" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+                <option>Brief</option><option>Validation</option><option>Livraison</option><option>Relance</option><option>Devis</option>
+              </select>
+              <select x-model="studioForm.tonEmail" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+                <option>Formel</option><option>Amical</option><option>Direct</option>
+              </select>
+            </div>
+
+            <button @click="runStudio()" class="bg-accent text-white text-sm font-medium px-4 py-2 rounded-lg flex items-center gap-2">
+              <span x-show="studioLoading" class="spinner"></span> Générer
+            </button>
+            <p x-show="studioError" class="text-xs text-accent" x-text="studioError"></p>
+
+            <div x-show="studioResult" class="bg-bg border border-line rounded-xl p-5">
+              <div class="flex gap-2 mb-3">
+                <button @click="runStudio()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg">Régénérer</button>
+                <button @click="copyText(studioResult)" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg">Copier tout</button>
+                <button @click="saveToProjectOpen=true" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg">Sauvegarder dans un projet</button>
+              </div>
+              <div class="text-sm whitespace-pre-wrap max-h-[500px] overflow-y-auto leading-relaxed" x-text="studioResult"></div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- ============ CLIENTS ============ -->
+      <template x-if="view==='clients'">
+        <div x-transition.opacity.duration.150ms>
+          <input x-model="clientSearch" placeholder="Rechercher un client..." class="text-sm px-3 py-2 rounded-lg border border-line w-72 mb-5">
+          <div x-show="filteredClients.length===0" class="text-center py-20 text-muted">Aucun client. Les clients apparaissent en créant des projets.</div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <template x-for="c in filteredClients" :key="c.name">
+              <div @click="openClient(c)" class="bg-surface border border-line rounded-xl p-4 cursor-pointer hover:border-accent/50 transition">
+                <p class="font-display font-bold" x-text="c.name"></p>
+                <p class="text-muted text-xs mt-1" x-text="c.count + ' projet(s)'"></p>
+              </div>
+            </template>
+          </div>
+
+          <div x-show="currentClient" class="mt-6 bg-surface border border-line rounded-xl p-5 max-w-2xl">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="font-display font-bold text-lg" x-text="currentClient?.name"></h3>
+              <button @click="openProjectModal(currentClient?.name)" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Nouveau projet pour ce client</button>
+            </div>
+            <div class="space-y-2">
+              <template x-for="p in projects.filter(p=>p.client===currentClient?.name)" :key="p.id">
+                <div @click="openProject(p)" class="flex items-center justify-between p-3 bg-bg border border-line rounded-lg cursor-pointer">
+                  <span class="text-sm" x-text="p.title"></span>
+                  <span class="text-xs font-mono px-2 py-0.5 rounded" :style="statusStyle(p.status)" x-text="p.status"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- ============ RÉGLAGES ============ -->
+      <template x-if="view==='reglages'">
+        <div class="max-w-2xl space-y-5" x-transition.opacity.duration.150ms>
+          <div class="bg-surface border border-line rounded-xl p-5">
+            <h3 class="font-display font-bold mb-3">Notion</h3>
+            <div class="space-y-2">
+              <input x-model="settings.notionProjectsDb" placeholder="Database ID projets" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+              <input x-model="settings.notionClientsDb" placeholder="Database ID clients" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+              <input x-model="settings.notionToken" placeholder="Token d'intégration (côté serveur via env)" class="w-full text-sm px-3 py-2 rounded-lg border border-line" disabled>
+              <button @click="testNotionConnection()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg flex items-center gap-2">
+                <span x-show="notionTestLoading" class="spinner"></span> Tester la connexion
+              </button>
+              <p x-show="notionTestResult" class="text-xs" :class="notionTestOk ? 'text-accent2' : 'text-accent'" x-text="notionTestResult"></p>
+            </div>
+          </div>
+
+          <div class="bg-surface border border-line rounded-xl p-5">
+            <h3 class="font-display font-bold mb-3">Firebase</h3>
+            <p class="text-xs text-muted">Config chargée depuis les variables d'environnement Vercel (non éditable ici).</p>
+          </div>
+
+          <div class="bg-surface border border-line rounded-xl p-5">
+            <h3 class="font-display font-bold mb-3">Claude API</h3>
+            <p class="text-sm">Clé API : <span class="font-mono text-muted">••••••••••••</span></p>
+            <p class="text-sm mt-1">Modèle : <span class="font-mono text-accent">claude-sonnet-4-6</span></p>
+          </div>
+
+          <div class="bg-surface border border-line rounded-xl p-5">
+            <h3 class="font-display font-bold mb-3">Profil</h3>
+            <input x-model="settings.profileName" @blur="saveSettings()" placeholder="Nom" class="w-full text-sm px-3 py-2 rounded-lg border border-line mb-2">
+            <input x-model="settings.billingInfo" @blur="saveSettings()" placeholder="Infos de facturation" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+          </div>
+
+          <div class="bg-surface border border-line rounded-xl p-5">
+            <h3 class="font-display font-bold mb-3">Données</h3>
+            <div class="flex gap-2 flex-wrap">
+              <button @click="exportData()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg">Export JSON</button>
+              <label class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg cursor-pointer">
+                Import JSON
+                <input type="file" @change="importData($event)" accept=".json" class="hidden">
+              </label>
+              <button @click="resetData()" class="text-xs bg-accent/15 text-accent border border-accent/30 px-3 py-1.5 rounded-lg">Reset</button>
+            </div>
+          </div>
+        </div>
+      </template>
+
+    </main>
+  </div>
+</div>
+
+<!-- ===================== MODAL NOUVEAU PROJET ===================== -->
+<div x-show="projectModalOpen" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @keydown.escape.window="projectModalOpen=false">
+  <div class="modal-slide-enter bg-surface border border-line rounded-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto" x-show="projectModalOpen">
+    <div class="flex items-center justify-between mb-5">
+      <h3 class="font-display font-bold text-lg">Nouveau projet</h3>
+      <button @click="projectModalOpen=false" class="text-muted hover:text-ink">✕</button>
+    </div>
+
+    <div class="flex gap-1 mb-5">
+      <template x-for="n in [1,2,3]" :key="n">
+        <div class="flex-1 h-1 rounded" :class="newProjectStep>=n ? 'bg-accent' : 'bg-line'"></div>
+      </template>
+    </div>
+
+    <!-- step 1 -->
+    <div x-show="newProjectStep===1" class="space-y-3">
+      <input x-model="newProject.title" placeholder="Titre du projet" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+      <input x-model="newProject.client" placeholder="Nom du client" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+      <select x-model="newProject.type" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+        <option>Corporate</option><option>Vlog</option><option>Interview</option><option>Podcast</option><option>TikTok/Reels</option><option>Court-métrage</option><option>Documentaire</option><option>Autre</option>
+      </select>
+      <input x-model="newProject.budget" placeholder="Budget (€)" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+      <input x-model="newProject.deadline" type="date" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+      <button @click="newProjectStep=2" :disabled="!newProject.title" class="w-full bg-accent text-white text-sm font-medium py-2 rounded-lg disabled:opacity-40">Suivant</button>
+    </div>
+
+    <!-- step 2 -->
+    <div x-show="newProjectStep===2" class="space-y-3">
+      <textarea x-model="newProject.briefRaw" rows="5" placeholder="Décris le projet en quelques phrases (objectif, cible, ton, contraintes)" class="w-full text-sm px-3 py-2 rounded-lg border border-line"></textarea>
+      <button @click="generateProjectBrief()" class="w-full bg-surface border border-line text-sm py-2 rounded-lg flex items-center justify-center gap-2">
+        <span x-show="newProjectBriefLoading" class="spinner"></span> Claude structure le brief
+      </button>
+      <p x-show="newProjectBriefError" class="text-xs text-accent" x-text="newProjectBriefError"></p>
+      <div class="flex gap-2">
+        <button @click="newProjectStep=1" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
+        <button @click="newProjectStep=3" class="flex-1 bg-accent text-white text-sm py-2 rounded-lg">Suivant</button>
+      </div>
+    </div>
+
+    <!-- step 3 -->
+    <div x-show="newProjectStep===3" class="space-y-3">
+      <div x-show="newProject.brief" class="bg-bg border border-line rounded-lg p-3 text-xs space-y-2 max-h-64 overflow-y-auto">
+        <template x-for="key in ['contexte','objectif','cible','ton','contraintes']" :key="key">
+          <div x-show="newProject.brief && newProject.brief[key]">
+            <p class="text-accent font-mono uppercase">{{key}}</p>
+            <textarea x-model="newProject.brief[key]" rows="2" class="w-full bg-transparent border-0 text-ink text-xs p-0"></textarea>
+          </div>
+        </template>
+      </div>
+      <div class="flex gap-2">
+        <button @click="newProjectStep=2" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
+        <button @click="createProject()" class="flex-1 bg-accent text-white text-sm py-2 rounded-lg flex items-center justify-center gap-2">
+          <span x-show="creatingProject" class="spinner"></span> Créer le projet
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL SAVE TO PROJECT ===================== -->
+<div x-show="saveToProjectOpen" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @keydown.escape.window="saveToProjectOpen=false">
+  <div class="modal-slide-enter bg-surface border border-line rounded-xl w-full max-w-md p-6" x-show="saveToProjectOpen">
+    <h3 class="font-display font-bold text-lg mb-4">Sauvegarder dans un projet</h3>
+    <div class="space-y-2 max-h-64 overflow-y-auto">
+      <template x-for="p in projects" :key="p.id">
+        <button @click="saveStudioResultToProject(p)" class="w-full text-left text-sm p-2 rounded-lg bg-bg border border-line hover:border-accent/50" x-text="p.title"></button>
+      </template>
+    </div>
+    <button @click="saveToProjectOpen=false" class="w-full mt-4 text-sm text-muted">Annuler</button>
+  </div>
+</div>
+
+<!-- ===================== TOASTS ===================== -->
+<div class="fixed bottom-4 right-4 space-y-2 z-50">
+  <template x-for="t in toasts" :key="t.id">
+    <div class="px-4 py-2.5 rounded-lg text-sm shadow-lg" :class="t.type==='error' ? 'bg-accent text-white' : 'bg-accent2 text-ink'" x-text="t.msg"></div>
+  </template>
+</div>
+
+<script>
+function app() {
+  return {
+    // auth
+    authReady: false, user: null, authMode: 'login', authEmail: '', authPassword: '', authError: '', authLoading: false,
+    firebaseEnabled: false,
+
+    // nav
+    sidebarOpen: true,
+    view: 'dashboard',
+    navItems: [
+      { id:'dashboard', label:'Dashboard', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>' },
+      { id:'projets', label:'Projets', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 10h20M6 6v4M11 6v4M16 6v4"/></svg>' },
+      { id:'studio', label:'Studio IA', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.5 6.5L21 11l-6.5 2.5L12 20l-2.5-6.5L3 11l6.5-2.5z"/></svg>' },
+      { id:'clients', label:'Clients', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0116 0v1"/></svg>' },
+      { id:'reglages', label:'Réglages', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 008.6 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H2a2 2 0 110-4h.09A1.65 1.65 0 003.6 8.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H8a1.65 1.65 0 001-1.51V2a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V8a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>' },
+    ],
+
+    // data
+    projects: [],
+    statusFilter: 'Tous',
+    searchQuery: '',
+    currentProject: null,
+    detailTab: 'brief',
+    notionConfigured: false,
+
+    // dashboard ai
+    aiSuggestLoading: false, aiSuggestions: [], aiSuggestError: '',
+
+    // project modal
+    projectModalOpen: false, newProjectStep: 1,
+    newProject: { title:'', client:'', type:'Corporate', budget:'', deadline:'', briefRaw:'', brief:null },
+    newProjectBriefLoading: false, newProjectBriefError: '', creatingProject: false,
+
+    // detail generation states
+    briefLoading: false, briefError: '',
+    shotlistLoading: false, shotlistError: '',
+    scriptLoading: false, scriptError: '',
+    captionsLoading: false, captionsError: '',
+    newChecklistItem: '',
+
+    // studio
+    studioType: 'script',
+    studioTypes: [
+      { id:'script', label:'Script vidéo', desc:'Script complet formaté' },
+      { id:'shotlist', label:'Shot list express', desc:'Liste de plans adaptée' },
+      { id:'idees', label:'Idées de contenu', desc:'10 idées de vidéos' },
+      { id:'captions', label:'Captions & hooks', desc:'5 hooks + caption' },
+      { id:'interview', label:'Questions d\'interview', desc:'15 questions structurées' },
+      { id:'email', label:'Email client', desc:'Email pro prêt à envoyer' },
+    ],
+    studioForm: { equip: [] },
+    studioResult: '', studioLoading: false, studioError: '',
+    studioHistory: [],
+    saveToProjectOpen: false,
+
+    // clients
+    clientSearch: '', currentClient: null,
+
+    // settings
+    settings: { notionProjectsDb:'', notionClientsDb:'', notionToken:'', profileName:'Moustikprod', billingInfo:'' },
+    notionTestLoading: false, notionTestResult: '', notionTestOk: false,
+
+    // toasts
+    toasts: [],
+
+    init() {
+      this.loadSettings();
+      this.loadProjects();
+      this.bindShortcuts();
+      this.initFirebase();
+    },
+
+    // ---------- AUTH ----------
+    async initFirebase() {
+      try {
+        const res = await fetch('/api/firebase-config');
+        const cfg = await res.json();
+        if (cfg.apiKey && window.firebase) {
+          firebase.initializeApp(cfg);
+          this.firebaseEnabled = true;
+          firebase.auth().onAuthStateChanged(u => {
+            this.user = u;
+            this.authReady = true;
+            if (u) this.loadSuggestions();
+          });
+        } else {
+          this.authReady = true;
+          const saved = localStorage.getItem('mp_studio_skip_auth');
+          this.user = saved ? { skip:true } : null;
+          if (this.user) this.loadSuggestions();
+        }
+      } catch(e) {
+        this.authReady = true;
+        const saved = localStorage.getItem('mp_studio_skip_auth');
+        this.user = saved ? { skip:true } : null;
+        if (this.user) this.loadSuggestions();
+      }
+    },
+    doLogin() {
+      this.authError=''; this.authLoading=true;
+      if (!this.firebaseEnabled) { this.authError='Firebase non configuré.'; this.authLoading=false; return; }
+      firebase.auth().signInWithEmailAndPassword(this.authEmail, this.authPassword)
+        .catch(e => this.authError = e.message)
+        .finally(() => this.authLoading=false);
+    },
+    doSignup() {
+      this.authError=''; this.authLoading=true;
+      if (!this.firebaseEnabled) { this.authError='Firebase non configuré.'; this.authLoading=false; return; }
+      firebase.auth().createUserWithEmailAndPassword(this.authEmail, this.authPassword)
+        .catch(e => this.authError = e.message)
+        .finally(() => this.authLoading=false);
+    },
+    skipAuth() {
+      localStorage.setItem('mp_studio_skip_auth','1');
+      this.user = { skip:true };
+      this.loadSuggestions();
+    },
+    logout() {
+      localStorage.removeItem('mp_studio_skip_auth');
+      this.user = null;
+      if (this.firebaseEnabled) firebase.auth().signOut();
+    },
+
+    // ---------- SHORTCUTS ----------
+    bindShortcuts() {
+      window.addEventListener('keydown', e => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+          if (e.key === 'Escape') { this.projectModalOpen=false; this.saveToProjectOpen=false; e.target.blur(); }
+          return;
+        }
+        if (e.key === 'n') this.openProjectModal();
+        if (e.key === '/') { e.preventDefault(); this.view='projets'; this.$nextTick?.(()=>{}); setTimeout(()=>document.getElementById('search-input')?.focus(),50); }
+        if (e.key === 'Escape') { this.projectModalOpen=false; this.saveToProjectOpen=false; }
+      });
+    },
+
+    // ---------- TOASTS ----------
+    toast(msg, type='success') {
+      const id = Date.now();
+      this.toasts.push({ id, msg, type });
+      setTimeout(() => { this.toasts = this.toasts.filter(t=>t.id!==id); }, 3000);
+    },
+
+    // ---------- STORAGE ----------
+    loadSettings() {
+      const s = localStorage.getItem('mp_studio_settings');
+      if (s) this.settings = { ...this.settings, ...JSON.parse(s) };
+      this.notionConfigured = !!(this.settings.notionProjectsDb && this.settings.notionClientsDb);
+    },
+    saveSettings() {
+      localStorage.setItem('mp_studio_settings', JSON.stringify(this.settings));
+      this.notionConfigured = !!(this.settings.notionProjectsDb && this.settings.notionClientsDb);
+      this.toast('Réglages enregistrés');
+    },
+    loadProjects() {
+      const s = localStorage.getItem('mp_studio_projects');
+      if (s) {
+        this.projects = JSON.parse(s);
+      } else {
+        this.projects = this.demoProjects();
+        this.saveProjects();
+      }
+      const h = localStorage.getItem('mp_studio_history');
+      if (h) this.studioHistory = JSON.parse(h);
+    },
+    saveProjects() {
+      localStorage.setItem('mp_studio_projects', JSON.stringify(this.projects));
+    },
+    demoProjects() {
+      return [
+        { id:'p1', title:'Aftermovie Festival Electronique', client:'Nova Events', type:'Court-métrage', status:'Montage', progress:75, deadline:'2026-07-10', budget:'3500', brief:null, shotlist:[], script:'', captions:{}, checklist:[{label:'Montage final',done:false},{label:'Color grading',done:false}], notes:'' },
+        { id:'p2', title:'Interview CEO Startup', client:'TechLab', type:'Interview', status:'Brief', progress:15, deadline:'2026-08-02', budget:'1200', brief:null, shotlist:[], script:'', captions:{}, checklist:[{label:'Brief validé',done:false}], notes:'' },
+        { id:'p3', title:'TikTok série Recettes', client:'RestoBio', type:'TikTok/Reels', status:'Livraison', progress:95, deadline:'2026-06-25', budget:'900', brief:null, shotlist:[], script:'', captions:{}, checklist:[{label:'Export vertical',done:true},{label:'Sous-titres',done:true}], notes:'' },
+      ];
+    },
+
+    // ---------- HELPERS ----------
+    isThisMonth(dateStr) {
+      if (!dateStr) return false;
+      const d = new Date(dateStr), now = new Date();
+      return d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear();
+    },
+    statusStyle(status) {
+      const map = {
+        'Brief':'background:#3CD6D122;color:#024059;border:1px solid #3CD6D155',
+        'Pré-production':'background:#02405922;color:#024059;border:1px solid #02405944',
+        'Tournage':'background:#02405933;color:#024059;border:1px solid #02405955',
+        'Montage':'background:#3CD6D133;color:#024059;border:1px solid #3CD6D166',
+        'Livraison':'background:#1FAF8822;color:#1FAF88;border:1px solid #1FAF8844',
+        'Archivé':'background:#5C7D8722;color:#5C7D87;border:1px solid #5C7D8744',
+      };
+      return map[status] || map['Brief'];
+    },
+    renderTimeline(p) {
+      const stages = ['Brief','Pré-production','Tournage','Montage','Livraison'];
+      const idx = stages.indexOf(p.status);
+      const colors = ['#3CD6D1','#024059','#024059','#3CD6D1','#1FAF88'];
+      return stages.map((s,i) => `<div class="timeline-seg" style="flex:1;background:${i<=idx ? colors[i] : '#DCE6E9'}"></div>`).join('');
+    },
+    copyText(text) {
+      navigator.clipboard.writeText(text || '');
+      this.toast('Copié dans le presse-papier');
+    },
+
+    // ---------- CLAUDE PROXY ----------
+    async callClaude(systemPrompt, userMessage) {
+      const res = await fetch('/api/claude.js', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({
+          system: systemPrompt,
+          messages: [{ role:'user', content: userMessage }]
+        })
+      });
+      const data = await res.json();
+      if (data.error || !data.content) throw new Error(data.error?.message || data.error || 'Erreur Claude API');
+      return data.content[0].text;
+    },
+    extractJson(text) {
+      const match = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+      if (!match) throw new Error('Réponse non JSON');
+      return JSON.parse(match[0]);
+    },
+
+    // ---------- DASHBOARD AI ----------
+    async loadSuggestions() {
+      this.aiSuggestLoading = true; this.aiSuggestError='';
+      try {
+        const ctx = this.projects.map(p => `${p.title} (${p.client}) - statut: ${p.status}, avancement: ${p.progress}%, deadline: ${p.deadline}`).join('\n');
+        const text = await this.callClaude(
+          `Tu es le co-pilote créatif de Moustikprod, une agence vidéo freelance.\nTu connais les projets en cours et tu suggères proactivement la prochaine action.\nSois concis, direct, actionnable. Maximum 3 suggestions courtes.\nRéponds en français.`,
+          `Projets en cours:\n${ctx}\n\nDonne 3 suggestions courtes, une par ligne, sans numérotation ni markdown.`
+        );
+        this.aiSuggestions = text.split('\n').map(l=>l.replace(/^[-•\d.]+\s*/,'').trim()).filter(Boolean).slice(0,3);
+      } catch(e) {
+        this.aiSuggestError = 'Claude indisponible.';
+      } finally {
+        this.aiSuggestLoading = false;
+      }
+    },
+
+    // ---------- PROJECTS LIST ----------
+    get filteredProjects() {
+      return this.projects.filter(p => {
+        const statusOk = this.statusFilter==='Tous' || p.status===this.statusFilter;
+        const q = this.searchQuery.toLowerCase();
+        const searchOk = !q || p.title.toLowerCase().includes(q) || p.client.toLowerCase().includes(q);
+        return statusOk && searchOk;
+      });
+    },
+    openProject(p) {
+      this.currentProject = p;
+      this.detailTab = 'brief';
+      this.view = 'detail';
+    },
+
+    // ---------- NEW PROJECT MODAL ----------
+    openProjectModal(prefillClient) {
+      this.newProjectStep = 1;
+      this.newProject = { title:'', client: prefillClient||'', type:'Corporate', budget:'', deadline:'', briefRaw:'', brief:null };
+      this.newProjectBriefError='';
+      this.projectModalOpen = true;
+    },
+    async generateProjectBrief() {
+      this.newProjectBriefLoading = true; this.newProjectBriefError='';
+      try {
+        const text = await this.callClaude(
+          `Tu es expert en production vidéo. L'utilisateur décrit un projet.\nGénère un brief structuré professionnel avec ces sections :\n- Contexte client\n- Objectif de la vidéo\n- Cible et message clé\n- Ton et style recommandés\n- Contraintes techniques\n- Suggestions créatives (3 angles différents)\nRéponds en JSON avec ces clés exactes : contexte, objectif, cible, ton, contraintes, suggestions[]`,
+          `Projet: ${this.newProject.title}\nClient: ${this.newProject.client}\nType: ${this.newProject.type}\nBudget: ${this.newProject.budget}€\nDeadline: ${this.newProject.deadline}\n\nDescription: ${this.newProject.briefRaw}`
+        );
+        this.newProject.brief = this.extractJson(text);
+      } catch(e) {
+        this.newProjectBriefError = 'Erreur Claude. Réessaie.';
+      } finally {
+        this.newProjectBriefLoading = false;
+      }
+    },
+    async createProject() {
+      this.creatingProject = true;
+      const project = {
+        id: 'p' + Date.now(),
+        title: this.newProject.title,
+        client: this.newProject.client,
+        type: this.newProject.type,
+        budget: this.newProject.budget,
+        deadline: this.newProject.deadline,
+        status: 'Brief',
+        progress: 5,
+        brief: this.newProject.brief,
+        shotlist: [],
+        script: '',
+        captions: {},
+        checklist: [],
+        notes: ''
+      };
+      this.projects.unshift(project);
+      this.saveProjects();
+      if (this.notionConfigured) {
+        try {
+          await fetch(`/api/notion.js?endpoint=pages`, {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({
+              parent: { database_id: this.settings.notionProjectsDb },
+              properties: {
+                Name: { title: [{ text: { content: project.title } }] }
+              }
+            })
+          });
+        } catch(e) {}
+      }
+      this.creatingProject = false;
+      this.projectModalOpen = false;
+      this.toast('Projet créé');
+      this.openProject(project);
+    },
+
+    // ---------- DETAIL GENERATIONS ----------
+    briefContext() {
+      const p = this.currentProject;
+      const b = p.brief;
+      return b ? `Contexte: ${b.contexte}\nObjectif: ${b.objectif}\nCible: ${b.cible}\nTon: ${b.ton}` : `Projet: ${p.title}, client ${p.client}, type ${p.type}`;
+    },
+    async regenerateBrief() {
+      this.briefLoading = true; this.briefError='';
+      try {
+        const text = await this.callClaude(
+          `Tu es expert en production vidéo. Génère un brief structuré professionnel.\nRéponds en JSON avec ces clés exactes : contexte, objectif, cible, ton, contraintes, suggestions[]`,
+          `Projet: ${this.currentProject.title}\nClient: ${this.currentProject.client}\nType: ${this.currentProject.type}`
+        );
+        this.currentProject.brief = this.extractJson(text);
+        this.saveProjects();
+        this.toast('Brief régénéré');
+      } catch(e) {
+        this.briefError = 'Erreur Claude. Réessaie.';
+      } finally {
+        this.briefLoading = false;
+      }
+    },
+    async generateShotlist() {
+      this.shotlistLoading = true; this.shotlistError='';
+      try {
+        const text = await this.callClaude(
+          `Tu es 1er assistant réalisateur. Génère une shot list professionnelle pour ce projet vidéo.\nFormat JSON : array d'objets avec les clés : numero, plan, cadrage, mouvement, description, duree, notes\nCadrage : GE/PE/GP/PM/PA/PL (plans standard français)\nMouvement : Fixe/Pan/Tilt/Travelling/Steadicam/Drone/Main levée`,
+          this.briefContext()
+        );
+        this.currentProject.shotlist = this.extractJson(text);
+        this.saveProjects();
+        this.toast('Shot list générée');
+      } catch(e) {
+        this.shotlistError = 'Erreur Claude. Réessaie.';
+      } finally {
+        this.shotlistLoading = false;
+      }
+    },
+    copyShotlist() {
+      const rows = (this.currentProject.shotlist||[]).map(s => `${s.numero}. ${s.plan} | ${s.cadrage} | ${s.mouvement} | ${s.description} | ${s.duree} | ${s.notes}`);
+      this.copyText(rows.join('\n'));
+    },
+    scriptPromptFor(type) {
+      const map = {
+        'Corporate': 'Génère un script voix-off professionnel pour une vidéo corporate.',
+        'TikTok/Reels': 'Génère un script format 5C (Contexte, Cap, Conflit, Changement, Conclusion) pour TikTok/Reels.',
+        'Interview': 'Génère un guide de questions structuré pour une interview.',
+        'Vlog': 'Génère une trame narrative avec temps forts pour un vlog.',
+      };
+      return map[type] || 'Génère un script vidéo professionnel adapté au type de vidéo.';
+    },
+    async generateScript() {
+      this.scriptLoading = true; this.scriptError='';
+      try {
+        const text = await this.callClaude(
+          `Tu es scénariste vidéo professionnel. ${this.scriptPromptFor(this.currentProject.type)}`,
+          this.briefContext()
+        );
+        this.currentProject.script = text;
+        this.saveProjects();
+        this.toast('Script généré');
+      } catch(e) {
+        this.scriptError = 'Erreur Claude. Réessaie.';
+      } finally {
+        this.scriptLoading = false;
+      }
+    },
+    async generateCaptions() {
+      this.captionsLoading = true; this.captionsError='';
+      try {
+        const text = await this.callClaude(
+          `Tu es expert réseaux sociaux. Génère 4 captions adaptées à ce projet vidéo.\nRéponds en JSON avec les clés exactes : instagram, tiktok, linkedin, twitter.\ninstagram: avec emojis, hashtags, CTA. tiktok: accroche + corps + hashtags. linkedin: ton pro. twitter: 280 caractères max.`,
+          this.briefContext()
+        );
+        this.currentProject.captions = this.extractJson(text);
+        this.saveProjects();
+        this.toast('Captions générées');
+      } catch(e) {
+        this.captionsError = 'Erreur Claude. Réessaie.';
+      } finally {
+        this.captionsLoading = false;
+      }
+    },
+    addChecklistItem() {
+      if (!this.newChecklistItem.trim()) return;
+      if (!this.currentProject.checklist) this.currentProject.checklist = [];
+      this.currentProject.checklist.push({ label: this.newChecklistItem, done:false });
+      this.newChecklistItem = '';
+      this.saveProjects();
+    },
+
+    // ---------- STUDIO ----------
+    toggleEquip(eq) {
+      if (!this.studioForm.equip) this.studioForm.equip = [];
+      const i = this.studioForm.equip.indexOf(eq);
+      if (i>-1) this.studioForm.equip.splice(i,1); else this.studioForm.equip.push(eq);
+    },
+    studioPrompt() {
+      const f = this.studioForm;
+      switch(this.studioType) {
+        case 'script':
+          return { system:'Tu es scénariste vidéo professionnel. Génère un script complet formaté.', msg:`Type: ${f.scriptKind}\nDurée cible: ${f.duree}\nThème: ${f.theme}\nTon: ${f.ton}` };
+        case 'shotlist':
+          return { system:'Tu es 1er assistant réalisateur. Génère une shot list adaptée, sous forme de texte structuré lisible (pas de JSON).', msg:`Type de vidéo: ${f.typeVideo}\nNombre de plans: ${f.nbPlans}\nLieu: ${f.lieu}\nÉquipement disponible: ${(f.equip||[]).join(', ')}` };
+        case 'idees':
+          return { system:'Tu es stratège de contenu vidéo. Génère 10 idées de vidéos avec titre accrocheur, angle, format et durée recommandée pour chaque idée.', msg:`Secteur client: ${f.secteur}\nObjectif: ${f.objectif}\nPlateforme cible: ${f.plateforme}` };
+        case 'captions':
+          return { system:'Tu es expert réseaux sociaux. Génère 5 variantes de hook et une caption complète.', msg:`Description vidéo: ${f.descriptionVideo}\nPlateforme: ${f.plateforme2}\nTon: ${f.ton2}` };
+        case 'interview':
+          return { system:'Tu es journaliste expert en interviews vidéo. Génère 15 questions structurées en 3 blocs.', msg:`Profil interviewé: ${f.profil}\nThème: ${f.themeInterview}\nDurée: ${f.dureeInterview}\nStyle: ${f.styleInterview}` };
+        case 'email':
+          return { system:'Tu es chargé de production vidéo freelance. Génère un email professionnel prêt à envoyer.', msg:`Contexte: ${f.contexteEmail}\nTon: ${f.tonEmail}` };
+      }
+    },
+    async runStudio() {
+      this.studioLoading = true; this.studioError='';
+      try {
+        const { system, msg } = this.studioPrompt();
+        const text = await this.callClaude(system, msg);
+        this.studioResult = text;
+        this.studioHistory.unshift({ type:this.studioType, label: this.studioTypes.find(t=>t.id===this.studioType).label + ' — ' + new Date().toLocaleString('fr-FR'), result:text });
+        this.studioHistory = this.studioHistory.slice(0,5);
+        localStorage.setItem('mp_studio_history', JSON.stringify(this.studioHistory));
+      } catch(e) {
+        this.studioError = 'Erreur Claude. Réessaie.';
+      } finally {
+        this.studioLoading = false;
+      }
+    },
+    saveStudioResultToProject(p) {
+      p.notes = (p.notes||'') + '\n\n--- Studio IA ---\n' + this.studioResult;
+      this.saveProjects();
+      this.saveToProjectOpen = false;
+      this.toast('Sauvegardé dans ' + p.title);
+    },
+
+    // ---------- CLIENTS ----------
+    get filteredClients() {
+      const map = {};
+      this.projects.forEach(p => {
+        if (!map[p.client]) map[p.client] = { name:p.client, count:0 };
+        map[p.client].count++;
+      });
+      const list = Object.values(map);
+      const q = this.clientSearch.toLowerCase();
+      return list.filter(c => !q || c.name.toLowerCase().includes(q));
+    },
+    openClient(c) { this.currentClient = c; },
+
+    // ---------- SETTINGS / DATA ----------
+    async testNotionConnection() {
+      this.notionTestLoading = true; this.notionTestResult='';
+      try {
+        const res = await fetch(`/api/notion.js?endpoint=databases/${this.settings.notionProjectsDb}`);
+        const data = await res.json();
+        if (data.object === 'database') {
+          this.notionTestOk = true;
+          this.notionTestResult = 'Connexion Notion réussie.';
+        } else {
+          this.notionTestOk = false;
+          this.notionTestResult = 'Connexion échouée: ' + (data.message || 'vérifie tes identifiants.');
+        }
+      } catch(e) {
+        this.notionTestOk = false;
+        this.notionTestResult = 'Erreur réseau.';
+      } finally {
+        this.notionTestLoading = false;
+      }
+    },
+    exportData() {
+      const blob = new Blob([JSON.stringify({ projects:this.projects, settings:this.settings }, null, 2)], { type:'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'moustikprod-studio-export.json'; a.click();
+      this.toast('Export généré');
+    },
+    importData(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = JSON.parse(ev.target.result);
+          if (data.projects) { this.projects = data.projects; this.saveProjects(); }
+          if (data.settings) { this.settings = data.settings; this.saveSettings(); }
+          this.toast('Import réussi');
+        } catch(err) {
+          this.toast('Fichier invalide', 'error');
+        }
+      };
+      reader.readAsText(file);
+    },
+    resetData() {
+      if (!confirm('Réinitialiser toutes les données locales ?')) return;
+      localStorage.removeItem('mp_studio_projects');
+      localStorage.removeItem('mp_studio_history');
+      this.projects = this.demoProjects();
+      this.saveProjects();
+      this.toast('Données réinitialisées');
+    }
+  }
+}
+</script>
+</body>
+</html>
