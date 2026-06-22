@@ -534,21 +534,27 @@ tailwind.config = {
             <div x-show="!ideasLoading && ideasList.length===0" class="text-center py-20 text-muted">
               Aucune étude pour l'instant. La tâche hebdomadaire alimentera cet onglet automatiquement, ou clique "Générer maintenant".
             </div>
-            <div class="space-y-4">
-              <template x-for="entry in ideasList" :key="entry.id">
-                <div class="bg-surface border border-line rounded-xl p-5 card-slide-enter">
-                  <div class="flex items-center justify-between mb-3">
-                    <p class="font-display font-bold text-sm text-accent" x-text="entry.weekLabel"></p>
-                    <button @click="deleteIdea(entry.id)" class="text-xs text-muted hover:text-accent">Supprimer</button>
-                  </div>
-                  <div x-show="entry.etude" class="text-sm whitespace-pre-wrap mb-3" x-text="entry.etude"></div>
-                  <div x-show="entry.idees && entry.idees.length">
-                    <p class="text-accent2 font-mono text-xs mb-1 uppercase">💡 Idées</p>
-                    <ul class="list-disc pl-5 space-y-1 text-sm">
-                      <template x-for="(idea,i) in (entry.idees||[])" :key="i">
-                        <li x-text="idea"></li>
-                      </template>
-                    </ul>
+            <div class="space-y-2">
+              <template x-for="(entry,idx) in ideasList" :key="entry.id">
+                <div class="bg-surface border border-line rounded-xl card-slide-enter overflow-hidden">
+                  <button @click="expandedIdeaId = (expandedIdeaId===entry.id ? null : entry.id)" class="w-full flex items-center justify-between gap-3 p-4 text-left">
+                    <div class="flex items-center gap-2 min-w-0">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0 text-muted transition-transform" :style="expandedIdeaId===entry.id ? 'transform:rotate(90deg)' : ''"><path d="M9 6l6 6-6 6"/></svg>
+                      <p class="font-display font-bold text-sm text-accent shrink-0" x-text="entry.weekLabel"></p>
+                      <p x-show="expandedIdeaId!==entry.id" class="text-muted text-xs truncate" x-text="(entry.idees||[]).length + ' idée(s)'"></p>
+                    </div>
+                    <span @click.stop="deleteIdea(entry.id)" class="text-xs text-muted hover:text-accent shrink-0">Supprimer</span>
+                  </button>
+                  <div x-show="expandedIdeaId===entry.id" class="px-5 pb-5">
+                    <div x-show="entry.etude" class="text-sm whitespace-pre-wrap mb-3" x-text="entry.etude"></div>
+                    <div x-show="entry.idees && entry.idees.length">
+                      <p class="text-accent2 font-mono text-xs mb-1 uppercase">💡 Idées</p>
+                      <ul class="list-disc pl-5 space-y-1 text-sm">
+                        <template x-for="(idea,i) in (entry.idees||[])" :key="i">
+                          <li x-text="idea"></li>
+                        </template>
+                      </ul>
+                    </div>
                   </div>
                 </div>
               </template>
@@ -787,7 +793,7 @@ function app() {
     // data
     projects: [],
     allClients: [],
-    ideasList: [], ideasLoading: false,
+    ideasList: [], ideasLoading: false, expandedIdeaId: null,
     manualIdeaLoading: false, manualIdeaError: '',
     db: null,
     statusFilter: 'Tous',
@@ -976,6 +982,7 @@ function app() {
       try {
         const snap = await this.db.collection('users').doc(this.user.uid).collection('idees').orderBy('weekStart', 'desc').get();
         this.ideasList = snap.docs.map(d => d.data());
+        if (this.ideasList.length) this.expandedIdeaId = this.ideasList[0].id;
       } catch(e) {
         console.error('Firestore loadIdeas error', e);
       } finally {
@@ -1017,6 +1024,7 @@ function app() {
         const entry = { id, weekStart, weekLabel, etude: j.etude || '', idees: j.idees || [], createdAt: new Date().toISOString() };
         await this.db.collection('users').doc(this.user.uid).collection('idees').doc(id).set(entry);
         this.ideasList.unshift(entry);
+        this.expandedIdeaId = entry.id;
         this.toast('Étude générée');
       } catch(e) {
         this.manualIdeaError = 'Erreur Claude. Réessaie.';
