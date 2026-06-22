@@ -261,7 +261,17 @@ tailwind.config = {
                 <button @click="currentProject.status='Livraison'; currentProject.progress=100; saveProjects()" class="text-xs bg-accent2 text-ink font-medium px-3 py-1.5 rounded-lg">Marquer livré</button>
               </div>
             </div>
-            <p class="text-muted text-sm mt-2" x-text="currentProject.client + ' · ' + currentProject.type + ' · Deadline: ' + (currentProject.deadline || '—')"></p>
+            <div class="flex items-center justify-between mt-2">
+              <p class="text-muted text-sm" x-text="currentProject.client + ' · ' + currentProject.type + ' · Deadline: ' + (currentProject.deadline || '—')"></p>
+              <div class="flex items-center gap-2">
+                <a x-show="currentProject.notionUrl" :href="currentProject.notionUrl" target="_blank" class="text-xs text-accent hover:underline">Voir dans Notion ↗</a>
+                <button @click="exportToNotion()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg flex items-center gap-2 hover:border-accent/50 transition">
+                  <span x-show="notionExportLoading" class="spinner"></span>
+                  <span x-text="currentProject.notionUrl ? 'Mettre à jour Notion' : 'Exporter vers Notion'"></span>
+                </button>
+              </div>
+            </div>
+            <p x-show="notionExportError" class="text-xs text-accent mt-1" x-text="notionExportError"></p>
           </div>
 
           <div class="flex gap-1 border-b border-line mb-5 overflow-x-auto">
@@ -677,6 +687,7 @@ function app() {
     scriptLoading: false, scriptError: '',
     captionsLoading: false, captionsError: '',
     newChecklistItem: '',
+    notionExportLoading: false, notionExportError: '',
 
     // studio
     studioType: 'script',
@@ -848,6 +859,8 @@ function app() {
         captions: data.captions || {},
         checklist: data.checklist || [],
         notes: data.notes || '',
+        notionPageId: data.notionPageId || '',
+        notionUrl: data.notionUrl || '',
         statutCrm: data.statut || 'prospection',
         dateCreation: data.dateCreation || new Date().toISOString(),
       };
@@ -886,6 +899,8 @@ function app() {
           captions: project.captions || {},
           checklist: project.checklist || [],
           notes: project.notes || '',
+          notionPageId: project.notionPageId || null,
+          notionUrl: project.notionUrl || null,
           dateCreation: project.dateCreation || new Date().toISOString(),
         };
         await this.db.collection('users').doc(this.user.uid).collection('projets').doc(project.id).set(docData, { merge:true });
@@ -1123,6 +1138,95 @@ function app() {
       this.currentProject.checklist.push({ label: this.newChecklistItem, done:false });
       this.newChecklistItem = '';
       this.saveProjects();
+    },
+
+    // ---------- NOTION EXPORT ----------
+    // Export manuel, à la demande — contenu créatif uniquement (pas de coordonnées
+    // client) pour rester compatible avec le choix RGPD du CRM.
+    notionRichText(text) {
+      const chunks = [];
+      const s = String(text || '');
+      for (let i = 0; i < s.length; i += 1900) chunks.push(s.slice(i, i + 1900));
+      return (chunks.length ? chunks : ['']).map(c => ({ type:'text', text:{ content:c } }));
+    },
+    notionParagraph(text) { return { object:'block', type:'paragraph', paragraph:{ rich_text: this.notionRichText(text) } }; },
+    notionHeading(text) { return { object:'block', type:'heading_2', heading_2:{ rich_text: this.notionRichText(text) } }; },
+    notionBullet(text) { return { object:'block', type:'bulleted_list_item', bulleted_list_item:{ rich_text: this.notionRichText(text) } }; },
+    buildNotionBlocks(p) {
+      const blocks = [];
+      if (p.brief) {
+        blocks.push(this.notionHeading('Brief'));
+        const labels = { contexte:'Contexte client', objectif:'Objectif', cible:'Cible et message clé', ton:'Ton et style', contraintes:'Contraintes' };
+        for (const key of Object.keys(labels)) {
+          if (p.brief[key]) blocks.push(this.notionParagraph(labels[key] + ' — ' + p.brief[key]));
+        }
+        if (Array.isArray(p.brief.suggestions)) {
+          for (const s of p.brief.suggestions) blocks.push(this.notionBullet(s));
+        }
+      }
+      if (p.shotlist && p.shotlist.length) {
+        blocks.push(this.notionHeading('Shot List'));
+        for (const s of p.shotlist) {
+          blocks.push(this.notionBullet(`${s.numero}. ${s.plan} — ${s.cadrage} / ${s.mouvement} — ${s.description} (${s.duree})${s.notes ? ' — ' + s.notes : ''}`));
+        }
+      }
+      if (p.script) {
+        blocks.push(this.notionHeading('Script'));
+        for (const line of p.script.split('\n')) blocks.push(this.notionParagraph(line));
+      }
+      if (p.captions && Object.keys(p.captions).length) {
+        blocks.push(this.notionHeading('Captions / Réseaux'));
+        for (const [net, text] of Object.entries(p.captions)) {
+          if (text) blocks.push(this.notionParagraph(net.toUpperCase() + ' — ' + text));
+        }
+      }
+      return blocks.slice(0, 100);
+    },
+    async exportToNotion() {
+      const p = this.currentProject;
+      this.notionExportLoading = true; this.notionExportError = '';
+      try {
+        const properties = {
+          Nom: { title: [{ text: { content: p.title || 'Sans titre' } }] },
+          Client: { rich_text: [{ text: { content: p.client || '' } }] },
+          Type: { select: { name: p.type || 'Autre' } },
+          Statut: { select: { name: p.status || 'Brief' } },
+          Budget: { number: p.budget ? Number(p.budget) : null },
+          Avancement: { number: (p.progress || 0) / 100 },
+        };
+        if (p.deadline) properties.Deadline = { date: { start: p.deadline } };
+
+        if (p.notionPageId) {
+          await fetch(`/api/notion.js?endpoint=pages/${p.notionPageId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type':'application/json' },
+            body: JSON.stringify({ properties }),
+          });
+        } else {
+          const res = await fetch(`/api/notion.js?endpoint=pages`, {
+            method: 'POST',
+            headers: { 'Content-Type':'application/json' },
+            body: JSON.stringify({
+              parent: { database_id: '387ad81d-a4bc-812a-9650-e8b28b058e76' },
+              properties,
+              children: this.buildNotionBlocks(p),
+            }),
+          });
+          const page = await res.json();
+          if (page.id) {
+            p.notionPageId = page.id;
+            p.notionUrl = page.url || ('https://notion.so/' + page.id.replace(/-/g,''));
+          } else {
+            throw new Error(page.message || 'Erreur Notion');
+          }
+        }
+        this.saveProjects();
+        this.toast('Exporté vers Notion');
+      } catch(e) {
+        this.notionExportError = 'Erreur Notion. Réessaie.';
+      } finally {
+        this.notionExportLoading = false;
+      }
     },
 
     // ---------- STUDIO ----------
