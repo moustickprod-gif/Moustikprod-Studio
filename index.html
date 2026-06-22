@@ -516,6 +516,40 @@ tailwind.config = {
         </div>
       </template>
 
+      <!-- ============ IDÉES ============ -->
+      <template x-if="view==='idees'">
+        <div x-transition.opacity.duration.150ms class="max-w-3xl">
+          <div x-show="!(db && user && !user.skip)" class="text-center py-20 text-muted">
+            Connecte-toi avec un vrai compte pour voir les études et idées hebdomadaires (générées automatiquement chaque semaine).
+          </div>
+          <div x-show="db && user && !user.skip">
+            <div x-show="ideasLoading" class="text-muted text-sm mb-4">Chargement…</div>
+            <div x-show="!ideasLoading && ideasList.length===0" class="text-center py-20 text-muted">
+              Aucune étude pour l'instant. La tâche hebdomadaire alimentera cet onglet automatiquement.
+            </div>
+            <div class="space-y-4">
+              <template x-for="entry in ideasList" :key="entry.id">
+                <div class="bg-surface border border-line rounded-xl p-5 card-slide-enter">
+                  <div class="flex items-center justify-between mb-3">
+                    <p class="font-display font-bold text-sm text-accent" x-text="entry.weekLabel"></p>
+                    <button @click="deleteIdea(entry.id)" class="text-xs text-muted hover:text-accent">Supprimer</button>
+                  </div>
+                  <div x-show="entry.etude" class="text-sm whitespace-pre-wrap mb-3" x-text="entry.etude"></div>
+                  <div x-show="entry.idees && entry.idees.length">
+                    <p class="text-accent2 font-mono text-xs mb-1 uppercase">💡 Idées</p>
+                    <ul class="list-disc pl-5 space-y-1 text-sm">
+                      <template x-for="(idea,i) in (entry.idees||[])" :key="i">
+                        <li x-text="idea"></li>
+                      </template>
+                    </ul>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+      </template>
+
       <!-- ============ CLIENTS ============ -->
       <template x-if="view==='clients'">
         <div x-transition.opacity.duration.150ms>
@@ -738,6 +772,7 @@ function app() {
       { id:'dashboard', label:'Dashboard', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>' },
       { id:'projets', label:'Projets', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 10h20M6 6v4M11 6v4M16 6v4"/></svg>' },
       { id:'studio', label:'Studio IA', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.5 6.5L21 11l-6.5 2.5L12 20l-2.5-6.5L3 11l6.5-2.5z"/></svg>' },
+      { id:'idees', label:'Idées', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7V17h8v-2.3A7 7 0 0012 2z"/></svg>' },
       { id:'clients', label:'Clients', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0116 0v1"/></svg>' },
       { id:'reglages', label:'Réglages', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 008.6 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H2a2 2 0 110-4h.09A1.65 1.65 0 003.6 8.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H8a1.65 1.65 0 001-1.51V2a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V8a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>' },
     ],
@@ -745,6 +780,7 @@ function app() {
     // data
     projects: [],
     allClients: [],
+    ideasList: [], ideasLoading: false,
     db: null,
     statusFilter: 'Tous',
     searchQuery: '',
@@ -919,9 +955,33 @@ function app() {
         this.projects = projetsSnap.docs.map(d => this.projetDocToStudio(d.data()));
         const h = localStorage.getItem('mp_studio_history');
         if (h) this.studioHistory = JSON.parse(h);
+        this.loadIdeas();
       } catch(e) {
         console.error('Firestore loadData error', e);
         this.toast('Erreur de chargement des données', 'error');
+      }
+    },
+    // Études + idées générées chaque semaine par la tâche Cowork, via
+    // /api/ideas-ingest.js (écrit directement dans Firestore côté serveur).
+    async loadIdeas() {
+      this.ideasLoading = true;
+      try {
+        const snap = await this.db.collection('users').doc(this.user.uid).collection('idees').orderBy('weekStart', 'desc').get();
+        this.ideasList = snap.docs.map(d => d.data());
+      } catch(e) {
+        console.error('Firestore loadIdeas error', e);
+      } finally {
+        this.ideasLoading = false;
+      }
+    },
+    async deleteIdea(id) {
+      if (!confirm('Supprimer cette étude ?')) return;
+      try {
+        await this.db.collection('users').doc(this.user.uid).collection('idees').doc(id).delete();
+        this.ideasList = this.ideasList.filter(e => e.id !== id);
+        this.toast('Étude supprimée');
+      } catch(e) {
+        this.toast('Erreur de suppression', 'error');
       }
     },
     projetDocToStudio(data) {
