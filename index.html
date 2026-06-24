@@ -132,7 +132,10 @@ tailwind.config = {
       <div class="flex items-center gap-3">
         <h1 class="font-display font-bold text-lg" x-text="navItems.find(n=>n.id===view)?.label"></h1>
         <span x-show="user && user.skip" class="text-xs font-mono px-2 py-0.5 rounded bg-accent2/15 text-accent2 border border-accent2/30">Mode démo local</span>
-        <span x-show="db && user && !user.skip" class="text-xs font-mono px-2 py-0.5 rounded bg-accent/15 text-accent border border-accent/30">Synchronisé avec le CRM</span>
+        <span x-show="db && user && !user.skip" class="text-xs font-mono px-2 py-0.5 rounded bg-accent/15 text-accent border border-accent/30 flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full" :class="syncStatus==='syncing' ? 'bg-amber-400 animate-pulse' : syncStatus==='error' ? 'bg-red-500' : 'bg-emerald-400'"></span>
+          <span x-text="syncStatus==='syncing' ? 'Synchronisation...' : syncStatus==='error' ? 'Erreur de sync' : 'Synchronisé avec le CRM' + (lastSyncAt ? ' · ' + lastSyncAt : '')"></span>
+        </span>
       </div>
       <div class="flex items-center gap-3">
         <div class="relative" x-show="view==='projets'">
@@ -224,7 +227,10 @@ tailwind.config = {
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <template x-for="p in filteredProjects" :key="p.id">
-              <div @click="openProject(p)" class="card-slide-enter bg-surface border border-line rounded-xl p-5 cursor-pointer hover:border-accent/50 transition">
+              <div @click="openProject(p)" class="card-slide-enter relative group bg-surface border border-line rounded-xl p-5 cursor-pointer hover:border-accent/50 transition">
+                <button @click.stop="confirmDeleteProject(p)" title="Supprimer le projet" class="absolute top-3 right-3 opacity-0 group-hover:opacity-100 text-muted hover:text-red-500 transition p-1 z-10">
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
                 <div class="timeline-track mb-4" x-html="renderTimeline(p)"></div>
                 <div class="flex items-start justify-between">
                   <div>
@@ -246,7 +252,13 @@ tailwind.config = {
       <!-- ============ DETAIL PROJET ============ -->
       <template x-if="view==='detail' && currentProject">
         <div x-transition.opacity.duration.150ms class="max-w-4xl">
-          <button @click="view='projets'" class="text-muted text-sm mb-4 hover:text-ink flex items-center gap-1">← Retour aux projets</button>
+          <div class="flex items-center justify-between mb-4">
+            <button @click="view='projets'" class="text-muted text-sm hover:text-ink flex items-center gap-1">← Retour aux projets</button>
+            <button @click="confirmDeleteProject(currentProject)" class="text-xs text-muted hover:text-red-500 flex items-center gap-1 transition">
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              Supprimer le projet
+            </button>
+          </div>
 
           <div class="bg-surface border border-line rounded-xl p-5 mb-5">
             <div class="timeline-track mb-4" x-html="renderTimeline(currentProject)"></div>
@@ -307,12 +319,13 @@ tailwind.config = {
                 <span x-show="decoupageLoading" class="spinner"></span> Générer avec Claude
               </button>
               <button @click="copyDecoupage()" x-show="currentProject.decoupage && currentProject.decoupage.length" class="bg-surface border border-line text-sm px-4 py-2 rounded-lg">Copier en texte</button>
+              <button @click="addDecoupageRow()" class="bg-surface border border-line text-sm px-4 py-2 rounded-lg">+ Ajouter une ligne</button>
             </div>
             <p x-show="decoupageError" class="text-xs text-accent" x-text="decoupageError"></p>
             <div x-show="currentProject.decoupage && currentProject.decoupage.length" class="overflow-x-auto bg-surface border border-line rounded-xl">
               <table class="w-full text-sm">
                 <thead><tr class="text-muted text-xs font-mono border-b border-line">
-                  <th class="text-left p-2">Plan</th><th class="text-left p-2">Focale / Angle</th><th class="text-left p-2">Description</th><th class="text-left p-2">Heure</th><th class="text-left p-2">Fait</th>
+                  <th class="text-left p-2">Plan</th><th class="text-left p-2">Focale / Angle</th><th class="text-left p-2">Description</th><th class="text-left p-2">Heure</th><th class="text-left p-2">Fait</th><th class="p-2"></th>
                 </tr></thead>
                 <tbody>
                   <template x-for="(s,i) in (currentProject.decoupage||[])" :key="i">
@@ -322,6 +335,7 @@ tailwind.config = {
                       <td class="p-2"><input x-model="s.description" @blur="saveProjects()" class="bg-transparent border-0 w-full text-sm"></td>
                       <td class="p-2"><input x-model="s.heure" @blur="saveProjects()" class="bg-transparent border-0 w-20 text-sm"></td>
                       <td class="p-2"><input type="checkbox" x-model="s.fait" @change="saveProjects()" class="accent-accent"></td>
+                      <td class="p-2"><button @click="currentProject.decoupage.splice(i,1); saveProjects()" class="text-muted hover:text-accent text-xs">✕</button></td>
                     </tr>
                   </template>
                 </tbody>
@@ -777,6 +791,8 @@ function app() {
     // auth
     authReady: false, user: null, authMode: 'login', authEmail: '', authPassword: '', authError: '', authLoading: false,
     firebaseEnabled: false,
+    syncStatus: 'ok', // 'ok' | 'syncing' | 'error'
+    lastSyncAt: '',
 
     // nav
     sidebarOpen: true,
@@ -960,6 +976,7 @@ function app() {
     // son propre document pour ne jamais écraser les données de l'autre app.
     async loadData() {
       const uid = this.user.uid;
+      this.syncStatus = 'syncing';
       try {
         const [clientsSnap, projetsSnap] = await Promise.all([
           this.db.collection('users').doc(uid).collection('clients').get(),
@@ -970,8 +987,11 @@ function app() {
         const h = localStorage.getItem('mp_studio_history');
         if (h) this.studioHistory = JSON.parse(h);
         this.loadIdeas();
+        this.syncStatus = 'ok';
+        this.lastSyncAt = new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
       } catch(e) {
         console.error('Firestore loadData error', e);
+        this.syncStatus = 'error';
         this.toast('Erreur de chargement des données', 'error');
       }
     },
@@ -1075,6 +1095,7 @@ function app() {
     // sinon juste en local. Appelé après chaque modification de currentProject.
     async saveProjectDoc(project) {
       if (!this.db || !this.user || this.user.skip) return;
+      this.syncStatus = 'syncing';
       try {
         let clientId = project.clientId;
         if (!clientId && project.client) clientId = await this.resolveClientId(project.client);
@@ -1105,8 +1126,11 @@ function app() {
           dateCreation: project.dateCreation || new Date().toISOString(),
         };
         await this.db.collection('users').doc(this.user.uid).collection('projets').doc(project.id).set(docData, { merge:true });
+        this.syncStatus = 'ok';
+        this.lastSyncAt = new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
       } catch(e) {
         console.error('Firestore saveProjectDoc error', e);
+        this.syncStatus = 'error';
         this.toast('Erreur de synchronisation', 'error');
       }
     },
@@ -1197,6 +1221,24 @@ function app() {
       this.currentProject = p;
       this.detailTab = 'pitch';
       this.view = 'detail';
+    },
+    confirmDeleteProject(p) {
+      if (!confirm(`Supprimer définitivement le projet "${p.title}" ? Cette action est irréversible.`)) return;
+      this.deleteProject(p);
+    },
+    async deleteProject(p) {
+      this.projects = this.projects.filter(x => x.id !== p.id);
+      if (this.currentProject && this.currentProject.id === p.id) {
+        this.view = 'projets';
+        this.currentProject = null;
+      }
+      if (this.db && this.user && !this.user.skip) {
+        try {
+          await this.db.collection('users').doc(this.user.uid).collection('projets').doc(p.id).delete();
+        } catch (e) { console.error('Erreur suppression projet:', e); }
+      } else {
+        localStorage.setItem('mp_studio_projects', JSON.stringify(this.projects));
+      }
     },
 
     // ---------- NEW PROJECT MODAL — assistant pas-à-pas ----------
@@ -1375,6 +1417,12 @@ function app() {
       } finally {
         this.logistiqueLoading = false;
       }
+    },
+    addDecoupageRow() {
+      if (!this.currentProject.decoupage) this.currentProject.decoupage = [];
+      const n = this.currentProject.decoupage.length + 1;
+      this.currentProject.decoupage.push({ plan: `${n}.1`, focale: '', description: '', heure: '', fait: false, transition: false });
+      this.saveProjects();
     },
     addMatosItem() {
       if (!this.newMatosItem.trim()) return;
