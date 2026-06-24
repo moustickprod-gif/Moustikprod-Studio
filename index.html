@@ -545,11 +545,17 @@ tailwind.config = {
           <div x-show="db && user && !user.skip">
             <div class="flex items-center justify-between mb-4">
               <p class="text-muted text-sm">Alimenté automatiquement chaque semaine — ou à la demande.</p>
-              <button @click="generateManualIdea()" class="bg-accent text-white text-sm font-medium px-3 py-1.5 rounded-lg flex items-center gap-2">
-                <span x-show="manualIdeaLoading" class="spinner"></span> Générer maintenant
-              </button>
+              <div class="flex gap-2">
+                <button @click="generateCompetitiveAnalysis()" class="bg-surface border border-line text-sm font-medium px-3 py-1.5 rounded-lg flex items-center gap-2 hover:border-accent/50 transition">
+                  <span x-show="competitiveLoading" class="spinner"></span> Analyse concurrentielle
+                </button>
+                <button @click="generateManualIdea()" class="bg-accent text-white text-sm font-medium px-3 py-1.5 rounded-lg flex items-center gap-2">
+                  <span x-show="manualIdeaLoading" class="spinner"></span> Générer maintenant
+                </button>
+              </div>
             </div>
             <p x-show="manualIdeaError" class="text-xs text-accent mb-3" x-text="manualIdeaError"></p>
+            <p x-show="competitiveError" class="text-xs text-accent mb-3" x-text="competitiveError"></p>
             <div x-show="ideasLoading" class="text-muted text-sm mb-4">Chargement…</div>
             <div x-show="!ideasLoading && ideasList.length===0" class="text-center py-20 text-muted">
               Aucune étude pour l'instant. La tâche hebdomadaire alimentera cet onglet automatiquement, ou clique "Générer maintenant".
@@ -561,6 +567,7 @@ tailwind.config = {
                     <div class="flex items-center gap-2 min-w-0">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0 text-muted transition-transform" :style="expandedIdeaId===entry.id ? 'transform:rotate(90deg)' : ''"><path d="M9 6l6 6-6 6"/></svg>
                       <p class="font-display font-bold text-sm text-accent shrink-0" x-text="entry.weekLabel"></p>
+                      <span x-show="entry.type==='concurrence'" class="text-xs font-mono px-1.5 py-0.5 rounded bg-accent2/20 text-accent2 shrink-0">Concurrence</span>
                       <p x-show="expandedIdeaId!==entry.id" class="text-muted text-xs truncate" x-text="(entry.idees||[]).length + ' idée(s)'"></p>
                     </div>
                     <span @click.stop="deleteIdea(entry.id)" class="text-xs text-muted hover:text-accent shrink-0">Supprimer</span>
@@ -828,6 +835,7 @@ function app() {
     allClients: [],
     ideasList: [], ideasLoading: false, expandedIdeaId: null,
     manualIdeaLoading: false, manualIdeaError: '',
+    competitiveLoading: false, competitiveError: '',
     db: null,
     statusFilter: 'Tous',
     searchQuery: '',
@@ -1068,6 +1076,30 @@ function app() {
         this.manualIdeaError = 'Erreur Claude. Réessaie.';
       } finally {
         this.manualIdeaLoading = false;
+      }
+    },
+    // Analyse de veille concurrentielle ciblée vidéo/réseaux sociaux pour
+    // freelances en production vidéo — distincte de l'étude hebdo généraliste.
+    async generateCompetitiveAnalysis() {
+      this.competitiveLoading = true; this.competitiveError = '';
+      try {
+        const ctx = this.projects.map(p => `${p.title} (${p.type})`).join('\n') || 'Aucun projet en cours.';
+        const text = await this.callClaude(
+          `Tu es consultant en veille concurrentielle pour Moustikprod, agence vidéo freelance (corporate, réseaux sociaux, storytelling). Analyse les tendances actuelles du marché de la production vidéo freelance/agence en France : formats qui montent, ce que font les concurrents (agences et freelances similaires), positionnement et tarifs observés, opportunités de différenciation. Propose ensuite 3 à 5 idées d'action concrètes (offre, contenu, prospection) basées sur cette analyse.\nRéponds en JSON avec ces clés exactes : etude (string, 5-8 phrases d'analyse concurrentielle), idees (array de strings, idées d'action concrètes).`,
+          `Types de projets actuels chez Moustikprod:\n${ctx}`
+        );
+        const j = this.extractJson(text);
+        const { weekStart, weekLabel } = this.weekLabelNow();
+        const id = 'idea_' + Date.now();
+        const entry = { id, weekStart, weekLabel, etude: j.etude || '', idees: j.idees || [], type: 'concurrence', createdAt: new Date().toISOString() };
+        await this.db.collection('users').doc(this.user.uid).collection('idees').doc(id).set(entry);
+        this.ideasList.unshift(entry);
+        this.expandedIdeaId = entry.id;
+        this.toast('Analyse concurrentielle générée');
+      } catch(e) {
+        this.competitiveError = 'Erreur Claude. Réessaie.';
+      } finally {
+        this.competitiveLoading = false;
       }
     },
     projetDocToStudio(data) {
