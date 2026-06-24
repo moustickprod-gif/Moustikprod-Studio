@@ -25,5 +25,16 @@ service cloud.firestore {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
     }
+
+    // Collections utilisées uniquement par les fonctions serverless du CRM
+    // (liens de signature, mapping d'abonnements Stripe), authentifiées via
+    // un compte de service Google (IAM) qui contourne ces règles. Aucun client
+    // (navigateur, app) ne doit jamais y accéder directement.
+    match /signatureRequests/{token} {
+      allow read, write: if false;
+    }
+    match /stripeSubscriptions/{subId} {
+      allow read, write: if false;
+    }
   }
 }
