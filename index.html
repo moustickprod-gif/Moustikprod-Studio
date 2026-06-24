@@ -276,6 +276,7 @@ tailwind.config = {
             <div class="flex items-center justify-between mt-2">
               <p class="text-muted text-sm" x-text="currentProject.client + ' · ' + currentProject.type + ' · Deadline: ' + (currentProject.deadline || '—')"></p>
               <div class="flex items-center gap-2">
+                <button @click="createDevisInCrm()" x-show="!user || !user.skip" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition">Créer un devis →</button>
                 <a x-show="currentProject.notionUrl" :href="currentProject.notionUrl" target="_blank" class="text-xs text-accent hover:underline">Voir dans Notion ↗</a>
                 <button @click="exportToNotion()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg flex items-center gap-2 hover:border-accent/50 transition">
                   <span x-show="notionExportLoading" class="spinner"></span>
@@ -1234,6 +1235,11 @@ function app() {
       this.currentProject = p;
       this.detailTab = 'pitch';
       this.view = 'detail';
+    },
+    createDevisInCrm() {
+      if (!this.currentProject || !this.currentProject.id) return;
+      const url = `https://moustikprod-crm.vercel.app/?devisFromProjet=${encodeURIComponent(this.currentProject.id)}`;
+      window.open(url, '_blank');
     },
     confirmDeleteProject(p) {
       if (!confirm(`Supprimer définitivement le projet "${p.title}" ? Cette action est irréversible.`)) return;

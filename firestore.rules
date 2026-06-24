@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      match /clients/{clientId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      match /projets/{projetId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      match /idees/{ideeId} {
+        // Lecture/suppression réservées au propriétaire connecté.
+        allow read, delete: if request.auth != null && request.auth.uid == userId;
+        // Écriture refusée depuis le client : seule la fonction serverless
+        // /api/ideas-ingest.js (compte de service Google, hors Firestore Auth)
+        // peut créer/modifier ces documents via l'API REST authentifiée OAuth2.
+        allow create, update: if false;
+      }
+      // Tout le reste (settings, devisListe, factures, transactions, etc.)
+      // reste sous la règle générique propriétaire ci-dessus, mais explicite
+      // plutôt que via un wildcard récursif fourre-tout.
+      match /data/{docId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+  }
+}
