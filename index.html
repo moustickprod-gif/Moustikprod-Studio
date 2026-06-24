@@ -281,6 +281,7 @@ tailwind.config = {
                   <span x-show="notionExportLoading" class="spinner"></span>
                   <span x-text="currentProject.notionUrl ? 'Mettre à jour Notion' : 'Exporter vers Notion'"></span>
                 </button>
+                <button @click="confirmDeleteProject()" class="text-xs bg-surface border border-red-200 text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-50 transition">Supprimer</button>
               </div>
             </div>
             <p x-show="notionExportError" class="text-xs text-accent mt-1" x-text="notionExportError"></p>
@@ -766,6 +767,17 @@ tailwind.config = {
 </div>
 
 <!-- ===================== MODAL SAVE TO PROJECT ===================== -->
+<div x-show="deleteProjectConfirmOpen" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @keydown.escape.window="deleteProjectConfirmOpen=false">
+  <div class="modal-slide-enter bg-surface border border-line rounded-xl w-full max-w-sm p-6" x-show="deleteProjectConfirmOpen">
+    <h3 class="font-display font-bold text-lg mb-2">Supprimer le projet</h3>
+    <p class="text-sm text-muted mb-6">Cette action est irréversible. Le projet sera supprimé définitivement.</p>
+    <div class="flex gap-3">
+      <button @click="deleteProjectConfirmOpen=false" class="flex-1 text-sm border border-line rounded-lg px-4 py-2 hover:bg-bg transition">Annuler</button>
+      <button @click="deleteProject()" class="flex-1 text-sm bg-red-500 text-white rounded-lg px-4 py-2 hover:bg-red-600 transition">Supprimer</button>
+    </div>
+  </div>
+</div>
+
 <div x-show="saveToProjectOpen" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @keydown.escape.window="saveToProjectOpen=false">
   <div class="modal-slide-enter bg-surface border border-line rounded-xl w-full max-w-md p-6" x-show="saveToProjectOpen">
     <h3 class="font-display font-bold text-lg mb-4">Sauvegarder dans un projet</h3>
@@ -852,6 +864,7 @@ function app() {
     studioResult: '', studioLoading: false, studioError: '',
     studioHistory: [],
     saveToProjectOpen: false,
+    deleteProjectConfirmOpen: false,
 
     // clients
     clientSearch: '', currentClient: null,
@@ -1650,6 +1663,26 @@ function app() {
       this.projects = this.demoProjects();
       this.saveProjects();
       this.toast('Données réinitialisées');
+    },
+
+    // ---------- DELETE PROJECT ----------
+    confirmDeleteProject() {
+      this.deleteProjectConfirmOpen = true;
+    },
+    async deleteProject() {
+      const p = this.currentProject;
+      if (!p) return;
+      if (this.db && this.user && !this.user.skip) {
+        try {
+          await this.db.collection('users').doc(this.user.uid).collection('projets').doc(p.id).delete();
+        } catch(e) { /* continue même si Firestore échoue */ }
+      }
+      this.projects = this.projects.filter(pr => pr.id !== p.id);
+      this.saveProjects();
+      this.deleteProjectConfirmOpen = false;
+      this.currentProject = null;
+      this.view = 'projets';
+      this.toast('Projet supprimé');
     }
   }
 }
