@@ -277,6 +277,10 @@ tailwind.config = {
               <p class="text-muted text-sm" x-text="currentProject.client + ' · ' + currentProject.type + ' · Deadline: ' + (currentProject.deadline || '—')"></p>
               <div class="flex items-center gap-2">
                 <button @click="createDevisInCrm()" x-show="!user || !user.skip" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition">Créer un devis →</button>
+                <button @click="currentProject.shareEnabled ? copyShareLink() : toggleShare()" x-show="!user || !user.skip" class="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition" :class="currentProject.shareEnabled ? 'bg-accent/15 text-accent border border-accent/30' : 'bg-surface border border-line hover:border-accent/50'">
+                  <span x-text="currentProject.shareEnabled ? 'Copier le lien client' : 'Partager avec le client'"></span>
+                </button>
+                <button @click="toggleShare()" x-show="currentProject.shareEnabled" class="text-xs text-muted hover:text-red-500">Désactiver</button>
                 <a x-show="currentProject.notionUrl" :href="currentProject.notionUrl" target="_blank" class="text-xs text-accent hover:underline">Voir dans Notion ↗</a>
                 <button @click="exportToNotion()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg flex items-center gap-2 hover:border-accent/50 transition">
                   <span x-show="notionExportLoading" class="spinner"></span>
@@ -1091,6 +1095,8 @@ function app() {
         notes: data.notes || '',
         notionPageId: data.notionPageId || '',
         notionUrl: data.notionUrl || '',
+        shareToken: data.shareToken || '',
+        shareEnabled: !!data.shareEnabled,
         statutCrm: data.statut || 'prospection',
         dateCreation: data.dateCreation || new Date().toISOString(),
       };
@@ -1137,6 +1143,8 @@ function app() {
           notes: project.notes || '',
           notionPageId: project.notionPageId || null,
           notionUrl: project.notionUrl || null,
+          shareToken: project.shareToken || null,
+          shareEnabled: !!project.shareEnabled,
           dateCreation: project.dateCreation || new Date().toISOString(),
         };
         await this.db.collection('users').doc(this.user.uid).collection('projets').doc(project.id).set(docData, { merge:true });
@@ -1235,6 +1243,28 @@ function app() {
       this.currentProject = p;
       this.detailTab = 'pitch';
       this.view = 'detail';
+    },
+    async toggleShare() {
+      if (!this.currentProject) return;
+      if (!this.currentProject.shareEnabled) {
+        if (!this.currentProject.shareToken) {
+          this.currentProject.shareToken = (crypto.randomUUID ? crypto.randomUUID() : (Date.now()+'-'+Math.random().toString(36).slice(2))).replace(/-/g,'');
+        }
+        this.currentProject.shareEnabled = true;
+        await this.saveProjectDoc(this.currentProject);
+        const url = `${location.origin}/share.html?token=${this.currentProject.shareToken}`;
+        try { await navigator.clipboard.writeText(url); this.toast('Lien copié dans le presse-papiers !', 'success'); }
+        catch(e) { this.toast(url, 'success'); }
+      } else {
+        this.currentProject.shareEnabled = false;
+        await this.saveProjectDoc(this.currentProject);
+        this.toast('Partage désactivé.', 'success');
+      }
+    },
+    copyShareLink() {
+      if (!this.currentProject || !this.currentProject.shareToken) return;
+      const url = `${location.origin}/share.html?token=${this.currentProject.shareToken}`;
+      navigator.clipboard.writeText(url).then(() => this.toast('Lien copié !', 'success')).catch(() => this.toast(url, 'success'));
     },
     createDevisInCrm() {
       if (!this.currentProject || !this.currentProject.id) return;

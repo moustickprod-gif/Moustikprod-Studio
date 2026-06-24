@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moustikprod — Aperçu projet</title>
+<meta name="robots" content="noindex">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  body { font-family: 'Poppins', sans-serif; background:#F7FAFB; color:#024059; }
+  .accent { color:#3CD6D1; }
+  .card { background:#fff; border:1px solid #DCE6E9; border-radius:14px; padding:20px; margin-bottom:16px; }
+</style>
+</head>
+<body>
+<div id="app" class="max-w-3xl mx-auto px-4 py-10"></div>
+<script>
+async function load() {
+  const params = new URLSearchParams(location.search);
+  const token = params.get('token') || '';
+  const app = document.getElementById('app');
+  app.innerHTML = '<p class="text-center text-sm" style="color:#6b8a93">Chargement...</p>';
+  try {
+    const res = await fetch('/api/project-share?token=' + encodeURIComponent(token));
+    const data = await res.json();
+    if (!res.ok) {
+      app.innerHTML = `<div class="card text-center"><p class="font-semibold">${data.error || 'Lien invalide ou expiré.'}</p></div>`;
+      return;
+    }
+    const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const nl = s => esc(s).replace(/\n/g, '<br>');
+    let decoupageHtml = '';
+    if (data.decoupage && data.decoupage.length) {
+      decoupageHtml = `<div class="card"><h2 class="font-bold mb-3" style="color:#024059">Découpage technique</h2>
+        <div class="overflow-x-auto"><table class="w-full text-sm">
+        <thead><tr class="text-xs uppercase" style="color:#6b8a93"><th class="text-left p-2">Plan</th><th class="text-left p-2">Focale</th><th class="text-left p-2">Description</th><th class="text-left p-2">Heure</th></tr></thead>
+        <tbody>${data.decoupage.map(s => `<tr style="border-top:1px solid #DCE6E9"><td class="p-2 text-xs font-mono">${esc(s.plan)}</td><td class="p-2">${esc(s.focale)}</td><td class="p-2">${esc(s.description)}</td><td class="p-2">${esc(s.heure)}</td></tr>`).join('')}</tbody>
+        </table></div></div>`;
+    }
+    app.innerHTML = `
+      <div class="mb-6">
+        <p class="text-xs accent font-bold uppercase tracking-wide mb-1">Aperçu projet — Moustikprod</p>
+        <h1 class="text-2xl font-bold">${esc(data.titre)}</h1>
+        <p class="text-sm mt-1" style="color:#6b8a93">${esc(data.client)}${data.typeVideo ? ' · ' + esc(data.typeVideo) : ''}${data.statutStudio ? ' · ' + esc(data.statutStudio) : ''}</p>
+      </div>
+      ${data.pitch ? `<div class="card"><h2 class="font-bold mb-2">Pitch</h2><p class="text-sm">${nl(data.pitch)}</p></div>` : ''}
+      ${data.idees ? `<div class="card"><h2 class="font-bold mb-2">Idées</h2><p class="text-sm">${nl(data.idees)}</p></div>` : ''}
+      ${data.aPenser ? `<div class="card"><h2 class="font-bold mb-2">À penser</h2><p class="text-sm">${nl(data.aPenser)}</p></div>` : ''}
+      ${data.scenario ? `<div class="card"><h2 class="font-bold mb-2">Scénario</h2><p class="text-sm">${nl(data.scenario)}</p></div>` : ''}
+      ${decoupageHtml}
+      ${(data.matos && data.matos.length) ? `<div class="card"><h2 class="font-bold mb-2">Matos à louer</h2><ul class="text-sm list-disc pl-5">${data.matos.map(m => `<li>${esc(m)}</li>`).join('')}</ul></div>` : ''}
+      ${data.lieu ? `<div class="card"><h2 class="font-bold mb-2">Lieu de tournage</h2><p class="text-sm">${nl(data.lieu)}</p></div>` : ''}
+      ${data.moodboardNotes ? `<div class="card"><h2 class="font-bold mb-2">Moodboard</h2><p class="text-sm">${nl(data.moodboardNotes)}</p></div>` : ''}
+      <p class="text-center text-xs mt-8" style="color:#6b8a93">Lien de partage en lecture seule — généré depuis Moustikprod Studio</p>
+    `;
+  } catch (e) {
+    app.innerHTML = '<div class="card text-center"><p class="font-semibold">Erreur de chargement.</p></div>';
+  }
+}
+load();
+</script>
+</body>
+</html>
