@@ -534,7 +534,8 @@ tailwind.config = {
             </div>
 
             <button @click="createProject()" :disabled="!newProject.title || creatingProject" class="w-full bg-accent text-white text-sm font-medium py-2.5 rounded-lg flex items-center justify-center gap-2 disabled:opacity-40">
-              <span x-show="creatingProject" class="spinner"></span> Créer le projet →
+              <span x-show="creatingProject" class="spinner"></span>
+              <span x-text="creatingProject ? '✦ Création en cours...' : 'Créer le projet →'"></span>
             </button>
           </div>
         </div>
@@ -1440,10 +1441,10 @@ function app() {
       };
       this.projects.unshift(project);
       await this.saveProjectDoc(project);
+      await this.generateInitialBrief(project);
       this.creatingProject = false;
       this.toast('Projet créé');
       this.openProject(project);
-      this.generateInitialBrief(project);
     },
     async generateInitialBrief(project) {
       this.autoBriefLoading = true;
@@ -1456,9 +1457,6 @@ function app() {
         const [briefPart, ideesPart] = text.split('---IDÉES---');
         project.pitch = (briefPart || '').trim();
         project.idees = (ideesPart || '').trim();
-        if (this.currentProject && this.currentProject.id === project.id) {
-          this.currentProject = Object.assign({}, this.currentProject, { pitch: project.pitch, idees: project.idees });
-        }
         await this.saveProjectDoc(project);
       } catch(e) {
         this.toast('Erreur génération automatique du brief', 'error');
