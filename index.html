@@ -290,7 +290,16 @@ tailwind.config = {
             <p x-show="notionExportError" class="text-xs text-accent mt-1" x-text="notionExportError"></p>
           </div>
 
-          <div x-show="!currentProject.pitch && !currentProject.scenario && !briefBannerDismissed" class="bg-accent/10 border border-accent/30 rounded-xl p-4 mb-5 flex items-center justify-between gap-4">
+          <div x-show="!projectSuggestionDismissed && (projectSuggestionLoading || projectSuggestion)" class="bg-accent2/10 border border-accent2/30 rounded-xl p-4 mb-5 flex items-center justify-between gap-4">
+            <p class="text-sm flex items-center gap-2">
+              <span class="text-accent2">✦</span>
+              <span x-show="projectSuggestionLoading" class="text-muted">Claude réfléchit à la prochaine étape…</span>
+              <span x-show="!projectSuggestionLoading"><span class="font-mono text-xs text-muted uppercase mr-1">Prochaine étape suggérée</span> — <span x-text="projectSuggestion"></span></span>
+            </p>
+            <button @click="dismissProjectSuggestion()" class="text-muted hover:text-ink text-sm shrink-0" title="Ignorer">✕</button>
+          </div>
+
+          <div x-show="!currentProject.pitch && !currentProject.scenario && !briefBannerDismissed && !autoBriefLoading" class="bg-accent/10 border border-accent/30 rounded-xl p-4 mb-5 flex items-center justify-between gap-4">
             <p class="text-sm">
               <span class="text-accent">✦</span>
               Ce projet n'a pas encore de brief. Génère-le en 1 clic pour préparer ta prod.
@@ -309,9 +318,10 @@ tailwind.config = {
 
           <!-- PITCH TAB -->
           <div x-show="detailTab==='pitch'" class="space-y-4">
+            <p x-show="autoBriefLoading" class="text-sm text-accent flex items-center gap-2"><span class="spinner"></span> ✦ Génération du brief en cours…</p>
             <div class="bg-surface border-l-4 border-accent2 rounded-xl p-5">
               <p class="text-accent2 font-mono text-xs mb-2 uppercase">Pitch</p>
-              <textarea x-model="currentProject.pitch" @blur="saveProjects()" rows="4" placeholder="Le pitch généré apparaîtra ici..." class="w-full bg-transparent border-0 text-sm p-0"></textarea>
+              <textarea x-model="currentProject.pitch" @blur="saveProjects()" rows="4" :disabled="autoBriefLoading" placeholder="Le pitch généré apparaîtra ici..." class="w-full bg-transparent border-0 text-sm p-0"></textarea>
             </div>
             <div class="bg-accent2/10 border-l-4 border-accent2 rounded-xl p-5">
               <p class="text-accent2 font-mono text-xs mb-2 uppercase">💡 Idées</p>
@@ -818,9 +828,12 @@ function app() {
     newProjectBriefLoading: false, newProjectBriefError: '',
     creatingProject: false,
     briefBannerDismissed: false,
+    projectSuggestion: '', projectSuggestionLoading: false, projectSuggestionDismissed: false,
 
     // detail generation states
-    pitchLoading: false, pitchError: '',
+    pitchLoading: false, pitchError: '', autoBriefLoading: false,
+    exploreAnglesLoading: false, exploreAnglesError: '', creativeAngles: [],
+    scenarioCritiqueLoading: false, scenarioCritiqueError: '', scenarioCritique: null,
     decoupageLoading: false, decoupageError: '',
     scenarioLoading: false, scenarioError: '',
     logistiqueLoading: false, logistiqueError: '',
@@ -1226,6 +1239,33 @@ function app() {
       this.detailTab = 'pitch';
       this.briefBannerDismissed = false;
       this.view = 'detail';
+      this.projectSuggestion = '';
+      this.projectSuggestionDismissed = localStorage.getItem('mp_suggestion_dismissed_' + p.id) === '1';
+      this.loadProjectSuggestion(p);
+    },
+    dismissProjectSuggestion() {
+      this.projectSuggestionDismissed = true;
+      if (this.currentProject) localStorage.setItem('mp_suggestion_dismissed_' + this.currentProject.id, '1');
+    },
+    async loadProjectSuggestion(project, attempt) {
+      if (this.projectSuggestionDismissed) return;
+      this.projectSuggestionLoading = true;
+      try {
+        const today = new Date().toISOString().slice(0,10);
+        const text = await this.callClaude(
+          'Tu es un assistant de production vidéo.',
+          `Ce projet en est là :\n- Titre : ${project.title}, Client : ${project.client || 'non précisé'}\n- Statut : ${this.statusLabel(project.status)}\n- Pitch : ${project.pitch ? 'rempli' : 'vide'}\n- Scénario : ${project.scenario ? 'rempli' : 'vide'}\n- Shot list : ${(project.decoupage||[]).length ? 'remplie' : 'vide'}\n- Deadline : ${project.deadline || 'non définie'}\n- Aujourd'hui : ${today}\n\nEn une phrase courte et directe (max 15 mots), quelle est la prochaine action concrète la plus importante pour faire avancer ce projet ?\nCommence par un verbe à l'impératif. Exemple : "Envoie le brief validé à Roussel Judicael avant vendredi."`
+        );
+        if (this.currentProject && this.currentProject.id === project.id) this.projectSuggestion = text.trim();
+      } catch(e) {
+        if (!attempt && this.currentProject && this.currentProject.id === project.id) {
+          this.projectSuggestionLoading = false;
+          return this.loadProjectSuggestion(project, 1);
+        }
+        // échec après retry — l'encart reste simplement masqué
+      } finally {
+        this.projectSuggestionLoading = false;
+      }
     },
     async toggleShare() {
       if (!this.currentProject) return;
@@ -1317,6 +1357,28 @@ function app() {
       this.creatingProject = false;
       this.toast('Projet créé');
       this.openProject(project);
+      this.generateInitialBrief(project);
+    },
+    async generateInitialBrief(project) {
+      this.autoBriefLoading = true;
+      const contexteCreateur = project.pitch || 'non renseigné';
+      try {
+        const text = await this.callClaude(
+          'Tu es un directeur créatif expert en production vidéo.',
+          `Un projet vient d'être créé avec ces informations :\n- Titre : ${project.title}\n- Client : ${project.client || 'non précisé'}\n- Type de vidéo : ${project.type || 'non précisé'}\n- Contexte créatif fourni par le créateur : ${contexteCreateur}\n\nGénère deux éléments distincts, séparés par le marqueur ---IDÉES--- :\n\n1. BRIEF (avant ---IDÉES---) :\nUn brief créatif de 3-4 phrases. Ton clair et direct. Mentionne l'objectif, le ton, et l'angle narratif principal.\n\n2. IDÉES (après ---IDÉES---) :\nPropose 3 angles créatifs DIFFÉRENTS pour ce projet, numérotés. Chaque angle en 1-2 phrases. Les angles doivent être contrastés : un émotionnel, un démonstratif, un storytelling.`
+        );
+        const [briefPart, ideesPart] = text.split('---IDÉES---');
+        project.pitch = (briefPart || '').trim();
+        project.idees = (ideesPart || '').trim();
+        if (this.currentProject && this.currentProject.id === project.id) {
+          this.currentProject = Object.assign({}, this.currentProject, { pitch: project.pitch, idees: project.idees });
+        }
+        await this.saveProjectDoc(project);
+      } catch(e) {
+        this.toast('Erreur génération automatique du brief', 'error');
+      } finally {
+        this.autoBriefLoading = false;
+      }
     },
 
     // ---------- DETAIL GENERATIONS — mêmes sections que le template Notion ----------
