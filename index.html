@@ -934,6 +934,25 @@ function app() {
       this.loadSettings();
       this.bindShortcuts();
       this.initFirebase();
+      this.handleDeepLinkParams();
+    },
+    // Supporte les liens du type /nouveau-projet?titre=...&type=...&contexte=...
+    // (utile pour des liens externes ou des intégrations qui veulent pré-remplir
+    // la création de projet sans passer par l'UI Idées).
+    handleDeepLinkParams() {
+      const params = new URLSearchParams(location.search);
+      const titre = params.get('titre');
+      if (!titre) return;
+      this.goToNewProject();
+      this.newProject.title = titre;
+      const type = params.get('type');
+      if (type) this.newProject.type = type;
+      const contexte = params.get('contexte');
+      if (contexte) {
+        this.newProject.briefContext = contexte;
+        this.newProject.briefOpen = true;
+      }
+      history.replaceState({}, '', '/');
     },
 
     // ---------- AUTH ----------
@@ -1356,9 +1375,15 @@ function app() {
       this.newProjectBriefError = '';
       this.view = 'nouveau-projet';
     },
+    detectVideoTypeFromText(text) {
+      const lower = text.toLowerCase();
+      if (/tiktok|reels|short/.test(lower)) return 'TikTok';
+      if (/vlog|van|nomade|aventure/.test(lower)) return 'Vlog';
+      if (/corporate|entreprise|marque/.test(lower)) return 'Corporate';
+      return '';
+    },
     createProjectFromIdea(ideaText) {
-      const videoTypes = ['Corporate','Vlog','TikTok','Interview','Podcast','Docu'];
-      const detectedType = videoTypes.find(t => ideaText.toLowerCase().includes(t.toLowerCase())) || '';
+      const detectedType = this.detectVideoTypeFromText(ideaText);
       const title = ideaText.split(/\s—\s|\s-\s|:/)[0].trim().slice(0, 80) || ideaText.slice(0, 80);
       this.goToNewProject();
       this.newProject.title = title;
