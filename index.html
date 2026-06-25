@@ -1511,16 +1511,28 @@ function app() {
       this.toast("Pitch remplacé par l'angle choisi");
     },
     decoupagePrompt() {
-      return `Tu es 1er assistant réalisateur. Génère un découpage technique professionnel pour ce projet vidéo, groupé par scène (numérotation type 1.1, 1.2, 2.1...).\nFormat JSON : array d'objets avec les clés exactes : plan (ex: "1.1"), focale (GE/PE/GP/PM/PA/PL ou type d'angle), description, heure (ambiance lumière, ex: "golden hour"), fait (toujours false), transition (true seulement pour une ligne de transition entre deux scènes, sinon false).`;
+      return `Tu es un 1er assistant caméra expert en tournage vidéo.\nGénère une shot list pour ce projet.\n\nGénère 8 à 12 plans. Pour chaque plan, réponds UNIQUEMENT avec ce format JSON array (sans markdown) :\n[\n  {"plan": "01", "focale": "Grand angle 16mm", "description": "Plan d'ouverture — vue d'ensemble du lieu", "heure": "08:00"},\n  ...\n]\n\nSois précis et concis. Un plan = une ligne JSON.`;
     },
     async generateDecoupage() {
       this.decoupageLoading = true; this.decoupageError='';
       try {
-        const text = await this.callClaude(this.decoupagePrompt(), this.projectContext());
-        this.currentProject.decoupage = this.extractJson(text);
+        const p = this.currentProject;
+        const scenarioContext = p.scenario && p.scenario.length > 3000
+          ? p.scenario.slice(0, 3000) + '...[tronqué]'
+          : p.scenario || 'non renseigné';
+        const userMessage = `Titre : ${p.title}\nType : ${p.type || 'non précisé'}\nClient : ${p.client || 'non précisé'}\nScénario (résumé) : ${scenarioContext}`;
+        const text = await this.callClaude(this.decoupagePrompt(), userMessage);
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) throw new Error('Réponse non JSON');
+        const plans = JSON.parse(jsonMatch[0]);
+        this.currentProject.decoupage = plans.map(pl => ({
+          plan: pl.plan || '', focale: pl.focale || '', description: pl.description || '',
+          heure: pl.heure || '', fait: false, transition: !!pl.transition,
+        }));
         this.saveProjects();
         this.toast('Découpage technique généré');
       } catch(e) {
+        console.error('[Découpage] Erreur Claude API:', e);
         this.decoupageError = 'Erreur Claude. Réessaie.';
       } finally {
         this.decoupageLoading = false;
