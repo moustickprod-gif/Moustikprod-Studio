@@ -1265,6 +1265,24 @@ function app() {
         },
         { ...base, id:'p2', title:'Interview CEO Startup', client:'TechLab', type:'Interview', status:'brief', progress:15, deadline:'2026-08-02', budget:'1200', checklist:[{label:'Brief validé',done:false}] },
         { ...base, id:'p3', title:'TikTok série Recettes', client:'RestoBio', type:'TikTok/Reels', status:'livraison', progress:95, deadline:'2026-06-25', budget:'900', checklist:[{label:'Export vertical',done:true},{label:'Sous-titres',done:true}] },
+        {
+          ...base, id:'p4', title:'Vidéo corporate lancement', client:'ColorMind', type:'Corporate', status:'pre-production', progress:30, deadline:'2026-07-25', budget:'900',
+          checklist:[{label:'Brief validé',done:true},{label:'Tournage atelier',done:false}],
+          pitch:"ColorMind est une marque de cosmétiques naturels qui souhaite une vidéo corporate de 2 minutes pour son lancement. Le ton est chaleureux, authentique, axé sur les valeurs fondatrices. Le pitch : montrer le processus de fabrication artisanal depuis les matières premières jusqu'au produit final, avec des témoignages de la fondatrice.",
+          scenario:"ACTE 1 — MATIÈRES PREMIÈRES (0:00-0:30)\nPlan d'ouverture sur les matières premières (plantes, huiles, textures brutes), voix-off de la fondatrice qui présente sa vision et ses valeurs.\n\nACTE 2 — FABRICATION (0:30-1:30)\nCoulisses de fabrication dans l'atelier, gros plans sur les mains qui travaillent les produits, étapes clés du processus artisanal.\n\nACTE 3 — PRODUIT FINI (1:30-2:00)\nPlan sur le produit fini et son packaging, message de clôture et appel à l'action (lien boutique / lancement).",
+          decoupage:[
+            { plan:'Plan 1', focale:'Grand angle (24mm)', description:"Plan large de l'atelier, ambiance de travail générale", heure:'09h00' },
+            { plan:'Plan 2', focale:'Macro / 100mm', description:"Gros plan sur les mains qui travaillent la matière première", heure:'09h30' },
+            { plan:'Plan 3', focale:'50mm', description:"Medium shot interview de la fondatrice face caméra", heure:'10h30' },
+            { plan:'Plan 4', focale:'Macro / 100mm', description:"Insert produit — texture, flacon, étiquette", heure:'11h15' },
+            { plan:'Plan 5', focale:'50mm', description:"Plan final sur le packaging fini, posé en lumière naturelle", heure:'11h45' },
+          ],
+          captions:{
+            instagram:"🌿 Du champ au flacon, sans détour. Découvrez les coulisses de fabrication de ColorMind — 100% naturel, 100% assumé. #ColorMind #CosmétiquesNaturels #FaitMain",
+            tiktok:"POV : tu découvres comment on fabrique vraiment tes cosmétiques 🌱✨ On t'emmène en coulisses chez ColorMind 👇",
+            linkedin:"ColorMind dévoile son processus de fabrication artisanal à l'occasion de son lancement. Une vidéo corporate produite par Moustikprod, pensée pour incarner l'authenticité de la marque.",
+          },
+        },
       ];
     },
 
