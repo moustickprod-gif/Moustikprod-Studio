@@ -331,10 +331,27 @@ tailwind.config = {
               <p class="text-accent font-mono text-xs mb-2 uppercase">❗ À penser</p>
               <textarea x-model="currentProject.aPenser" @blur="saveProjects()" rows="3" placeholder="Points de vigilance..." class="w-full bg-transparent border-0 text-sm p-0"></textarea>
             </div>
-            <button @click="regeneratePitch()" class="bg-surface border border-line rounded-lg px-4 py-2 text-sm hover:border-accent/50 transition flex items-center gap-2">
-              <span x-show="pitchLoading" class="spinner"></span> Régénérer avec Claude
-            </button>
+            <div class="flex gap-2">
+              <button @click="regeneratePitch()" class="bg-surface border border-line rounded-lg px-4 py-2 text-sm hover:border-accent/50 transition flex items-center gap-2">
+                <span x-show="pitchLoading" class="spinner"></span> ↺ Régénérer le brief
+              </button>
+              <button @click="exploreAngles()" class="bg-surface border border-line rounded-lg px-4 py-2 text-sm hover:border-accent/50 transition flex items-center gap-2">
+                <span x-show="exploreAnglesLoading" class="spinner"></span> ✦ Explorer 3 angles
+              </button>
+            </div>
             <p x-show="pitchError" class="text-xs text-accent" x-text="pitchError"></p>
+            <p x-show="exploreAnglesError" class="text-xs text-accent" x-text="exploreAnglesError"></p>
+
+            <div x-show="creativeAngles.length" class="space-y-3">
+              <p class="text-xs text-muted font-mono uppercase">Angles créatifs</p>
+              <template x-for="(angle,i) in creativeAngles" :key="i">
+                <div class="bg-surface border border-line rounded-xl p-4 space-y-2">
+                  <p class="font-display font-bold text-sm" x-text="angle.title"></p>
+                  <p class="text-sm text-muted" x-text="angle.description"></p>
+                  <button @click="useAngle(angle)" class="text-xs text-accent hover:underline">Partir de cet angle →</button>
+                </div>
+              </template>
+            </div>
           </div>
 
           <!-- DÉCOUPAGE TAB -->
@@ -1402,6 +1419,34 @@ function app() {
       } finally {
         this.pitchLoading = false;
       }
+    },
+    async exploreAngles() {
+      this.exploreAnglesLoading = true; this.exploreAnglesError = '';
+      try {
+        const p = this.currentProject;
+        const text = await this.callClaude(
+          'Tu es directeur créatif.',
+          `Pour ce projet :\n- Titre : ${p.title}\n- Client : ${p.client || 'non précisé'}\n- Type : ${p.type || 'non précisé'}\n- Brief actuel : ${p.pitch || 'non renseigné'}\n\nPropose 3 angles créatifs très différents. Format strict :\n**ANGLE 1 — [titre court]**\n[2-3 phrases décrivant l'approche narrative, le ton, les plans clés]\n\n**ANGLE 2 — [titre court]**\n[2-3 phrases]\n\n**ANGLE 3 — [titre court]**\n[2-3 phrases]`
+        );
+        this.creativeAngles = this.parseAngles(text);
+      } catch(e) {
+        this.exploreAnglesError = 'Erreur Claude. Réessaie.';
+      } finally {
+        this.exploreAnglesLoading = false;
+      }
+    },
+    parseAngles(text) {
+      const matches = [...text.matchAll(/\*\*ANGLE\s*\d+\s*—\s*([^*]+)\*\*/gi)];
+      return matches.map((m, i) => {
+        const start = m.index + m[0].length;
+        const end = i + 1 < matches.length ? matches[i + 1].index : text.length;
+        return { title: m[1].trim(), description: text.slice(start, end).trim() };
+      });
+    },
+    useAngle(angle) {
+      this.currentProject.pitch = angle.description;
+      this.saveProjects();
+      this.toast("Pitch remplacé par l'angle choisi");
     },
     decoupagePrompt() {
       return `Tu es 1er assistant réalisateur. Génère un découpage technique professionnel pour ce projet vidéo, groupé par scène (numérotation type 1.1, 1.2, 2.1...).\nFormat JSON : array d'objets avec les clés exactes : plan (ex: "1.1"), focale (GE/PE/GP/PM/PA/PL ou type d'angle), description, heure (ambiance lumière, ex: "golden hour"), fait (toujours false), transition (true seulement pour une ligne de transition entre deux scènes, sinon false).`;
