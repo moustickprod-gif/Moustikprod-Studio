@@ -95,7 +95,6 @@ tailwind.config = {
       <button @click="authMode = authMode==='login' ? 'signup' : 'login'" class="text-xs text-muted mt-4 hover:text-ink transition w-full text-center">
         <span x-text="authMode==='login' ? 'Pas de compte ? Créer un compte' : 'Déjà un compte ? Se connecter'"></span>
       </button>
-      <button @click="skipAuth()" class="text-xs text-accent2 mt-2 w-full text-center hover:underline">Continuer sans connexion (démo)</button>
     </div>
   </div>
 </div>
@@ -131,8 +130,7 @@ tailwind.config = {
     <header class="h-16 border-b border-line flex items-center justify-between px-6 shrink-0">
       <div class="flex items-center gap-3">
         <h1 class="font-display font-bold text-lg" x-text="navItems.find(n=>n.id===view)?.label"></h1>
-        <span x-show="user && user.skip" class="text-xs font-mono px-2 py-0.5 rounded bg-accent2/15 text-accent2 border border-accent2/30">Mode démo local</span>
-        <span x-show="db && user && !user.skip" class="text-xs font-mono px-2 py-0.5 rounded bg-accent/15 text-accent border border-accent/30 flex items-center gap-1.5">
+        <span x-show="db && user" class="text-xs font-mono px-2 py-0.5 rounded bg-accent/15 text-accent border border-accent/30 flex items-center gap-1.5">
           <span class="w-1.5 h-1.5 rounded-full" :class="syncStatus==='syncing' ? 'bg-amber-400 animate-pulse' : syncStatus==='error' ? 'bg-red-500' : 'bg-emerald-400'"></span>
           <span x-text="syncStatus==='syncing' ? 'Synchronisation...' : syncStatus==='error' ? 'Erreur de sync' : 'Synchronisé avec le CRM' + (lastSyncAt ? ' · ' + lastSyncAt : '')"></span>
         </span>
@@ -276,8 +274,8 @@ tailwind.config = {
             <div class="flex items-center justify-between mt-2">
               <p class="text-muted text-sm" x-text="currentProject.client + ' · ' + currentProject.type + ' · Deadline: ' + (currentProject.deadline || '—')"></p>
               <div class="flex items-center gap-2">
-                <button @click="createDevisInCrm()" x-show="!user || !user.skip" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition">Créer un devis →</button>
-                <button @click="currentProject.shareEnabled ? copyShareLink() : toggleShare()" x-show="!user || !user.skip" class="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition" :class="currentProject.shareEnabled ? 'bg-accent/15 text-accent border border-accent/30' : 'bg-surface border border-line hover:border-accent/50'">
+                <button @click="createDevisInCrm()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition">Créer un devis →</button>
+                <button @click="currentProject.shareEnabled ? copyShareLink() : toggleShare()" class="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition" :class="currentProject.shareEnabled ? 'bg-accent/15 text-accent border border-accent/30' : 'bg-surface border border-line hover:border-accent/50'">
                   <span x-text="currentProject.shareEnabled ? 'Copier le lien client' : 'Partager avec le client'"></span>
                 </button>
                 <button @click="toggleShare()" x-show="currentProject.shareEnabled" class="text-xs text-muted hover:text-red-500">Désactiver</button>
@@ -550,28 +548,7 @@ tailwind.config = {
       <!-- ============ IDÉES ============ -->
       <template x-if="view==='idees'">
         <div x-transition.opacity.duration.150ms class="max-w-3xl">
-          <div x-show="!(db && user && !user.skip)">
-            <div class="bg-accent2/15 border border-accent2/30 text-sm text-ink rounded-xl px-4 py-3 mb-4">
-              Aperçu — Connecte-toi pour voir les idées hebdomadaires personnalisées à ton activité.
-            </div>
-            <div class="space-y-2">
-              <template x-for="entry in demoIdeas" :key="entry.id">
-                <div class="bg-surface border border-line rounded-xl card-slide-enter overflow-hidden opacity-90">
-                  <div class="p-4">
-                    <p class="font-display font-bold text-sm text-accent mb-2" x-text="entry.weekLabel"></p>
-                    <p class="text-sm whitespace-pre-wrap mb-3" x-text="entry.etude"></p>
-                    <p class="text-accent2 font-mono text-xs mb-1 uppercase">💡 Idées</p>
-                    <ul class="list-disc pl-5 space-y-1 text-sm">
-                      <template x-for="(idea,i) in entry.idees" :key="i">
-                        <li x-text="idea"></li>
-                      </template>
-                    </ul>
-                  </div>
-                </div>
-              </template>
-            </div>
-          </div>
-          <div x-show="db && user && !user.skip">
+          <div>
             <div class="flex items-center justify-between mb-4">
               <p class="text-muted text-sm">Alimenté automatiquement chaque semaine — ou à la demande.</p>
               <div class="flex gap-2">
@@ -655,8 +632,7 @@ tailwind.config = {
         <div class="max-w-2xl space-y-5" x-transition.opacity.duration.150ms>
           <div class="bg-surface border border-line rounded-xl p-5">
             <h3 class="font-display font-bold mb-3">Données partagées</h3>
-            <p class="text-xs text-muted" x-show="db && user && !user.skip">✓ Connecté au même projet Firebase que le CRM Moustikprod — clients et projets sont synchronisés automatiquement entre les deux apps.</p>
-            <p class="text-xs text-muted" x-show="user && user.skip">Mode démo local : connecte-toi avec un compte pour synchroniser tes données avec le CRM.</p>
+            <p class="text-xs text-muted" x-show="db && user">✓ Connecté au même projet Firebase que le CRM Moustikprod — clients et projets sont synchronisés automatiquement entre les deux apps.</p>
           </div>
 
           <div class="bg-surface border border-line rounded-xl p-5">
@@ -918,10 +894,6 @@ function app() {
       { id:'interview', label:'Questions d\'interview', desc:'15 questions structurées' },
       { id:'email', label:'Email client', desc:'Email pro prêt à envoyer' },
     ],
-    demoIdeas: [
-      { id:'d1', weekLabel:'Semaine du 15 juin', etude:"Les formats courts verticaux (Reels/TikTok) continuent de surperformer sur l'engagement organique des agences vidéo. Les aftermovies d'événements génèrent un fort taux de partage quand ils sont découpés en plusieurs extraits.", idees:["Découper l'aftermovie Nova Events en 3 extraits de 15s pour TikTok","Proposer une offre 'pack réseaux sociaux' aux clients événementiel existants","Tester un format coulisses de tournage en story Instagram"] },
-      { id:'d2', weekLabel:'Semaine du 22 juin', etude:"Les entreprises B2B investissent de plus en plus dans des interviews dirigeants courtes pour LinkedIn plutôt que des films corporate longs. Le format 'question/réponse cut serré' performe bien.", idees:["Démarcher TechLab pour une série de 3 interviews courtes au lieu d'une seule longue","Créer un template de questions réutilisable pour les interviews CEO","Proposer un teaser LinkedIn avant publication de l'interview complète"] },
-    ],
     studioForm: { equip: [] },
     studioSelectedProjectId: '',
     studioResult: '', studioLoading: false, studioError: '',
@@ -947,8 +919,7 @@ function app() {
 
     // ---------- AUTH ----------
     // Studio partage le projet Firebase du CRM (mêmes comptes, mêmes données
-    // clients/projets en sous-collections Firestore). "Continuer sans connexion"
-    // reste un mode démo 100% local (localStorage), sans synchronisation.
+    // clients/projets en sous-collections Firestore).
     async initFirebase() {
       try {
         const res = await fetch('/api/firebase-config');
@@ -967,15 +938,11 @@ function app() {
           });
         } else {
           this.authReady = true;
-          const saved = localStorage.getItem('mp_studio_skip_auth');
-          this.user = saved ? { skip:true } : null;
-          if (this.user) { this.loadProjectsLocal(); this.loadSuggestions(); }
+          this.user = null;
         }
       } catch(e) {
         this.authReady = true;
-        const saved = localStorage.getItem('mp_studio_skip_auth');
-        this.user = saved ? { skip:true } : null;
-        if (this.user) { this.loadProjectsLocal(); this.loadSuggestions(); }
+        this.user = null;
       }
     },
     doLogin() {
@@ -992,14 +959,7 @@ function app() {
         .catch(e => this.authError = e.message)
         .finally(() => this.authLoading=false);
     },
-    skipAuth() {
-      localStorage.setItem('mp_studio_skip_auth','1');
-      this.user = { skip:true };
-      this.loadProjectsLocal();
-      this.loadSuggestions();
-    },
     logout() {
-      localStorage.removeItem('mp_studio_skip_auth');
       this.user = null;
       if (this.firebaseEnabled) firebase.auth().signOut();
     },
@@ -1033,20 +993,8 @@ function app() {
       localStorage.setItem('mp_studio_settings', JSON.stringify(this.settings));
       this.toast('Réglages enregistrés');
     },
-    // Mode démo local (bouton "Continuer sans connexion") — aucune synchronisation.
-    loadProjectsLocal() {
-      const s = localStorage.getItem('mp_studio_projects');
-      this.projects = s ? JSON.parse(s) : this.demoProjects();
-      if (!s) this.saveProjects();
-      const h = localStorage.getItem('mp_studio_history');
-      if (h) this.studioHistory = JSON.parse(h);
-    },
     saveProjects() {
-      if (this.db && this.user && !this.user.skip) {
-        if (this.currentProject) this.saveProjectDoc(this.currentProject);
-      } else {
-        localStorage.setItem('mp_studio_projects', JSON.stringify(this.projects));
-      }
+      if (this.currentProject) this.saveProjectDoc(this.currentProject);
     },
     // Mode connecté — clients et projets partagés avec le CRM via Firestore
     // (users/{uid}/clients/{id} et users/{uid}/projets/{id}), chaque fiche dans
@@ -1194,10 +1142,10 @@ function app() {
       this.allClients.push(newClient);
       return newClient.id;
     },
-    // Persiste un projet : en mode connecté vers Firestore (partagé avec le CRM),
-    // sinon juste en local. Appelé après chaque modification de currentProject.
+    // Persiste un projet vers Firestore (partagé avec le CRM). Appelé après
+    // chaque modification de currentProject.
     async saveProjectDoc(project) {
-      if (!this.db || !this.user || this.user.skip) return;
+      if (!this.db || !this.user) return;
       this.syncStatus = 'syncing';
       try {
         let clientId = project.clientId;
@@ -1239,53 +1187,6 @@ function app() {
         this.toast('Erreur de synchronisation', 'error');
       }
     },
-    demoProjects() {
-      const base = { pitch:'', idees:'', aPenser:'', scenario:'', decoupage:[], matos:[], lieu:'', moodboardNotes:'', captions:{}, notes:'' };
-      return [
-        {
-          ...base, id:'p1', title:'Aftermovie Festival Electronique', client:'Nova Events', type:'Court-métrage', status:'montage', progress:75, deadline:'2026-07-10', budget:'3500',
-          checklist:[{label:'Montage final',done:false},{label:'Color grading',done:false}],
-          pitch:"Une plongée immersive dans une nuit de festival électro : montée d'énergie, foule en fusion, jeux de lumière laser et basses qui font trembler le sol. L'aftermovie capture l'émotion brute du live — des premiers DJ sets au coucher de soleil jusqu'au climax de la headline à 2h du matin.\n\nLe montage alterne plans larges de foule, gros plans sur les artistes et ralentis sur les réactions du public, porté par un sound design qui fait vivre le drop comme si on y était.\n\nObjectif : donner envie à la communauté Nova Events de revivre l'événement et de réserver l'édition suivante dès l'ouverture des ventes.",
-          idees:"Ouvrir sur un plan drone au lever du jour sur le terrain vide, puis cut sec sur l'explosion de la foule au peak du festival.\nIntercaler des interviews flash de festivaliers (\"un mot pour décrire ta soirée ?\").\nFinir sur un plan large nocturne avec logo Nova Events qui se dessine dans les lasers.",
-          aPenser:"Vérifier les droits image des artistes et du public (panneaux d'info à l'entrée).\nPrévoir une version courte 60s pour Instagram/TikTok en plus du format long YouTube.\nAnticiper le poids des fichiers RAW drone pour le transfert post-tournage.",
-          scenario:"ACTE 1 — INSTALLATION (0:00-0:45)\nScène 1. Extérieur, fin d'après-midi — Plans drone du site en cours de montage, équipes techniques, premiers festivaliers qui arrivent.\nScène 2. Entrée du site — Ambiance qui monte, premiers sourires, bracelets scannés, soleil encore haut.\n\nACTE 2 — MONTÉE EN PUISSANCE (0:45-2:00)\nScène 3. Scène principale — Premiers DJ sets, foule qui se densifie, jeux de lumière qui s'intensifient avec la nuit qui tombe.\nScène 4. Backstage — Quelques plans artistes en préparation, ambiance complice avec l'équipe Nova Events.\nScène 5. Foule — Gros plans réactions, mains levées, confettis, premiers gros drops qui font exploser la foule.\n\nACTE 3 — CLIMAX & DESCENTE (2:00-3:00)\nScène 6. Headliner — Set principal à son pic, lasers, fumée, plan large + ralentis sur la foule en fusion.\nScène 7. Fin de nuit — Lever du jour progressif, festivaliers fatigués mais heureux, derniers plans d'ambiance calme.\nScène 8. Outro — Logo Nova Events, date de la prochaine édition, musique qui s'éteint en fondu.",
-          decoupage:[
-            { plan:'Plan 1', focale:'Grand angle (drone)', description:"Vue aérienne du site au lever du jour, installation en cours", heure:'17h00' },
-            { plan:'Plan 2', focale:'24mm', description:"Plan large de l'entrée avec premiers festivaliers", heure:'18h30' },
-            { plan:'Plan 3', focale:'50mm', description:"Gros plan sur la cabine DJ, premiers mix", heure:'20h00' },
-            { plan:'Plan 4', focale:'85mm', description:"Réactions de la foule au premier gros drop", heure:'21h30' },
-            { plan:'Plan 5', focale:'24mm + steadicam', description:"Traveling dans la foule en pleine euphorie", heure:'23h00' },
-            { plan:'Plan 6', focale:'Grand angle (drone)', description:"Vue d'ensemble nocturne, lasers et fumée sur la foule", heure:'01h00' },
-          ],
-          captions:{
-            instagram:"🔊 Cette nuit, le festival a tremblé jusqu'au bout de la nuit. Revivez l'aftermovie complet en story ⚡️ #NovaEvents #Aftermovie #Festival",
-            tiktok:"POV : tu rejoues cette nuit en boucle 🎶✨ L'aftermovie est en ligne, tag la personne avec qui tu y étais 👇",
-            linkedin:"Nova Events confirme son savoir-faire dans l'organisation d'événements à forte intensité émotionnelle. Découvrez l'aftermovie de notre dernier festival, produit par Moustikprod.",
-          },
-        },
-        { ...base, id:'p2', title:'Interview CEO Startup', client:'TechLab', type:'Interview', status:'brief', progress:15, deadline:'2026-08-02', budget:'1200', checklist:[{label:'Brief validé',done:false}] },
-        { ...base, id:'p3', title:'TikTok série Recettes', client:'RestoBio', type:'TikTok/Reels', status:'livraison', progress:95, deadline:'2026-06-25', budget:'900', checklist:[{label:'Export vertical',done:true},{label:'Sous-titres',done:true}] },
-        {
-          ...base, id:'p4', title:'Vidéo corporate lancement', client:'ColorMind', type:'Corporate', status:'pre-production', progress:30, deadline:'2026-07-25', budget:'900',
-          checklist:[{label:'Brief validé',done:true},{label:'Tournage atelier',done:false}],
-          pitch:"ColorMind est une marque de cosmétiques naturels qui souhaite une vidéo corporate de 2 minutes pour son lancement. Le ton est chaleureux, authentique, axé sur les valeurs fondatrices. Le pitch : montrer le processus de fabrication artisanal depuis les matières premières jusqu'au produit final, avec des témoignages de la fondatrice.",
-          scenario:"ACTE 1 — MATIÈRES PREMIÈRES (0:00-0:30)\nPlan d'ouverture sur les matières premières (plantes, huiles, textures brutes), voix-off de la fondatrice qui présente sa vision et ses valeurs.\n\nACTE 2 — FABRICATION (0:30-1:30)\nCoulisses de fabrication dans l'atelier, gros plans sur les mains qui travaillent les produits, étapes clés du processus artisanal.\n\nACTE 3 — PRODUIT FINI (1:30-2:00)\nPlan sur le produit fini et son packaging, message de clôture et appel à l'action (lien boutique / lancement).",
-          decoupage:[
-            { plan:'Plan 1', focale:'Grand angle (24mm)', description:"Plan large de l'atelier, ambiance de travail générale", heure:'09h00' },
-            { plan:'Plan 2', focale:'Macro / 100mm', description:"Gros plan sur les mains qui travaillent la matière première", heure:'09h30' },
-            { plan:'Plan 3', focale:'50mm', description:"Medium shot interview de la fondatrice face caméra", heure:'10h30' },
-            { plan:'Plan 4', focale:'Macro / 100mm', description:"Insert produit — texture, flacon, étiquette", heure:'11h15' },
-            { plan:'Plan 5', focale:'50mm', description:"Plan final sur le packaging fini, posé en lumière naturelle", heure:'11h45' },
-          ],
-          captions:{
-            instagram:"🌿 Du champ au flacon, sans détour. Découvrez les coulisses de fabrication de ColorMind — 100% naturel, 100% assumé. #ColorMind #CosmétiquesNaturels #FaitMain",
-            tiktok:"POV : tu découvres comment on fabrique vraiment tes cosmétiques 🌱✨ On t'emmène en coulisses chez ColorMind 👇",
-            linkedin:"ColorMind dévoile son processus de fabrication artisanal à l'occasion de son lancement. Une vidéo corporate produite par Moustikprod, pensée pour incarner l'authenticité de la marque.",
-          },
-        },
-      ];
-    },
-
     // ---------- HELPERS ----------
     isThisMonth(dateStr) {
       if (!dateStr) return false;
@@ -1507,11 +1408,7 @@ function app() {
         statutCrm: 'prospection',
       };
       this.projects.unshift(project);
-      if (this.db && this.user && !this.user.skip) {
-        await this.saveProjectDoc(project);
-      } else {
-        this.saveProjects();
-      }
+      await this.saveProjectDoc(project);
       this.creatingProject = false;
       this.projectModalOpen = false;
       localStorage.removeItem('mp_studio_draft');
@@ -1815,17 +1712,9 @@ function app() {
     // ---------- CLIENTS ----------
     get filteredClients() {
       const q = this.clientSearch.toLowerCase();
-      if (this.db && this.user && !this.user.skip) {
-        return this.allClients
-          .map(c => ({ name: c.nom, id: c.id, count: this.projects.filter(p => p.clientId === c.id).length }))
-          .filter(c => !q || c.name.toLowerCase().includes(q));
-      }
-      const map = {};
-      this.projects.forEach(p => {
-        if (!map[p.client]) map[p.client] = { name:p.client, count:0 };
-        map[p.client].count++;
-      });
-      return Object.values(map).filter(c => !q || c.name.toLowerCase().includes(q));
+      return this.allClients
+        .map(c => ({ name: c.nom, id: c.id, count: this.projects.filter(p => p.clientId === c.id).length }))
+        .filter(c => !q || c.name.toLowerCase().includes(q));
     },
     openClient(c) { this.currentClient = c; },
 
@@ -1854,19 +1743,17 @@ function app() {
       reader.readAsText(file);
     },
     resetData() {
-      if (!confirm('Réinitialiser toutes les données locales ?')) return;
-      localStorage.removeItem('mp_studio_projects');
+      if (!confirm('Effacer le cache local (historique IA) ? Les projets et clients restent sur Firestore.')) return;
       localStorage.removeItem('mp_studio_history');
-      this.projects = this.demoProjects();
-      this.saveProjects();
-      this.toast('Données réinitialisées');
+      this.studioHistory = [];
+      this.toast('Cache local effacé');
     },
 
     // ---------- DELETE PROJECT ----------
     async deleteProject() {
       const p = this.projectPendingDelete;
       if (!p) return;
-      if (this.db && this.user && !this.user.skip) {
+      if (this.db && this.user) {
         try {
           await this.db.collection('users').doc(this.user.uid).collection('projets').doc(p.id).delete();
         } catch(e) { /* continue même si Firestore échoue */ }
