@@ -666,11 +666,11 @@ tailwind.config = {
 </div>
 
 <!-- ===================== MODAL NOUVEAU PROJET ===================== -->
-<div x-show="projectModalOpen" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @keydown.escape.window="projectModalOpen=false">
+<div x-show="projectModalOpen" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @keydown.escape.window="closeProjectModal()">
   <div class="modal-slide-enter bg-surface border border-line rounded-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto" x-show="projectModalOpen">
     <div class="flex items-center justify-between mb-5">
       <h3 class="font-display font-bold text-lg">Nouveau projet</h3>
-      <button @click="projectModalOpen=false" class="text-muted hover:text-ink">✕</button>
+      <button @click="closeProjectModal()" class="text-muted hover:text-ink">✕</button>
     </div>
 
     <div class="flex gap-1 mb-5">
@@ -689,7 +689,7 @@ tailwind.config = {
       </select>
       <input x-model="newProject.budget" placeholder="Budget (€)" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
       <input x-model="newProject.deadline" type="date" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
-      <button @click="newProjectStep=2" :disabled="!newProject.title" class="w-full bg-accent text-white text-sm font-medium py-2 rounded-lg disabled:opacity-40">Suivant</button>
+      <button @click="newProjectStep=2; saveProjectDraft()" :disabled="!newProject.title" class="w-full bg-accent text-white text-sm font-medium py-2 rounded-lg disabled:opacity-40">Suivant</button>
     </div>
 
     <!-- step 2 — pitch & idées -->
@@ -706,8 +706,8 @@ tailwind.config = {
         <div><p class="text-accent font-mono uppercase">❗ À penser</p><textarea x-model="newProject.aPenser" rows="2" class="w-full bg-transparent border-0 text-ink text-xs p-0"></textarea></div>
       </div>
       <div class="flex gap-2">
-        <button @click="newProjectStep=1" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
-        <button @click="newProjectStep=3" class="flex-1 bg-accent text-white text-sm py-2 rounded-lg">Suivant</button>
+        <button @click="newProjectStep=1; saveProjectDraft()" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
+        <button @click="newProjectStep=3; saveProjectDraft()" class="flex-1 bg-accent text-white text-sm py-2 rounded-lg">Suivant</button>
       </div>
     </div>
 
@@ -720,8 +720,8 @@ tailwind.config = {
       <p x-show="newProjectScenarioError" class="text-xs text-accent" x-text="newProjectScenarioError"></p>
       <textarea x-model="newProject.scenario" rows="8" placeholder="Le scénario apparaîtra ici, modifiable..." class="w-full text-sm px-3 py-2 rounded-lg border border-line font-mono"></textarea>
       <div class="flex gap-2">
-        <button @click="newProjectStep=2" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
-        <button @click="newProjectStep=4" class="flex-1 bg-accent text-white text-sm py-2 rounded-lg">Suivant</button>
+        <button @click="newProjectStep=2; saveProjectDraft()" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
+        <button @click="newProjectStep=4; saveProjectDraft()" class="flex-1 bg-accent text-white text-sm py-2 rounded-lg">Suivant</button>
       </div>
     </div>
 
@@ -734,8 +734,8 @@ tailwind.config = {
       <p x-show="newProjectDecoupageError" class="text-xs text-accent" x-text="newProjectDecoupageError"></p>
       <p x-show="newProject.decoupage && newProject.decoupage.length" class="text-xs text-muted" x-text="(newProject.decoupage||[]).length + ' plans générés — modifiables après création'"></p>
       <div class="flex gap-2">
-        <button @click="newProjectStep=3" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
-        <button @click="newProjectStep=5" class="flex-1 bg-accent text-white text-sm py-2 rounded-lg">Suivant</button>
+        <button @click="newProjectStep=3; saveProjectDraft()" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
+        <button @click="newProjectStep=5; saveProjectDraft()" class="flex-1 bg-accent text-white text-sm py-2 rounded-lg">Suivant</button>
       </div>
     </div>
 
@@ -752,8 +752,8 @@ tailwind.config = {
       </div>
       <textarea x-model="newProject.lieu" rows="2" placeholder="Lieu de tournage" class="w-full text-sm px-3 py-2 rounded-lg border border-line"></textarea>
       <div class="flex gap-2">
-        <button @click="newProjectStep=4" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
-        <button @click="newProjectStep=6" class="flex-1 bg-accent text-white text-sm py-2 rounded-lg">Suivant</button>
+        <button @click="newProjectStep=4; saveProjectDraft()" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
+        <button @click="newProjectStep=6; saveProjectDraft()" class="flex-1 bg-accent text-white text-sm py-2 rounded-lg">Suivant</button>
       </div>
     </div>
 
@@ -769,7 +769,7 @@ tailwind.config = {
         <p x-show="newProject.lieu"><span class="text-accent font-mono uppercase">Lieu</span> — <span x-text="newProject.lieu"></span></p>
       </div>
       <div class="flex gap-2">
-        <button @click="newProjectStep=5" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
+        <button @click="newProjectStep=5; saveProjectDraft()" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
         <button @click="createProject()" class="flex-1 bg-accent text-white text-sm py-2 rounded-lg flex items-center justify-center gap-2">
           <span x-show="creatingProject" class="spinner"></span> Créer le projet
         </button>
@@ -958,12 +958,12 @@ function app() {
     bindShortcuts() {
       window.addEventListener('keydown', e => {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-          if (e.key === 'Escape') { this.projectModalOpen=false; this.saveToProjectOpen=false; e.target.blur(); }
+          if (e.key === 'Escape') { this.closeProjectModal(); this.saveToProjectOpen=false; e.target.blur(); }
           return;
         }
         if (e.key === 'n') this.openProjectModal();
         if (e.key === '/') { e.preventDefault(); this.view='projets'; this.$nextTick?.(()=>{}); setTimeout(()=>document.getElementById('search-input')?.focus(),50); }
-        if (e.key === 'Escape') { this.projectModalOpen=false; this.saveToProjectOpen=false; }
+        if (e.key === 'Escape') { this.closeProjectModal(); this.saveToProjectOpen=false; }
       });
     },
 
@@ -1314,7 +1314,29 @@ function app() {
       this.newProjectStep = 1;
       this.newProject = { title:'', client: prefillClient||'', type:'Corporate', budget:'', deadline:'', briefRaw:'', pitch:'', idees:'', aPenser:'', scenario:'', decoupage:[], matos:[], lieu:'' };
       this.newProjectPitchError=''; this.newProjectScenarioError=''; this.newProjectDecoupageError=''; this.newProjectLogistiqueError='';
+      // Reprise d'un brouillon si l'utilisateur a fermé la fenêtre sans terminer
+      // la création (sinon tout le travail — pitch, scénario générés — est perdu).
+      try {
+        const raw = localStorage.getItem('mp_studio_draft');
+        if (raw) {
+          const draft = JSON.parse(raw);
+          if (draft && draft.newProject && draft.newProject.title && confirm(`Reprendre le brouillon de projet "${draft.newProject.title}" non terminé ?`)) {
+            this.newProject = draft.newProject;
+            this.newProjectStep = draft.newProjectStep || 1;
+          } else {
+            localStorage.removeItem('mp_studio_draft');
+          }
+        }
+      } catch(e) { localStorage.removeItem('mp_studio_draft'); }
       this.projectModalOpen = true;
+    },
+    saveProjectDraft() {
+      if (!this.projectModalOpen) return;
+      localStorage.setItem('mp_studio_draft', JSON.stringify({ newProject: this.newProject, newProjectStep: this.newProjectStep }));
+    },
+    closeProjectModal() {
+      this.saveProjectDraft();
+      this.projectModalOpen = false;
     },
     async generatePitch() {
       this.newProjectPitchLoading = true; this.newProjectPitchError='';
@@ -1399,6 +1421,7 @@ function app() {
       }
       this.creatingProject = false;
       this.projectModalOpen = false;
+      localStorage.removeItem('mp_studio_draft');
       this.toast('Projet créé');
       this.openProject(project);
     },
