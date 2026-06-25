@@ -129,7 +129,7 @@ tailwind.config = {
     <!-- TOPBAR -->
     <header class="h-16 border-b border-line flex items-center justify-between px-6 shrink-0">
       <div class="flex items-center gap-3">
-        <h1 class="font-display font-bold text-lg" x-text="navItems.find(n=>n.id===view)?.label"></h1>
+        <h1 class="font-display font-bold text-lg" x-text="navItems.find(n=>n.id===view)?.label || (view==='nouveau-projet' ? 'Nouveau projet' : '')"></h1>
         <span x-show="db && user" class="text-xs font-mono px-2 py-0.5 rounded bg-accent/15 text-accent border border-accent/30 flex items-center gap-1.5">
           <span class="w-1.5 h-1.5 rounded-full" :class="syncStatus==='syncing' ? 'bg-amber-400 animate-pulse' : syncStatus==='error' ? 'bg-red-500' : 'bg-emerald-400'"></span>
           <span x-text="syncStatus==='syncing' ? 'Synchronisation...' : syncStatus==='error' ? 'Erreur de sync' : 'Synchronisé avec le CRM' + (lastSyncAt ? ' · ' + lastSyncAt : '')"></span>
@@ -139,7 +139,7 @@ tailwind.config = {
         <div class="relative" x-show="view==='projets'">
           <input x-model="searchQuery" id="search-input" placeholder="Rechercher... (/)" class="text-sm px-3 py-1.5 rounded-lg border border-line w-56">
         </div>
-        <button @click="openProjectModal()" class="bg-accent text-white text-sm font-medium px-3 py-1.5 rounded-lg hover:opacity-90 transition flex items-center gap-1.5">
+        <button @click="goToNewProject()" class="bg-accent text-white text-sm font-medium px-3 py-1.5 rounded-lg hover:opacity-90 transition flex items-center gap-1.5">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
           Nouveau projet
         </button>
@@ -202,7 +202,7 @@ tailwind.config = {
           </div>
 
           <div class="flex gap-3">
-            <button @click="openProjectModal()" class="bg-surface border border-line rounded-lg px-4 py-2 text-sm hover:border-accent/50 transition">+ Nouveau projet</button>
+            <button @click="goToNewProject()" class="bg-surface border border-line rounded-lg px-4 py-2 text-sm hover:border-accent/50 transition">+ Nouveau projet</button>
             <button @click="view='studio'; studioType='script'" class="bg-surface border border-line rounded-lg px-4 py-2 text-sm hover:border-accent/50 transition">+ Nouveau script</button>
             <button @click="view='studio'; studioType='shotlist'" class="bg-surface border border-line rounded-lg px-4 py-2 text-sm hover:border-accent/50 transition">+ Nouvelle shot list</button>
           </div>
@@ -220,7 +220,7 @@ tailwind.config = {
 
           <div x-show="filteredProjects.length===0" class="text-center py-20 text-muted">
             <p class="mb-3">Aucun projet pour le moment.</p>
-            <button @click="openProjectModal()" class="bg-accent text-white px-4 py-2 rounded-lg text-sm">Créer mon premier projet</button>
+            <button @click="goToNewProject()" class="bg-accent text-white px-4 py-2 rounded-lg text-sm">Créer mon premier projet</button>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -288,6 +288,17 @@ tailwind.config = {
               </div>
             </div>
             <p x-show="notionExportError" class="text-xs text-accent mt-1" x-text="notionExportError"></p>
+          </div>
+
+          <div x-show="!currentProject.pitch && !currentProject.scenario && !briefBannerDismissed" class="bg-accent/10 border border-accent/30 rounded-xl p-4 mb-5 flex items-center justify-between gap-4">
+            <p class="text-sm">
+              <span class="text-accent">✦</span>
+              Ce projet n'a pas encore de brief. Génère-le en 1 clic pour préparer ta prod.
+            </p>
+            <div class="flex items-center gap-3 shrink-0">
+              <button @click="detailTab='pitch'; regeneratePitch()" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg whitespace-nowrap">Générer le brief →</button>
+              <button @click="briefBannerDismissed=true" class="text-muted hover:text-ink text-sm" title="Ignorer">✕</button>
+            </div>
           </div>
 
           <div class="flex gap-1 border-b border-line mb-5 overflow-x-auto">
@@ -427,6 +438,71 @@ tailwind.config = {
               <p class="font-display font-bold text-sm mb-3">Notes</p>
               <textarea x-model="currentProject.notes" @blur="saveProjects()" rows="5" placeholder="Notes et commentaires..." class="w-full bg-bg border border-line rounded-lg p-3 text-sm"></textarea>
             </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- ============ NOUVEAU PROJET ============ -->
+      <template x-if="view==='nouveau-projet'">
+        <div x-transition.opacity.duration.150ms class="max-w-xl">
+          <button @click="view='projets'" class="text-muted text-sm hover:text-ink flex items-center gap-1 mb-5">← Retour</button>
+
+          <div class="bg-surface border border-line rounded-xl p-6 space-y-5">
+            <div class="space-y-3">
+              <p class="text-xs text-muted font-mono uppercase">Infos essentielles</p>
+              <input x-model="newProject.title" placeholder="Titre du projet *" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+
+              <div>
+                <label class="text-xs font-mono text-muted uppercase block mb-1.5">Client *</label>
+                <select x-model="newProject.clientSelect" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+                  <option value="">— Choisir un client —</option>
+                  <template x-for="c in allClients" :key="c.id">
+                    <option :value="c.nom" x-text="c.nom"></option>
+                  </template>
+                  <option value="__new__">+ Nouveau client</option>
+                </select>
+                <input x-show="newProject.clientSelect==='__new__'" x-model="newProject.clientNew" placeholder="Nom du nouveau client" class="w-full text-sm px-3 py-2 rounded-lg border border-line mt-2">
+              </div>
+
+              <div>
+                <label class="text-xs font-mono text-muted uppercase block mb-1.5">Type de vidéo *</label>
+                <div class="flex gap-2 flex-wrap">
+                  <template x-for="t in ['Corporate','Vlog','TikTok','Interview','Podcast','Docu']" :key="t">
+                    <button type="button" @click="newProject.type = (newProject.type===t ? '' : t)" :class="newProject.type===t ? 'bg-accent text-white border-accent' : 'bg-surface text-ink border-line hover:border-accent/50'" class="text-sm px-3 py-1.5 rounded-lg border transition" x-text="t"></button>
+                  </template>
+                </div>
+              </div>
+
+              <div>
+                <label class="text-xs font-mono text-muted uppercase block mb-1.5">Deadline</label>
+                <input x-model="newProject.deadline" type="date" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+                <p x-show="newProject.deadline" class="text-xs text-muted mt-1" x-text="deadlineLabel(newProject.deadline)"></p>
+              </div>
+
+              <div>
+                <label class="text-xs font-mono text-muted uppercase block mb-1.5">Budget (optionnel)</label>
+                <input x-model="newProject.budget" placeholder="€" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+              </div>
+            </div>
+
+            <div class="border-t border-line pt-4">
+              <button type="button" @click="newProject.briefOpen = !newProject.briefOpen" class="text-sm text-muted hover:text-ink flex items-center gap-1.5">
+                <span x-text="newProject.briefOpen ? '▾' : '▸'"></span>
+                Ajouter un contexte créatif (optionnel)
+              </button>
+              <div x-show="newProject.briefOpen" class="space-y-3 mt-3">
+                <p class="text-xs text-muted">En quelques mots, quel est l'objectif de cette vidéo ?</p>
+                <textarea x-model="newProject.briefContext" rows="4" placeholder="Ton, cible, contraintes..." class="w-full text-sm px-3 py-2 rounded-lg border border-line"></textarea>
+                <button type="button" @click="generateNewProjectBrief()" :disabled="newProjectBriefLoading" class="bg-surface border border-line text-sm py-2 px-3 rounded-lg flex items-center justify-center gap-2 disabled:opacity-40">
+                  <span x-show="newProjectBriefLoading" class="spinner"></span> ✦ Générer le brief avec Claude
+                </button>
+                <p x-show="newProjectBriefError" class="text-xs text-accent" x-text="newProjectBriefError"></p>
+              </div>
+            </div>
+
+            <button @click="createProject()" :disabled="!newProject.title || creatingProject" class="w-full bg-accent text-white text-sm font-medium py-2.5 rounded-lg flex items-center justify-center gap-2 disabled:opacity-40">
+              <span x-show="creatingProject" class="spinner"></span> Créer le projet →
+            </button>
           </div>
         </div>
       </template>
@@ -613,7 +689,7 @@ tailwind.config = {
           <div x-show="currentClient" class="mt-6 bg-surface border border-line rounded-xl p-5 max-w-2xl">
             <div class="flex items-center justify-between mb-4">
               <h3 class="font-display font-bold text-lg" x-text="currentClient?.name"></h3>
-              <button @click="openProjectModal(currentClient?.name)" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Nouveau projet pour ce client</button>
+              <button @click="goToNewProject(currentClient?.name)" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Nouveau projet pour ce client</button>
             </div>
             <div class="space-y-2">
               <template x-for="p in projects.filter(p=>p.client===currentClient?.name)" :key="p.id">
@@ -667,124 +743,6 @@ tailwind.config = {
       </template>
 
     </main>
-  </div>
-</div>
-
-<!-- ===================== MODAL NOUVEAU PROJET ===================== -->
-<div x-show="projectModalOpen" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @keydown.escape.window="closeProjectModal()">
-  <div class="modal-slide-enter bg-surface border border-line rounded-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto" x-show="projectModalOpen">
-    <div class="flex items-center justify-between mb-5">
-      <h3 class="font-display font-bold text-lg">Nouveau projet</h3>
-      <button @click="closeProjectModal()" class="text-muted hover:text-ink">✕</button>
-    </div>
-
-    <div class="flex gap-1 mb-5">
-      <template x-for="n in [1,2,3,4,5,6]" :key="n">
-        <div class="flex-1 h-1 rounded" :class="newProjectStep>=n ? 'bg-accent' : 'bg-line'"></div>
-      </template>
-    </div>
-
-    <!-- step 1 — infos de base -->
-    <div x-show="newProjectStep===1" class="space-y-3">
-      <p class="text-xs text-muted font-mono uppercase">Étape 1 — Infos de base</p>
-      <input x-model="newProject.title" placeholder="Titre du projet" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
-      <input x-model="newProject.client" placeholder="Nom du client" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
-      <select x-model="newProject.type" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
-        <option>Corporate</option><option>Vlog</option><option>Interview</option><option>Podcast</option><option>TikTok/Reels</option><option>Court-métrage</option><option>Documentaire</option><option>Autre</option>
-      </select>
-      <input x-model="newProject.budget" placeholder="Budget (€)" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
-      <input x-model="newProject.deadline" type="date" required class="w-full text-sm px-3 py-2 rounded-lg border border-line">
-      <p class="text-xs text-muted">Tu peux toujours la modifier plus tard. Une deadline estimée permet à l'outil de te rappeler les échéances.</p>
-      <button @click="newProjectStep=2; saveProjectDraft()" :disabled="!newProject.title" class="w-full bg-accent text-white text-sm font-medium py-2 rounded-lg disabled:opacity-40">Suivant</button>
-    </div>
-
-    <!-- step 2 — pitch & idées -->
-    <div x-show="newProjectStep===2" class="space-y-3">
-      <p class="text-xs text-muted font-mono uppercase">Étape 2 — Pitch & idées</p>
-      <textarea x-model="newProject.briefRaw" rows="4" placeholder="Décris le projet en quelques phrases (objectif, cible, ton, contraintes)" class="w-full text-sm px-3 py-2 rounded-lg border border-line"></textarea>
-      <button @click="generatePitch()" class="w-full bg-surface border border-line text-sm py-2 rounded-lg flex items-center justify-center gap-2">
-        <span x-show="newProjectPitchLoading" class="spinner"></span> Claude propose un pitch
-      </button>
-      <p x-show="newProjectPitchError" class="text-xs text-accent" x-text="newProjectPitchError"></p>
-      <div x-show="newProject.pitch" class="bg-bg border border-line rounded-lg p-3 text-xs space-y-2 max-h-56 overflow-y-auto">
-        <div><p class="text-accent font-mono uppercase">Pitch</p><textarea x-model="newProject.pitch" rows="3" class="w-full bg-transparent border-0 text-ink text-xs p-0"></textarea></div>
-        <div><p class="text-accent font-mono uppercase">💡 Idées</p><textarea x-model="newProject.idees" rows="2" class="w-full bg-transparent border-0 text-ink text-xs p-0"></textarea></div>
-        <div><p class="text-accent font-mono uppercase">❗ À penser</p><textarea x-model="newProject.aPenser" rows="2" class="w-full bg-transparent border-0 text-ink text-xs p-0"></textarea></div>
-      </div>
-      <div class="flex gap-2">
-        <button @click="newProjectStep=1; saveProjectDraft()" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
-        <button @click="newProjectStep=3; saveProjectDraft()" class="flex-1 bg-accent text-white text-sm py-2 rounded-lg">Suivant</button>
-      </div>
-    </div>
-
-    <!-- step 3 — scénario -->
-    <div x-show="newProjectStep===3" class="space-y-3">
-      <p class="text-xs text-muted font-mono uppercase">Étape 3 — Scénario</p>
-      <button @click="generateScenarioNew()" class="w-full bg-surface border border-line text-sm py-2 rounded-lg flex items-center justify-center gap-2">
-        <span x-show="newProjectScenarioLoading" class="spinner"></span> Claude propose un scénario
-      </button>
-      <p x-show="newProjectScenarioError" class="text-xs text-accent" x-text="newProjectScenarioError"></p>
-      <textarea x-model="newProject.scenario" rows="8" placeholder="Le scénario apparaîtra ici, modifiable..." class="w-full text-sm px-3 py-2 rounded-lg border border-line font-mono"></textarea>
-      <div class="flex gap-2">
-        <button @click="newProjectStep=2; saveProjectDraft()" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
-        <button @click="newProjectStep=4; saveProjectDraft()" class="flex-1 bg-accent text-white text-sm py-2 rounded-lg">Suivant</button>
-      </div>
-    </div>
-
-    <!-- step 4 — découpage technique -->
-    <div x-show="newProjectStep===4" class="space-y-3">
-      <p class="text-xs text-muted font-mono uppercase">Étape 4 — Découpage technique</p>
-      <button @click="generateDecoupageNew()" class="w-full bg-surface border border-line text-sm py-2 rounded-lg flex items-center justify-center gap-2">
-        <span x-show="newProjectDecoupageLoading" class="spinner"></span> Claude génère le découpage
-      </button>
-      <p x-show="newProjectDecoupageError" class="text-xs text-accent" x-text="newProjectDecoupageError"></p>
-      <p x-show="newProject.decoupage && newProject.decoupage.length" class="text-xs text-muted" x-text="(newProject.decoupage||[]).length + ' plans générés — modifiables après création'"></p>
-      <div class="flex gap-2">
-        <button @click="newProjectStep=3; saveProjectDraft()" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
-        <button @click="newProjectStep=5; saveProjectDraft()" class="flex-1 bg-accent text-white text-sm py-2 rounded-lg">Suivant</button>
-      </div>
-    </div>
-
-    <!-- step 5 — logistique -->
-    <div x-show="newProjectStep===5" class="space-y-3">
-      <p class="text-xs text-muted font-mono uppercase">Étape 5 — Logistique</p>
-      <button @click="generateLogistiqueNew()" class="w-full bg-surface border border-line text-sm py-2 rounded-lg flex items-center justify-center gap-2">
-        <span x-show="newProjectLogistiqueLoading" class="spinner"></span> Claude suggère matos & lieu
-      </button>
-      <p x-show="newProjectLogistiqueError" class="text-xs text-accent" x-text="newProjectLogistiqueError"></p>
-      <div x-show="newProject.matos && newProject.matos.length" class="bg-bg border border-line rounded-lg p-3 text-xs space-y-2 max-h-48 overflow-y-auto">
-        <p class="text-accent font-mono uppercase">Matos à louer</p>
-        <ul class="list-disc pl-4"><template x-for="(m,i) in (newProject.matos||[])" :key="i"><li x-text="m"></li></template></ul>
-      </div>
-      <textarea x-model="newProject.lieu" rows="2" placeholder="Lieu de tournage" class="w-full text-sm px-3 py-2 rounded-lg border border-line"></textarea>
-      <div class="flex gap-2">
-        <button @click="newProjectStep=4; saveProjectDraft()" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
-        <button @click="newProjectStep=6; saveProjectDraft()" class="flex-1 bg-accent text-white text-sm py-2 rounded-lg">Suivant</button>
-      </div>
-    </div>
-
-    <!-- step 6 — récap -->
-    <div x-show="newProjectStep===6" class="space-y-3">
-      <p class="text-xs text-muted font-mono uppercase">Étape 6 — Récapitulatif</p>
-      <div class="bg-bg border border-line rounded-lg p-3 text-xs space-y-2 max-h-64 overflow-y-auto">
-        <p><span class="text-accent font-mono uppercase">Titre</span> — <span x-text="newProject.title"></span></p>
-        <p><span class="text-accent font-mono uppercase">Client</span> — <span x-text="newProject.client"></span></p>
-        <p x-show="newProject.pitch"><span class="text-accent font-mono uppercase">Pitch</span> — <span x-text="newProject.pitch"></span></p>
-        <p x-show="newProject.scenario"><span class="text-accent font-mono uppercase">Scénario</span> — rédigé ✓</p>
-        <p x-show="newProject.decoupage && newProject.decoupage.length"><span class="text-accent font-mono uppercase">Découpage</span> — <span x-text="(newProject.decoupage||[]).length + ' plans'"></span></p>
-        <p x-show="newProject.lieu"><span class="text-accent font-mono uppercase">Lieu</span> — <span x-text="newProject.lieu"></span></p>
-      </div>
-      <div x-show="!newProject.deadline" class="flex gap-2">
-        <input x-model="newProject.deadline" type="date" required class="w-full text-sm px-3 py-2 rounded-lg border border-accent/40">
-      </div>
-      <p x-show="!newProject.deadline" class="text-xs text-accent">La deadline est obligatoire pour créer le projet.</p>
-      <div class="flex gap-2">
-        <button @click="newProjectStep=5; saveProjectDraft()" class="flex-1 bg-surface border border-line text-sm py-2 rounded-lg">Retour</button>
-        <button @click="createProject()" :disabled="!newProject.deadline" class="flex-1 bg-accent text-white text-sm py-2 rounded-lg flex items-center justify-center gap-2 disabled:opacity-40">
-          <span x-show="creatingProject" class="spinner"></span> Créer le projet
-        </button>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -855,14 +813,11 @@ function app() {
     // dashboard ai
     aiSuggestLoading: false, aiSuggestions: [], aiSuggestError: '',
 
-    // project modal — assistant pas-à-pas (6 étapes, miroir du template Notion)
-    projectModalOpen: false, newProjectStep: 1,
-    newProject: { title:'', client:'', type:'Corporate', budget:'', deadline:'', briefRaw:'', pitch:'', idees:'', aPenser:'', scenario:'', decoupage:[], matos:[], lieu:'' },
-    newProjectPitchLoading: false, newProjectPitchError: '',
-    newProjectScenarioLoading: false, newProjectScenarioError: '',
-    newProjectDecoupageLoading: false, newProjectDecoupageError: '',
-    newProjectLogistiqueLoading: false, newProjectLogistiqueError: '',
+    // page "Nouveau projet" — quick add + brief créatif optionnel
+    newProject: { title:'', clientSelect:'', clientNew:'', type:'', budget:'', deadline:'', briefOpen:false, briefContext:'' },
+    newProjectBriefLoading: false, newProjectBriefError: '',
     creatingProject: false,
+    briefBannerDismissed: false,
 
     // detail generation states
     pitchLoading: false, pitchError: '',
@@ -968,12 +923,12 @@ function app() {
     bindShortcuts() {
       window.addEventListener('keydown', e => {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-          if (e.key === 'Escape') { this.closeProjectModal(); this.saveToProjectOpen=false; e.target.blur(); }
+          if (e.key === 'Escape') { this.saveToProjectOpen=false; e.target.blur(); }
           return;
         }
-        if (e.key === 'n') this.openProjectModal();
+        if (e.key === 'n') this.goToNewProject();
         if (e.key === '/') { e.preventDefault(); this.view='projets'; this.$nextTick?.(()=>{}); setTimeout(()=>document.getElementById('search-input')?.focus(),50); }
-        if (e.key === 'Escape') { this.closeProjectModal(); this.saveToProjectOpen=false; }
+        if (e.key === 'Escape') { this.saveToProjectOpen=false; }
       });
     },
 
@@ -1269,6 +1224,7 @@ function app() {
     openProject(p) {
       this.currentProject = p;
       this.detailTab = 'pitch';
+      this.briefBannerDismissed = false;
       this.view = 'detail';
     },
     async toggleShare() {
@@ -1303,104 +1259,53 @@ function app() {
       this.deleteProjectConfirmOpen = true;
     },
 
-    // ---------- NEW PROJECT MODAL — assistant pas-à-pas ----------
-    openProjectModal(prefillClient) {
-      this.newProjectStep = 1;
-      this.newProject = { title:'', client: prefillClient||'', type:'Corporate', budget:'', deadline:'', briefRaw:'', pitch:'', idees:'', aPenser:'', scenario:'', decoupage:[], matos:[], lieu:'' };
-      this.newProjectPitchError=''; this.newProjectScenarioError=''; this.newProjectDecoupageError=''; this.newProjectLogistiqueError='';
-      // Reprise d'un brouillon si l'utilisateur a fermé la fenêtre sans terminer
-      // la création (sinon tout le travail — pitch, scénario générés — est perdu).
+    // ---------- PAGE NOUVEAU PROJET — quick add + brief créatif optionnel ----------
+    goToNewProject(prefillClient) {
+      this.newProject = { title:'', clientSelect: prefillClient||'', clientNew:'', type:'', budget:'', deadline:'', briefOpen:false, briefContext:'' };
+      this.newProjectBriefError = '';
+      this.view = 'nouveau-projet';
+    },
+    deadlineLabel(dateStr) {
+      if (!dateStr) return '';
+      const days = Math.round((new Date(dateStr) - new Date(new Date().toDateString())) / 86400000);
+      if (days === 0) return 'Aujourd\'hui';
+      if (days < 0) return 'Échéance dépassée';
+      return `dans ${days} jour${days>1?'s':''}`;
+    },
+    async generateNewProjectBrief() {
+      this.newProjectBriefLoading = true; this.newProjectBriefError='';
       try {
-        const raw = localStorage.getItem('mp_studio_draft');
-        if (raw) {
-          const draft = JSON.parse(raw);
-          if (draft && draft.newProject && draft.newProject.title && confirm(`Reprendre le brouillon de projet "${draft.newProject.title}" non terminé ?`)) {
-            this.newProject = draft.newProject;
-            this.newProjectStep = draft.newProjectStep || 1;
-          } else {
-            localStorage.removeItem('mp_studio_draft');
-          }
-        }
-      } catch(e) { localStorage.removeItem('mp_studio_draft'); }
-      this.projectModalOpen = true;
-    },
-    saveProjectDraft() {
-      if (!this.projectModalOpen) return;
-      localStorage.setItem('mp_studio_draft', JSON.stringify({ newProject: this.newProject, newProjectStep: this.newProjectStep }));
-    },
-    closeProjectModal() {
-      this.saveProjectDraft();
-      this.projectModalOpen = false;
-    },
-    async generatePitch() {
-      this.newProjectPitchLoading = true; this.newProjectPitchError='';
-      try {
-        const text = await this.callClaude(
-          `Tu es producteur vidéo expert, co-pilote créatif sur une préproduction. L'utilisateur décrit un projet.\nPropose : un pitch percutant (3-4 phrases), des idées créatives (angles, références), et les points de vigilance à anticiper (contraintes, risques).\nRéponds en JSON avec ces clés exactes : pitch (string), idees (string), aPenser (string).`,
-          `Projet: ${this.newProject.title}\nClient: ${this.newProject.client}\nType: ${this.newProject.type}\nBudget: ${this.newProject.budget}€\nDeadline: ${this.newProject.deadline}\n\nDescription: ${this.newProject.briefRaw}`
-        );
-        const j = this.extractJson(text);
-        this.newProject.pitch = j.pitch || ''; this.newProject.idees = j.idees || ''; this.newProject.aPenser = j.aPenser || '';
-      } catch(e) {
-        this.newProjectPitchError = 'Erreur Claude. Réessaie.';
-      } finally {
-        this.newProjectPitchLoading = false;
-      }
-    },
-    async generateScenarioNew() {
-      this.newProjectScenarioLoading = true; this.newProjectScenarioError='';
-      try {
-        this.newProject.scenario = await this.callClaude(
-          `Tu es scénariste vidéo professionnel. ${this.scenarioPromptFor(this.newProject.type)}`,
-          `Pitch: ${this.newProject.pitch}\nIdées: ${this.newProject.idees}\nType: ${this.newProject.type}`
+        const client = this.newProject.clientSelect==='__new__' ? this.newProject.clientNew : this.newProject.clientSelect;
+        this.newProject.briefContext = await this.callClaude(
+          'Tu es assistant de production vidéo.',
+          `Génère un brief créatif court (3-4 phrases) pour un projet ${this.newProject.type || 'vidéo'} intitulé "${this.newProject.title}", pour le client ${client || 'non précisé'}. Objectif mentionné par le créateur : ${this.newProject.briefContext || 'non précisé'}.`
         );
       } catch(e) {
-        this.newProjectScenarioError = 'Erreur Claude. Réessaie.';
+        this.newProjectBriefError = 'Erreur Claude. Réessaie.';
       } finally {
-        this.newProjectScenarioLoading = false;
-      }
-    },
-    async generateDecoupageNew() {
-      this.newProjectDecoupageLoading = true; this.newProjectDecoupageError='';
-      try {
-        const text = await this.callClaude(this.decoupagePrompt(), `Pitch: ${this.newProject.pitch}\nScénario: ${this.newProject.scenario}`);
-        this.newProject.decoupage = this.extractJson(text);
-      } catch(e) {
-        this.newProjectDecoupageError = 'Erreur Claude. Réessaie.';
-      } finally {
-        this.newProjectDecoupageLoading = false;
-      }
-    },
-    async generateLogistiqueNew() {
-      this.newProjectLogistiqueLoading = true; this.newProjectLogistiqueError='';
-      try {
-        const text = await this.callClaude(this.logistiquePrompt(), `Pitch: ${this.newProject.pitch}\nType: ${this.newProject.type}\nNombre de plans: ${(this.newProject.decoupage||[]).length}`);
-        const j = this.extractJson(text);
-        this.newProject.matos = j.matos || []; this.newProject.lieu = j.lieu || '';
-      } catch(e) {
-        this.newProjectLogistiqueError = 'Erreur Claude. Réessaie.';
-      } finally {
-        this.newProjectLogistiqueLoading = false;
+        this.newProjectBriefLoading = false;
       }
     },
     async createProject() {
+      if (!this.newProject.title) return;
       this.creatingProject = true;
+      const client = this.newProject.clientSelect==='__new__' ? this.newProject.clientNew : this.newProject.clientSelect;
       const project = {
         id: 'p' + Date.now(),
         title: this.newProject.title,
-        client: this.newProject.client,
+        client: client || '',
         type: this.newProject.type,
         budget: this.newProject.budget,
         deadline: this.newProject.deadline,
         status: 'brief',
         progress: 5,
-        pitch: this.newProject.pitch,
-        idees: this.newProject.idees,
-        aPenser: this.newProject.aPenser,
-        scenario: this.newProject.scenario,
-        decoupage: this.newProject.decoupage || [],
-        matos: this.newProject.matos || [],
-        lieu: this.newProject.lieu,
+        pitch: this.newProject.briefContext || '',
+        idees: '',
+        aPenser: '',
+        scenario: '',
+        decoupage: [],
+        matos: [],
+        lieu: '',
         moodboardNotes: '',
         captions: {},
         checklist: [],
@@ -1410,8 +1315,6 @@ function app() {
       this.projects.unshift(project);
       await this.saveProjectDoc(project);
       this.creatingProject = false;
-      this.projectModalOpen = false;
-      localStorage.removeItem('mp_studio_draft');
       this.toast('Projet créé');
       this.openProject(project);
     },
