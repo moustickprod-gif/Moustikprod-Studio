@@ -422,13 +422,33 @@ tailwind.config = {
               <button @click="generateScenario()" class="bg-accent text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2">
                 <span x-show="scenarioLoading" class="spinner"></span> Générer avec Claude
               </button>
-              <button @click="analyzeScenario()" class="bg-surface border border-line text-sm px-4 py-2 rounded-lg flex items-center gap-2 hover:border-accent/50 transition">
+              <button @click="analyzeScenario()" :disabled="(currentProject.scenario||'').length <= 50 || scenarioCritiqueLoading" :title="(currentProject.scenario||'').length <= 50 ? 'Écris d\'abord un scénario' : ''" class="bg-surface border border-line text-sm px-4 py-2 rounded-lg flex items-center gap-2 hover:border-accent/50 transition disabled:opacity-40 disabled:cursor-not-allowed">
                 <span x-show="scenarioCritiqueLoading" class="spinner"></span> ✦ Analyser et améliorer
               </button>
             </div>
             <p x-show="scenarioError" class="text-xs text-accent" x-text="scenarioError"></p>
             <p x-show="scenarioCritiqueError" class="text-xs text-accent" x-text="scenarioCritiqueError"></p>
             <textarea x-model="currentProject.scenario" @blur="saveProjects()" rows="16" placeholder="Le scénario généré apparaîtra ici..." class="w-full bg-surface border border-line rounded-xl p-4 text-sm font-mono leading-relaxed"></textarea>
+
+            <div x-show="scenarioCritique" class="space-y-3 border border-line rounded-xl p-4">
+              <div class="flex items-center justify-between">
+                <p class="font-display font-bold text-sm">✦ Analyse du scénario</p>
+                <button @click="scenarioCritique=null" class="text-muted hover:text-ink text-sm" title="Fermer">✕</button>
+              </div>
+              <div class="bg-emerald-50 border-l-4 border-emerald-400 rounded-lg p-4">
+                <p class="text-emerald-700 font-mono text-xs mb-2 uppercase">✓ Ce qui est fort</p>
+                <p class="text-sm whitespace-pre-wrap" x-text="scenarioCritique?.strengths"></p>
+              </div>
+              <div class="bg-orange-50 border-l-4 border-orange-400 rounded-lg p-4">
+                <p class="text-orange-700 font-mono text-xs mb-2 uppercase">⚠ Ce qui est faible ou manque</p>
+                <p class="text-sm whitespace-pre-wrap" x-text="scenarioCritique?.weaknesses"></p>
+              </div>
+              <div class="bg-bg border-l-4 border-line rounded-lg p-4">
+                <p class="text-ink font-mono text-xs mb-2 uppercase">✦ Version améliorée</p>
+                <p class="text-sm whitespace-pre-wrap" x-text="scenarioCritique?.improved"></p>
+                <button @click="useImprovedScenario()" class="mt-3 text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Utiliser cette version →</button>
+              </div>
+            </div>
           </div>
 
           <!-- CAPTIONS TAB -->
@@ -807,31 +827,6 @@ tailwind.config = {
   </div>
 </div>
 
-<!-- ===================== MODAL CRITIQUE SCÉNARIO ===================== -->
-<div x-show="critiqueModalOpen" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @keydown.escape.window="critiqueModalOpen=false">
-  <div class="modal-slide-enter bg-surface border border-line rounded-xl w-full max-w-2xl p-6 max-h-[85vh] overflow-y-auto" x-show="critiqueModalOpen">
-    <div class="flex items-center justify-between mb-4">
-      <h3 class="font-display font-bold text-lg">✦ Analyse du scénario</h3>
-      <button @click="critiqueModalOpen=false" class="text-muted hover:text-ink">✕</button>
-    </div>
-    <div class="space-y-4" x-show="scenarioCritique">
-      <div class="bg-emerald-50 border-l-4 border-emerald-400 rounded-lg p-4">
-        <p class="text-emerald-700 font-mono text-xs mb-2 uppercase">Ce qui est fort</p>
-        <p class="text-sm whitespace-pre-wrap" x-text="scenarioCritique?.strengths"></p>
-      </div>
-      <div class="bg-orange-50 border-l-4 border-orange-400 rounded-lg p-4">
-        <p class="text-orange-700 font-mono text-xs mb-2 uppercase">Ce qui manque ou est faible</p>
-        <p class="text-sm whitespace-pre-wrap" x-text="scenarioCritique?.weaknesses"></p>
-      </div>
-      <div class="bg-bg border-l-4 border-line rounded-lg p-4">
-        <p class="text-ink font-mono text-xs mb-2 uppercase">Version améliorée</p>
-        <p class="text-sm whitespace-pre-wrap" x-text="scenarioCritique?.improved"></p>
-        <button @click="useImprovedScenario()" class="mt-3 text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Utiliser cette version →</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- ===================== TOASTS ===================== -->
 <div class="fixed bottom-4 right-4 space-y-2 z-50">
   <template x-for="t in toasts" :key="t.id">
@@ -885,7 +880,7 @@ function app() {
     // detail generation states
     pitchLoading: false, pitchError: '', autoBriefLoading: false,
     exploreAnglesLoading: false, exploreAnglesError: '', creativeAngles: [],
-    scenarioCritiqueLoading: false, scenarioCritiqueError: '', scenarioCritique: null, critiqueModalOpen: false,
+    scenarioCritiqueLoading: false, scenarioCritiqueError: '', scenarioCritique: null,
     decoupageLoading: false, decoupageError: '',
     scenarioLoading: false, scenarioError: '',
     logistiqueLoading: false, logistiqueError: '',
@@ -1560,20 +1555,20 @@ function app() {
       }
     },
     async analyzeScenario() {
-      if (!this.currentProject.scenario) {
-        this.scenarioCritiqueError = "Écris ou génère un scénario avant de l'analyser.";
+      if ((this.currentProject.scenario || '').length <= 50) {
+        this.scenarioCritiqueError = "Écris d'abord un scénario.";
         return;
       }
       this.scenarioCritiqueLoading = true; this.scenarioCritiqueError = '';
       try {
+        const p = this.currentProject;
         const text = await this.callClaude(
-          'Tu es un script doctor expert en production vidéo courte.',
-          `Analyse ce scénario pour une vidéo ${this.currentProject.type || 'vidéo'} intitulée "${this.currentProject.title}" :\n\n${this.currentProject.scenario}\n\nRéponds en 3 sections séparées par ---SECTION--- :\n\nSECTION 1 — CE QUI EST FORT :\nListe 2-3 points forts du scénario (sois précis, cite des éléments du texte)\n\n---SECTION---\n\nSECTION 2 — CE QUI MANQUE OU EST FAIBLE :\nListe 2-3 problèmes concrets (rythme, accroche, fin, transition...)\n\n---SECTION---\n\nSECTION 3 — VERSION AMÉLIORÉE :\nRéécris le scénario en corrigeant les faiblesses identifiées. Garde la structure de l'auteur mais renforce les passages faibles.`
+          'Tu es un script doctor expert en vidéo courte (vlog, corporate, TikTok).',
+          `Analyse ce scénario pour une vidéo ${p.type || 'vidéo'} intitulée "${p.title}" pour le client ${p.client || 'non précisé'} :\n\n---\n${p.scenario}\n---\n\nRéponds en 3 sections séparées par ===SECTION=== :\n\nSECTION 1 — CE QUI EST FORT :\n2-3 points forts précis (cite des éléments du scénario).\n\n===SECTION===\n\nSECTION 2 — CE QUI EST FAIBLE OU MANQUE :\n2-3 problèmes concrets avec suggestions de correction.\n\n===SECTION===\n\nSECTION 3 — VERSION AMÉLIORÉE :\nRéécris le scénario en corrigeant les faiblesses. Garde la structure de l'auteur, renforce les passages faibles. Commence directement par le texte réécrit.`
         );
         const stripHeading = s => (s || '').trim().replace(/^[\s\S]*?SECTION\s*\d+\s*—[^\n]*\n+/i, '').trim();
-        const [strengths, weaknesses, improved] = text.split('---SECTION---').map(stripHeading);
+        const [strengths, weaknesses, improved] = text.split('===SECTION===').map(stripHeading);
         this.scenarioCritique = { strengths: strengths || '', weaknesses: weaknesses || '', improved: improved || '' };
-        this.critiqueModalOpen = true;
       } catch(e) {
         this.scenarioCritiqueError = 'Erreur Claude. Réessaie.';
       } finally {
@@ -1585,7 +1580,7 @@ function app() {
       if (!confirm('Remplacer ton scénario par la version améliorée ?')) return;
       this.currentProject.scenario = this.scenarioCritique.improved;
       this.saveProjects();
-      this.critiqueModalOpen = false;
+      this.scenarioCritique = null;
       this.toast('Scénario remplacé');
     },
     logistiquePrompt() {
