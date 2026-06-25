@@ -784,7 +784,7 @@ tailwind.config = {
     <h3 class="font-display font-bold text-lg mb-2">Supprimer le projet</h3>
     <p class="text-sm text-muted mb-6">Cette action est irréversible. Le projet sera supprimé définitivement.</p>
     <div class="flex gap-3">
-      <button @click="deleteProjectConfirmOpen=false" class="flex-1 text-sm border border-line rounded-lg px-4 py-2 hover:bg-bg transition">Annuler</button>
+      <button @click="deleteProjectConfirmOpen=false; projectPendingDelete=null" class="flex-1 text-sm border border-line rounded-lg px-4 py-2 hover:bg-bg transition">Annuler</button>
       <button @click="deleteProject()" class="flex-1 text-sm bg-red-500 text-white rounded-lg px-4 py-2 hover:bg-red-600 transition">Supprimer</button>
     </div>
   </div>
@@ -878,6 +878,7 @@ function app() {
     studioHistory: [],
     saveToProjectOpen: false,
     deleteProjectConfirmOpen: false,
+    projectPendingDelete: null,
 
     // clients
     clientSearch: '', currentClient: null,
@@ -1304,22 +1305,8 @@ function app() {
       window.open(url, '_blank');
     },
     confirmDeleteProject(p) {
-      if (!confirm(`Supprimer définitivement le projet "${p.title}" ? Cette action est irréversible.`)) return;
-      this.deleteProject(p);
-    },
-    async deleteProject(p) {
-      this.projects = this.projects.filter(x => x.id !== p.id);
-      if (this.currentProject && this.currentProject.id === p.id) {
-        this.view = 'projets';
-        this.currentProject = null;
-      }
-      if (this.db && this.user && !this.user.skip) {
-        try {
-          await this.db.collection('users').doc(this.user.uid).collection('projets').doc(p.id).delete();
-        } catch (e) { console.error('Erreur suppression projet:', e); }
-      } else {
-        localStorage.setItem('mp_studio_projects', JSON.stringify(this.projects));
-      }
+      this.projectPendingDelete = p || this.currentProject;
+      this.deleteProjectConfirmOpen = true;
     },
 
     // ---------- NEW PROJECT MODAL — assistant pas-à-pas ----------
@@ -1734,11 +1721,8 @@ function app() {
     },
 
     // ---------- DELETE PROJECT ----------
-    confirmDeleteProject() {
-      this.deleteProjectConfirmOpen = true;
-    },
     async deleteProject() {
-      const p = this.currentProject;
+      const p = this.projectPendingDelete;
       if (!p) return;
       if (this.db && this.user && !this.user.skip) {
         try {
@@ -1748,8 +1732,11 @@ function app() {
       this.projects = this.projects.filter(pr => pr.id !== p.id);
       this.saveProjects();
       this.deleteProjectConfirmOpen = false;
-      this.currentProject = null;
-      this.view = 'projets';
+      this.projectPendingDelete = null;
+      if (this.currentProject && this.currentProject.id === p.id) {
+        this.currentProject = null;
+        this.view = 'projets';
+      }
       this.toast('Projet supprimé');
     }
   }
