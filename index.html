@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -233,7 +233,8 @@ tailwind.config = {
                 <div class="flex items-start justify-between">
                   <div>
                     <p class="font-display font-bold" x-text="p.title"></p>
-                    <p class="text-muted text-sm" x-text="p.client + ' · ' + p.type"></p>
+                    <p class="text-muted text-sm" x-text="p.client + ' · ' + p.type + (p.type==='Série / Épisodes' && p.nbEpisodes ? ' (' + p.nbEpisodes + ' épisodes)' : '')"></p>
+                    <span x-show="p.secteurClient" class="text-xs font-mono text-accent" x-text="p.secteurClient"></span>
                   </div>
                   <span class="text-xs font-mono px-2 py-0.5 rounded shrink-0" :style="statusStyle(p.status)" x-text="statusLabel(p.status)"></span>
                 </div>
@@ -311,8 +312,8 @@ tailwind.config = {
           </div>
 
           <div class="flex gap-1 border-b border-line mb-5 overflow-x-auto">
-            <template x-for="t in ['pitch','scenario','decoupage','logistique','captions','suivi']" :key="t">
-              <button @click="detailTab=t" :class="detailTab===t ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-ink'" class="px-4 py-2 text-sm font-medium border-b-2 transition whitespace-nowrap" x-text="{pitch:'Pitch',scenario:'Scénario',decoupage:'Découpage technique',logistique:'Logistique',captions:'Captions / Réseaux',suivi:'Suivi'}[t]"></button>
+            <template x-for="t in ['pitch','moodboard','scenario','decoupage','logistique','captions','suivi']" :key="t">
+              <button @click="detailTab=t" :class="detailTab===t ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-ink'" class="px-4 py-2 text-sm font-medium border-b-2 transition whitespace-nowrap" x-text="{pitch:'Pitch',moodboard:'Moodboard & Références',scenario:'Scénario',decoupage:'Découpage technique',logistique:'Logistique',captions:'Captions / Réseaux',suivi:'Suivi'}[t]"></button>
             </template>
           </div>
 
@@ -354,6 +355,38 @@ tailwind.config = {
             </div>
           </div>
 
+          <!-- MOODBOARD TAB -->
+          <div x-show="detailTab==='moodboard'" class="space-y-4">
+            <div class="bg-surface border-l-4 border-accent2 rounded-xl p-5">
+              <p class="text-accent2 font-mono text-xs mb-2 uppercase">Références visuelles</p>
+              <textarea x-model="currentProject.moodboardRefVisuelles" @blur="saveProjects()" rows="3" placeholder="Films, clips, photographes, colorimétrie de référence" class="w-full bg-transparent border-0 text-sm p-0"></textarea>
+            </div>
+            <div class="bg-surface border-l-4 border-accent2 rounded-xl p-5">
+              <p class="text-accent2 font-mono text-xs mb-2 uppercase">Références sonores / musicales</p>
+              <textarea x-model="currentProject.moodboardRefSonores" @blur="saveProjects()" rows="3" placeholder="Ambiance, artistes, BPM, mood musical" class="w-full bg-transparent border-0 text-sm p-0"></textarea>
+            </div>
+            <div>
+              <label class="text-xs font-mono text-muted uppercase block mb-1.5">Ton narratif</label>
+              <select x-model="currentProject.moodboardTon" @change="saveProjects()" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+                <option value="">— Choisir —</option>
+                <option>Documentaire immersif</option>
+                <option>Contemplatif</option>
+                <option>Dynamique</option>
+                <option>Intimiste</option>
+                <option>Épique</option>
+                <option>Autre</option>
+              </select>
+            </div>
+            <div class="bg-surface border border-line rounded-xl p-5">
+              <p class="text-muted font-mono text-xs mb-2 uppercase">Notes moodboard</p>
+              <textarea x-model="currentProject.moodboardNotes" @blur="saveProjects()" rows="4" placeholder="Notes libres..." class="w-full bg-transparent border-0 text-sm p-0"></textarea>
+            </div>
+            <button @click="suggestMoodboardRefs()" class="bg-surface border border-line rounded-lg px-4 py-2 text-sm hover:border-accent/50 transition flex items-center gap-2">
+              <span x-show="moodboardLoading" class="spinner"></span> ✦ Claude suggère des références
+            </button>
+            <p x-show="moodboardError" class="text-xs text-accent" x-text="moodboardError"></p>
+          </div>
+
           <!-- DÉCOUPAGE TAB -->
           <div x-show="detailTab==='decoupage'" class="space-y-4">
             <div class="flex gap-2">
@@ -367,7 +400,7 @@ tailwind.config = {
             <div x-show="currentProject.decoupage && currentProject.decoupage.length" class="overflow-x-auto bg-surface border border-line rounded-xl">
               <table class="w-full text-sm">
                 <thead><tr class="text-muted text-xs font-mono border-b border-line">
-                  <th class="text-left p-2">Plan</th><th class="text-left p-2">Focale / Angle</th><th class="text-left p-2">Description</th><th class="text-left p-2">Heure</th><th class="text-left p-2">Fait</th><th class="p-2"></th>
+                  <th class="text-left p-2">Plan</th><th class="text-left p-2">Focale / Angle</th><th class="text-left p-2">Description</th><th class="text-left p-2">Heure</th><th class="text-left p-2">Intention</th><th class="text-left p-2">Son</th><th class="text-left p-2">Fait</th><th class="p-2"></th>
                 </tr></thead>
                 <tbody>
                   <template x-for="(s,i) in (currentProject.decoupage||[])" :key="i">
@@ -376,6 +409,18 @@ tailwind.config = {
                       <td class="p-2"><input x-model="s.focale" @blur="saveProjects()" class="bg-transparent border-0 w-24 text-sm"></td>
                       <td class="p-2"><input x-model="s.description" @blur="saveProjects()" class="bg-transparent border-0 w-full text-sm"></td>
                       <td class="p-2"><input x-model="s.heure" @blur="saveProjects()" class="bg-transparent border-0 w-20 text-sm"></td>
+                      <td class="p-2">
+                        <select x-model="s.intention" @change="saveProjects()" class="bg-transparent border-0 text-xs">
+                          <option value="">—</option>
+                          <option>Contemplatif</option><option>Descriptif</option><option>Immersif</option><option>Dynamique</option><option>Émotionnel</option>
+                        </select>
+                      </td>
+                      <td class="p-2">
+                        <select x-model="s.son" @change="saveProjects()" class="bg-transparent border-0 text-xs">
+                          <option value="">—</option>
+                          <option>Ambiance naturelle</option><option>Voix off</option><option>Musique</option><option>Silence</option><option>Interview</option>
+                        </select>
+                      </td>
                       <td class="p-2"><input type="checkbox" x-model="s.fait" @change="saveProjects()" class="accent-accent"></td>
                       <td class="p-2"><button @click="currentProject.decoupage.splice(i,1); saveProjects()" class="text-muted hover:text-accent text-xs">✕</button></td>
                     </tr>
@@ -411,8 +456,15 @@ tailwind.config = {
               <textarea x-model="currentProject.lieu" @blur="saveProjects()" rows="3" placeholder="Lieu de tournage..." class="w-full bg-bg border border-line rounded-lg p-3 text-sm"></textarea>
             </div>
             <div class="bg-surface border border-line rounded-xl p-5">
-              <p class="font-display font-bold text-sm mb-3">Moodboard — notes & références</p>
-              <textarea x-model="currentProject.moodboardNotes" @blur="saveProjects()" rows="3" placeholder="Palette de couleurs, films de référence, ambiance visuelle..." class="w-full bg-bg border border-line rounded-lg p-3 text-sm"></textarea>
+              <p class="font-display font-bold text-sm mb-3">Format de livraison</p>
+              <div class="space-y-1.5">
+                <template x-for="f in ['Master 16:9 (YouTube / Vimeo)','Carré 1:1 (Instagram feed)','Vertical 9:16 (Reels / TikTok / Shorts)','Sous-titres inclus','Export audio séparé','Exports par séquence']" :key="f">
+                  <label class="flex items-center gap-2 text-sm text-ink">
+                    <input type="checkbox" :value="f" @change="$event.target.checked ? (currentProject.formatsLivraison||(currentProject.formatsLivraison=[])).push(f) : currentProject.formatsLivraison.splice(currentProject.formatsLivraison.indexOf(f),1); saveProjects()" :checked="(currentProject.formatsLivraison||[]).includes(f)">
+                    <span x-text="f"></span>
+                  </label>
+                </template>
+              </div>
             </div>
           </div>
 
@@ -520,10 +572,24 @@ tailwind.config = {
               <div>
                 <label class="text-xs font-mono text-muted uppercase block mb-1.5">Type de vidéo *</label>
                 <div class="flex gap-2 flex-wrap">
-                  <template x-for="t in ['Corporate','Vlog','TikTok','Interview','Podcast','Docu']" :key="t">
+                  <template x-for="t in ['Film de marque','Vlog','TikTok','Interview','Podcast','Docu','Série / Épisodes']" :key="t">
                     <button type="button" @click="newProject.type = (newProject.type===t ? '' : t)" :class="newProject.type===t ? 'bg-accent text-white border-accent' : 'bg-surface text-ink border-line hover:border-accent/50'" class="text-sm px-3 py-1.5 rounded-lg border transition" x-text="t"></button>
                   </template>
                 </div>
+                <input x-show="newProject.type==='Série / Épisodes'" x-model.number="newProject.nbEpisodes" type="number" min="2" placeholder="Nombre d'épisodes prévus" class="w-full text-sm px-3 py-2 rounded-lg border border-line mt-2">
+              </div>
+
+              <div>
+                <label class="text-xs font-mono text-muted uppercase block mb-1.5">Secteur client</label>
+                <select x-model="newProject.secteurClient" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+                  <option value="">— Choisir —</option>
+                  <option value="Artisan">Artisan</option>
+                  <option value="Restaurateur / Food">Restaurateur / Food</option>
+                  <option value="Culture / Événementiel">Culture / Événementiel</option>
+                  <option value="Tech / Startup">Tech / Startup</option>
+                  <option value="Personnel / Perso">Personnel / Perso</option>
+                  <option value="Autre">Autre</option>
+                </select>
               </div>
 
               <div>
@@ -550,6 +616,18 @@ tailwind.config = {
                   <span x-show="newProjectBriefLoading" class="spinner"></span> ✦ Générer le brief avec Claude
                 </button>
                 <p x-show="newProjectBriefError" class="text-xs text-accent" x-text="newProjectBriefError"></p>
+              </div>
+            </div>
+
+            <div class="border-t border-line pt-4">
+              <p class="text-xs font-mono text-muted uppercase mb-2">Format de livraison</p>
+              <div class="space-y-1.5">
+                <template x-for="f in ['Master 16:9 (YouTube / Vimeo)','Carré 1:1 (Instagram feed)','Vertical 9:16 (Reels / TikTok / Shorts)','Sous-titres inclus','Export audio séparé','Exports par séquence']" :key="f">
+                  <label class="flex items-center gap-2 text-sm text-ink">
+                    <input type="checkbox" :value="f" @change="$event.target.checked ? newProject.formatsLivraison.push(f) : newProject.formatsLivraison.splice(newProject.formatsLivraison.indexOf(f),1)" :checked="newProject.formatsLivraison.includes(f)">
+                    <span x-text="f"></span>
+                  </label>
+                </template>
               </div>
             </div>
 
@@ -597,7 +675,7 @@ tailwind.config = {
             <!-- Script -->
             <div x-show="studioType==='script'" class="bg-surface border border-line rounded-xl p-5 space-y-3">
               <select x-model="studioForm.scriptKind" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
-                <option>Corporate</option><option>Vlog</option><option>TikTok</option><option>Interview</option><option>Podcast</option><option>Docu</option>
+                <option>Film de marque</option><option>Vlog</option><option>TikTok</option><option>Interview</option><option>Podcast</option><option>Docu</option>
               </select>
               <input x-model="studioForm.duree" placeholder="Durée cible (ex: 2 min)" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
               <input x-model="studioForm.theme" placeholder="Thème / sujet" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
@@ -880,6 +958,7 @@ function app() {
     // detail generation states
     pitchLoading: false, pitchError: '', autoBriefLoading: false,
     exploreAnglesLoading: false, exploreAnglesError: '', creativeAngles: [],
+    moodboardLoading: false, moodboardError: '',
     scenarioCritiqueLoading: false, scenarioCritiqueError: '', scenarioCritique: null,
     decoupageLoading: false, decoupageError: '',
     scenarioLoading: false, scenarioError: '',
@@ -1118,7 +1197,7 @@ function app() {
       try {
         const ctx = this.projects.map(p => `${p.title} (${p.type})`).join('\n') || 'Aucun projet en cours.';
         const text = await this.callClaude(
-          `Tu es consultant en veille concurrentielle pour Moustikprod, agence vidéo freelance (corporate, réseaux sociaux, storytelling). Analyse les tendances actuelles du marché de la production vidéo freelance/agence en France : formats qui montent, ce que font les concurrents (agences et freelances similaires), positionnement et tarifs observés, opportunités de différenciation. Propose ensuite 3 à 5 idées d'action concrètes (offre, contenu, prospection) basées sur cette analyse.\nRéponds en JSON avec ces clés exactes : etude (string, 5-8 phrases d'analyse concurrentielle), idees (array de strings, idées d'action concrètes).`,
+          `Tu es consultant en veille concurrentielle pour Moustikprod, agence vidéo freelance (Film de marque, réseaux sociaux, storytelling). Analyse les tendances actuelles du marché de la production vidéo freelance/agence en France : formats qui montent, ce que font les concurrents (agences et freelances similaires), positionnement et tarifs observés, opportunités de différenciation. Propose ensuite 3 à 5 idées d'action concrètes (offre, contenu, prospection) basées sur cette analyse.\nRéponds en JSON avec ces clés exactes : etude (string, 5-8 phrases d'analyse concurrentielle), idees (array de strings, idées d'action concrètes).`,
           `Types de projets actuels chez Moustikprod:\n${ctx}`
         );
         const j = this.extractJson(text);
@@ -1185,6 +1264,13 @@ function app() {
         let clientId = project.clientId;
         if (!clientId && project.client) clientId = await this.resolveClientId(project.client);
         project.clientId = clientId || '';
+        if (clientId && project.secteurClient) {
+          const client = this.allClients.find(c => c.id === clientId);
+          if (client && !client.secteur) {
+            await this.db.collection('users').doc(this.user.uid).collection('clients').doc(clientId).set({ secteur: project.secteurClient }, { merge:true });
+            client.secteur = project.secteurClient;
+          }
+        }
         const docData = {
           id: project.id,
           titre: project.title,
@@ -1192,6 +1278,7 @@ function app() {
           statut: project.statutCrm || 'prospection',
           statutStudio: project.status,
           typeVideo: project.type,
+          secteurClient: project.secteurClient || '',
           budgetStudio: project.budget,
           deadlineStudio: project.deadline,
           progress: project.progress,
@@ -1367,7 +1454,7 @@ function app() {
 
     // ---------- PAGE NOUVEAU PROJET — quick add + brief créatif optionnel ----------
     goToNewProject(prefillClient) {
-      this.newProject = { title:'', clientSelect: prefillClient||'', clientNew:'', type:'', budget:'', deadline:'', briefOpen:false, briefContext:'' };
+      this.newProject = { title:'', clientSelect: prefillClient||'', clientNew:'', type:'Film de marque', nbEpisodes:null, secteurClient:'', budget:'', deadline:'', briefOpen:false, briefContext:'', formatsLivraison:[] };
       this.newProjectBriefError = '';
       this.view = 'nouveau-projet';
     },
@@ -1375,7 +1462,7 @@ function app() {
       const lower = text.toLowerCase();
       if (/tiktok|reels|short/.test(lower)) return 'TikTok';
       if (/vlog|van|nomade|aventure/.test(lower)) return 'Vlog';
-      if (/corporate|entreprise|marque/.test(lower)) return 'Corporate';
+      if (/corporate|entreprise|marque/.test(lower)) return 'Film de marque';
       return '';
     },
     createProjectFromIdea(ideaText) {
@@ -1417,6 +1504,8 @@ function app() {
         title: this.newProject.title,
         client: client || '',
         type: this.newProject.type,
+        nbEpisodes: this.newProject.type==='Série / Épisodes' ? (this.newProject.nbEpisodes||2) : null,
+        secteurClient: this.newProject.secteurClient || '',
         budget: this.newProject.budget,
         deadline: this.newProject.deadline,
         status: 'brief',
@@ -1428,7 +1517,11 @@ function app() {
         decoupage: [],
         matos: [],
         lieu: '',
+        moodboardRefVisuelles: '',
+        moodboardRefSonores: '',
+        moodboardTon: '',
         moodboardNotes: '',
+        formatsLivraison: this.newProject.formatsLivraison || [],
         captions: {},
         checklist: [],
         notes: '',
@@ -1510,8 +1603,32 @@ function app() {
       this.saveProjects();
       this.toast("Pitch remplacé par l'angle choisi");
     },
+    async suggestMoodboardRefs() {
+      this.moodboardLoading = true; this.moodboardError = '';
+      try {
+        const p = this.currentProject;
+        const text = await this.callClaude(
+          'Tu es directeur artistique expert en production vidéo documentaire.',
+          `Pour ce projet :\n- Titre : ${p.title}\n- Type : ${p.type || 'non précisé'}\n- Pitch : ${p.pitch || 'non renseigné'}\n\nPropose des références cohérentes avec ce pitch. Réponds en JSON avec ces clés exactes : refVisuelles (string — films, clips, photographes, colorimétrie), refSonores (string — ambiance, artistes, BPM, mood musical), ton (string — un seul mot parmi : Documentaire immersif, Contemplatif, Dynamique, Intimiste, Épique, Autre).`
+        );
+        const j = this.extractJson(text);
+        this.currentProject.moodboardRefVisuelles = j.refVisuelles || this.currentProject.moodboardRefVisuelles;
+        this.currentProject.moodboardRefSonores = j.refSonores || this.currentProject.moodboardRefSonores;
+        if (j.ton) this.currentProject.moodboardTon = j.ton;
+        this.saveProjects();
+        this.toast('Références suggérées');
+      } catch(e) {
+        this.moodboardError = 'Erreur Claude. Réessaie.';
+      } finally {
+        this.moodboardLoading = false;
+      }
+    },
     decoupagePrompt() {
-      return `Tu es un 1er assistant caméra expert en tournage vidéo.\nGénère une shot list pour ce projet.\n\nGénère 8 à 12 plans. Pour chaque plan, réponds UNIQUEMENT avec ce format JSON array (sans markdown) :\n[\n  {"plan": "01", "focale": "Grand angle 16mm", "description": "Plan d'ouverture — vue d'ensemble du lieu", "heure": "08:00"},\n  ...\n]\n\nSois précis et concis. Un plan = une ligne JSON.`;
+      const p = this.currentProject;
+      const moodboardCtx = (p.moodboardRefVisuelles || p.moodboardRefSonores || p.moodboardTon)
+        ? `\n\nRéférences moodboard à respecter :\n- Visuelles : ${p.moodboardRefVisuelles || 'aucune'}\n- Sonores : ${p.moodboardRefSonores || 'aucune'}\n- Ton narratif : ${p.moodboardTon || 'non précisé'}`
+        : '';
+      return `Tu es un 1er assistant caméra expert en tournage vidéo.\nGénère une shot list pour ce projet.${moodboardCtx}\n\nGénère 8 à 12 plans. Pour chaque plan, réponds UNIQUEMENT avec ce format JSON array (sans markdown) :\n[\n  {"plan": "01", "focale": "Grand angle 16mm", "description": "Plan d'ouverture — vue d'ensemble du lieu", "heure": "08:00", "intention": "Contemplatif", "son": "Ambiance naturelle"},\n  ...\n]\n\nintention doit être l'une de : Contemplatif, Descriptif, Immersif, Dynamique, Émotionnel.\nson doit être l'un de : Ambiance naturelle, Voix off, Musique, Silence, Interview.\nSois précis et concis. Un plan = une ligne JSON.`;
     },
     async generateDecoupage() {
       this.decoupageLoading = true; this.decoupageError='';
@@ -1527,7 +1644,7 @@ function app() {
         const plans = JSON.parse(jsonMatch[0]);
         this.currentProject.decoupage = plans.map(pl => ({
           plan: pl.plan || '', focale: pl.focale || '', description: pl.description || '',
-          heure: pl.heure || '', fait: false, transition: !!pl.transition,
+          heure: pl.heure || '', intention: pl.intention || '', son: pl.son || '', fait: false, transition: !!pl.transition,
         }));
         this.saveProjects();
         this.toast('Découpage technique généré');
@@ -1539,12 +1656,12 @@ function app() {
       }
     },
     copyDecoupage() {
-      const rows = (this.currentProject.decoupage||[]).map(s => `${s.plan} — ${s.focale} — ${s.description} (${s.heure})`);
+      const rows = (this.currentProject.decoupage||[]).map(s => `${s.plan} — ${s.focale} — ${s.description} (${s.heure})${s.intention ? ' — intention: '+s.intention : ''}${s.son ? ' — son: '+s.son : ''}`);
       this.copyText(rows.join('\n'));
     },
     scenarioPromptFor(type) {
       const map = {
-        'Corporate': 'Génère un scénario / script voix-off professionnel pour une vidéo corporate.',
+        'Film de marque': 'Génère un scénario / script voix-off professionnel pour une vidéo Film de marque.',
         'TikTok/Reels': 'Génère un scénario format 5C (Contexte, Cap, Conflit, Changement, Conclusion) pour TikTok/Reels.',
         'Interview': 'Génère un guide de questions structuré pour une interview.',
         'Vlog': 'Génère une trame narrative avec temps forts pour un vlog.',
@@ -1575,7 +1692,7 @@ function app() {
       try {
         const p = this.currentProject;
         const text = await this.callClaude(
-          'Tu es un script doctor expert en vidéo courte (vlog, corporate, TikTok).',
+          'Tu es un script doctor expert en vidéo courte (vlog, Film de marque, TikTok).',
           `Analyse ce scénario pour une vidéo ${p.type || 'vidéo'} intitulée "${p.title}" pour le client ${p.client || 'non précisé'} :\n\n---\n${p.scenario}\n---\n\nRéponds en 3 sections séparées par ===SECTION=== :\n\nSECTION 1 — CE QUI EST FORT :\n2-3 points forts précis (cite des éléments du scénario).\n\n===SECTION===\n\nSECTION 2 — CE QUI EST FAIBLE OU MANQUE :\n2-3 problèmes concrets avec suggestions de correction.\n\n===SECTION===\n\nSECTION 3 — VERSION AMÉLIORÉE :\nRéécris le scénario en corrigeant les faiblesses. Garde la structure de l'auteur, renforce les passages faibles. Commence directement par le texte réécrit.`
         );
         const stripHeading = s => (s || '').trim().replace(/^[\s\S]*?SECTION\s*\d+\s*—[^\n]*\n+/i, '').trim();
@@ -1615,7 +1732,7 @@ function app() {
     addDecoupageRow() {
       if (!this.currentProject.decoupage) this.currentProject.decoupage = [];
       const n = this.currentProject.decoupage.length + 1;
-      this.currentProject.decoupage.push({ plan: `${n}.1`, focale: '', description: '', heure: '', fait: false, transition: false });
+      this.currentProject.decoupage.push({ plan: `${n}.1`, focale: '', description: '', heure: '', intention: '', son: '', fait: false, transition: false });
       this.saveProjects();
     },
     addMatosItem() {
@@ -1759,7 +1876,7 @@ function app() {
       switch (this.studioType) {
         case 'script':
           this.studioForm.theme = sujet;
-          if (['Corporate','Vlog','TikTok','Interview','Podcast','Docu'].includes(p.type)) this.studioForm.scriptKind = p.type;
+          if (['Film de marque','Vlog','TikTok','Interview','Podcast','Docu'].includes(p.type)) this.studioForm.scriptKind = p.type;
           break;
         case 'shotlist':
           this.studioForm.typeVideo = p.type + ' — ' + p.title;
