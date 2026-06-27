@@ -570,16 +570,6 @@ tailwind.config = {
               </div>
 
               <div>
-                <label class="text-xs font-mono text-muted uppercase block mb-1.5">Type de vidéo *</label>
-                <div class="flex gap-2 flex-wrap">
-                  <template x-for="t in ['Film de marque','Vlog','TikTok','Interview','Podcast','Docu','Série / Épisodes']" :key="t">
-                    <button type="button" @click="newProject.type = (newProject.type===t ? '' : t)" :class="newProject.type===t ? 'bg-accent text-white border-accent' : 'bg-surface text-ink border-line hover:border-accent/50'" class="text-sm px-3 py-1.5 rounded-lg border transition" x-text="t"></button>
-                  </template>
-                </div>
-                <input x-show="newProject.type==='Série / Épisodes'" x-model.number="newProject.nbEpisodes" type="number" min="2" placeholder="Nombre d'épisodes prévus" class="w-full text-sm px-3 py-2 rounded-lg border border-line mt-2">
-              </div>
-
-              <div>
                 <label class="text-xs font-mono text-muted uppercase block mb-1.5">Secteur client</label>
                 <select x-model="newProject.secteurClient" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
                   <option value="">— Choisir —</option>
@@ -590,6 +580,16 @@ tailwind.config = {
                   <option value="Personnel / Perso">Personnel / Perso</option>
                   <option value="Autre">Autre</option>
                 </select>
+              </div>
+
+              <div>
+                <label class="text-xs font-mono text-muted uppercase block mb-1.5">Type de vidéo *</label>
+                <div class="flex gap-2 flex-wrap">
+                  <template x-for="t in ['Film de marque','Vlog','TikTok','Interview','Podcast','Docu','Série / Épisodes']" :key="t">
+                    <button type="button" @click="newProject.type = (newProject.type===t ? '' : t)" :class="newProject.type===t ? 'bg-accent text-white border-accent' : 'bg-surface text-ink border-line hover:border-accent/50'" class="text-sm px-3 py-1.5 rounded-lg border transition" x-text="t"></button>
+                  </template>
+                </div>
+                <input x-show="newProject.type==='Série / Épisodes'" x-model.number="newProject.nbEpisodes" type="number" min="2" placeholder="Nombre d'épisodes prévus" class="w-full text-sm px-3 py-2 rounded-lg border border-line mt-2">
               </div>
 
               <div>
