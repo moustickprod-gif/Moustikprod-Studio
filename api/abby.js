@@ -4,12 +4,13 @@ import { requireUser } from './_verifyAuth.js';
 // La clé ABBY_API_KEY reste côté serveur (variable d'env Vercel).
 // Doc : https://docs.abby.fr — Base URL : https://api.app-abby.com
 const BASE = 'https://api.app-abby.com';
+const ABBY_KEY = process.env.ABBY_API_KEY || process.env.Moustikprod_Studio;
 
 async function abby(method, path, body) {
   const r = await fetch(BASE + path, {
     method,
     headers: {
-      'Authorization': `Bearer ${process.env.ABBY_API_KEY}`,
+      'Authorization': `Bearer ${ABBY_KEY}`,
       'Content-Type': 'application/json',
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -26,7 +27,7 @@ export default async function handler(req, res) {
   const user = await requireUser(req, res);
   if (!user) return;
 
-  if (!process.env.ABBY_API_KEY) {
+  if (!ABBY_KEY) {
     return res.status(500).json({ error: 'ABBY_API_KEY non configurée sur Vercel' });
   }
 
