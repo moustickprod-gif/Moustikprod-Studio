@@ -10,6 +10,8 @@
 
 <script src="https://cdn.tailwindcss.com"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -885,6 +887,55 @@ tailwind.config = {
         </div>
       </template>
 
+      <!-- ============ CONTRATS ============ -->
+      <template x-if="view==='contrats'">
+        <div class="max-w-4xl" x-transition.opacity.duration.150ms>
+          <div class="flex items-center justify-between mb-5">
+            <p class="text-muted text-sm">Contrats de prestation — PDF pour Adobe Acrobat ou signature par lien intégré.</p>
+            <div class="flex gap-2">
+              <button @click="verifierSignatures()" class="bg-surface border border-line text-sm px-3 py-1.5 rounded-lg flex items-center gap-2 hover:border-accent/50 transition">
+                <span x-show="checkingSignatures" class="spinner"></span> Vérifier les signatures
+              </button>
+              <button @click="openContratModal()" class="bg-accent text-white text-sm font-medium px-3 py-1.5 rounded-lg">+ Nouveau contrat</button>
+            </div>
+          </div>
+
+          <div x-show="!settings.signaturePrestataire" class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4 text-sm text-amber-700">
+            Astuce : enregistre ta signature dans <button @click="view='reglages'" class="underline font-medium">Réglages → Ma signature</button> pour qu'elle apparaisse automatiquement sur tes contrats.
+          </div>
+
+          <div x-show="contrats.length===0" class="text-center py-20 text-muted">
+            <p class="mb-3">Aucun contrat pour l'instant.</p>
+            <button @click="openContratModal()" class="bg-accent text-white px-4 py-2 rounded-lg text-sm">Créer le premier contrat</button>
+          </div>
+
+          <div class="space-y-2">
+            <template x-for="c in [...contrats].sort((x,y)=>(y.dateCreation||'').localeCompare(x.dateCreation||''))" :key="c.id">
+              <div class="bg-surface border border-line rounded-xl p-4 card-slide-enter">
+                <div class="flex items-center justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="font-display font-bold text-sm truncate">
+                      <span x-text="c.numero"></span> — <span x-text="clientName(c.clientId) || 'Client ?'"></span>
+                    </p>
+                    <p class="text-xs text-muted truncate" x-text="(projectTitle(c.projetId) || c.typePrestation || 'Prestation') + (c.montantHT ? ' · ' + Number(c.montantHT).toLocaleString('fr-FR') + ' € HT' : '')"></p>
+                  </div>
+                  <span class="text-xs font-mono px-2 py-0.5 rounded shrink-0" :class="c.statut==='signé' ? 'bg-emerald-100 text-emerald-700' : c.statut==='envoyé' ? 'bg-amber-100 text-amber-700' : c.statut==='refusé' ? 'bg-red-100 text-red-600' : 'bg-bg text-muted border border-line'" x-text="c.statut || 'brouillon'"></span>
+                </div>
+                <div class="flex items-center gap-2 mt-3 flex-wrap">
+                  <button @click="previewingContrat=c; contratPreviewOpen=true" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">Aperçu</button>
+                  <button @click="openEditContrat(c)" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">Modifier</button>
+                  <button @click="telechargerContratPdf(c)" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">📄 PDF</button>
+                  <button @click="signerAvecAdobe(c)" class="text-xs bg-[#ED2224]/10 text-[#b91c1c] border border-[#ED2224]/30 px-3 py-1.5 rounded-lg">Signer via Adobe</button>
+                  <button x-show="c.statut!=='signé'" @click="envoyerContratPourSignature(c)" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Lien de signature</button>
+                  <button x-show="c.signatureToken && c.statut!=='signé'" @click="copyText(signLink(c))" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">Copier le lien</button>
+                  <button @click="deleteContrat(c)" class="text-xs text-muted hover:text-red-500 px-1 ml-auto">✕</button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
       <!-- ============ DROIT À L'IMAGE ============ -->
       <template x-if="view==='droitimage'">
         <div class="max-w-4xl" x-transition.opacity.duration.150ms>
@@ -947,6 +998,19 @@ tailwind.config = {
           </div>
 
           <div class="bg-surface border border-line rounded-xl p-5">
+            <h3 class="font-display font-bold mb-3">Ma signature</h3>
+            <p class="text-xs text-muted mb-3">Apparaît automatiquement sur tes contrats (côté Prestataire).</p>
+            <div x-show="settings.signaturePrestataire" class="mb-3">
+              <img :src="settings.signaturePrestataire" class="h-16 border border-line rounded-lg bg-white p-1">
+            </div>
+            <canvas x-init="initSigPad($el)" class="w-full h-28 border border-line rounded-lg bg-white touch-none"></canvas>
+            <div class="flex gap-2 mt-2">
+              <button @click="saveSigPad()" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Enregistrer la signature</button>
+              <button @click="clearSigPad()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg">Effacer</button>
+            </div>
+          </div>
+
+          <div class="bg-surface border border-line rounded-xl p-5">
             <h3 class="font-display font-bold mb-3">Firebase</h3>
             <p class="text-xs text-muted">Config chargée depuis les variables d'environnement Vercel (non éditable ici).</p>
           </div>
@@ -1002,6 +1066,105 @@ tailwind.config = {
       </template>
     </div>
     <button @click="saveToProjectOpen=false" class="w-full mt-4 text-sm text-muted">Annuler</button>
+  </div>
+</div>
+
+<!-- ===================== MODAL CONTRAT ===================== -->
+<div x-show="contratModalOpen" x-cloak class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @keydown.escape.window="contratModalOpen=false">
+  <div class="modal-slide-enter bg-surface border border-line rounded-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto" x-show="contratModalOpen">
+    <h3 class="font-display font-bold text-lg mb-4" x-text="editingContrat?.id ? 'Modifier le contrat' : 'Nouveau contrat'"></h3>
+    <template x-if="editingContrat">
+      <div class="space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-mono text-muted uppercase block mb-1">Client *</label>
+            <select x-model="editingContrat.clientId" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+              <option value="">— Choisir —</option>
+              <template x-for="c in allClients" :key="c.id"><option :value="c.id" x-text="c.nom + (c.entreprise ? ' ('+c.entreprise+')' : '')"></option></template>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs font-mono text-muted uppercase block mb-1">Projet</label>
+            <select x-model="editingContrat.projetId" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+              <option value="">— Aucun —</option>
+              <template x-for="p in projects" :key="p.id"><option :value="p.id" x-text="p.title"></option></template>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="text-xs font-mono text-muted uppercase block mb-1">Type de client</label>
+          <div class="flex gap-2">
+            <button type="button" @click="editingContrat.type='b2b'" :class="editingContrat.type==='b2b' ? 'bg-accent text-white border-accent' : 'bg-surface border-line'" class="text-sm px-3 py-1.5 rounded-lg border transition">Professionnel (B2B)</button>
+            <button type="button" @click="editingContrat.type='b2c'" :class="editingContrat.type==='b2c' ? 'bg-accent text-white border-accent' : 'bg-surface border-line'" class="text-sm px-3 py-1.5 rounded-lg border transition">Particulier (B2C)</button>
+          </div>
+          <p x-show="editingContrat.type==='b2c'" class="text-xs text-muted mt-1">Ajoute automatiquement les articles consommateur (rétractation, médiation, RGPD).</p>
+        </div>
+        <input x-model="editingContrat.typePrestation" placeholder="Type de prestation (ex : Film de marque, captation événement...)" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="text-xs font-mono text-muted uppercase block mb-1">Montant HT (€)</label>
+            <input x-model.number="editingContrat.montantHT" type="number" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+          </div>
+          <div>
+            <label class="text-xs font-mono text-muted uppercase block mb-1">Acompte (%)</label>
+            <input x-model.number="editingContrat.acompte" type="number" min="0" max="100" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+          </div>
+          <div>
+            <label class="text-xs font-mono text-muted uppercase block mb-1">Révisions</label>
+            <input x-model.number="editingContrat.nombreRevisions" type="number" min="0" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+          </div>
+        </div>
+        <div>
+          <label class="text-xs font-mono text-muted uppercase block mb-1">Délai de paiement (jours)</label>
+          <select x-model.number="editingContrat.delaiPaiement" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+            <option :value="0">À réception</option><option :value="15">15 jours</option><option :value="30">30 jours</option><option :value="45">45 jours</option>
+          </select>
+        </div>
+        <div class="border-t border-line pt-3">
+          <p class="text-xs font-mono text-muted uppercase mb-2">Cession de droits</p>
+          <div class="grid grid-cols-3 gap-3">
+            <select x-model="editingContrat.cessionDroits.duree" class="text-sm px-3 py-2 rounded-lg border border-line">
+              <option>1 an</option><option>3 ans</option><option>5 ans</option><option>10 ans</option><option>Illimitée</option>
+            </select>
+            <select x-model="editingContrat.cessionDroits.territoire" class="text-sm px-3 py-2 rounded-lg border border-line">
+              <option>France</option><option>Europe</option><option>Monde</option>
+            </select>
+            <select x-model="editingContrat.cessionDroits.usage" class="text-sm px-3 py-2 rounded-lg border border-line">
+              <option value="commercial">Commercial</option><option value="interne">Interne</option><option value="tous usages">Tous usages</option>
+            </select>
+          </div>
+          <div class="flex gap-2 flex-wrap mt-2">
+            <template x-for="su in supportsOptions" :key="su">
+              <button type="button" @click="toggleSupport(su)" :class="(editingContrat.cessionDroits.support||[]).includes(su) ? 'bg-accent text-white border-accent' : 'bg-surface text-ink border-line'" class="text-xs px-2.5 py-1 rounded-lg border transition" x-text="su"></button>
+            </template>
+          </div>
+        </div>
+        <textarea x-model="editingContrat.notes" rows="2" placeholder="Clauses particulières (optionnel, ajoutées en fin de contrat)" class="w-full text-sm px-3 py-2 rounded-lg border border-line"></textarea>
+        <div class="flex justify-between items-center pt-2">
+          <button x-show="editingContrat.id" @click="deleteContrat(editingContrat); contratModalOpen=false" class="text-sm text-red-500">Supprimer</button>
+          <div class="flex gap-2 ml-auto">
+            <button @click="contratModalOpen=false" class="text-sm px-4 py-2 rounded-lg border border-line">Annuler</button>
+            <button @click="saveContrat()" class="text-sm bg-accent text-white px-4 py-2 rounded-lg">Enregistrer</button>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+</div>
+
+<!-- ===================== MODAL APERÇU CONTRAT ===================== -->
+<div x-show="contratPreviewOpen" x-cloak class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @keydown.escape.window="contratPreviewOpen=false" @click.self="contratPreviewOpen=false">
+  <div class="modal-slide-enter bg-surface rounded-xl w-full max-w-3xl max-h-[90vh] flex flex-col" x-show="contratPreviewOpen">
+    <div class="flex items-center justify-between p-4 border-b border-line shrink-0">
+      <h3 class="font-display font-bold">Aperçu du contrat</h3>
+      <div class="flex gap-2">
+        <button @click="telechargerContratPdf(previewingContrat)" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">📄 PDF</button>
+        <button @click="signerAvecAdobe(previewingContrat)" class="text-xs bg-[#ED2224]/10 text-[#b91c1c] border border-[#ED2224]/30 px-3 py-1.5 rounded-lg">Signer via Adobe</button>
+        <button x-show="previewingContrat && previewingContrat.statut!=='signé'" @click="envoyerContratPourSignature(previewingContrat); contratPreviewOpen=false" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Lien de signature</button>
+        <button @click="contratPreviewOpen=false" class="text-muted hover:text-ink px-2">✕</button>
+      </div>
+    </div>
+    <div class="overflow-y-auto p-8 bg-white" x-html="previewingContrat ? texteContratHtml(previewingContrat) : ''"></div>
   </div>
 </div>
 
@@ -1115,6 +1278,7 @@ function app() {
       { id:'idees', label:'Idées', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7V17h8v-2.3A7 7 0 0012 2z"/></svg>' },
       { id:'clients', label:'Clients', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0116 0v1"/></svg>' },
       { id:'calendrier', label:'Calendrier', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>' },
+      { id:'contrats', label:'Contrats', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>' },
       { id:'droitimage', label:'Droit à l\'image', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>' },
       { id:'reglages', label:'Réglages', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 008.6 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H2a2 2 0 110-4h.09A1.65 1.65 0 003.6 8.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H8a1.65 1.65 0 001-1.51V2a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V8a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>' },
     ],
@@ -1193,6 +1357,14 @@ function app() {
     previewingAutorisation: null,
     checkingSignatures: false,
     usagesOptions: ['YouTube','Instagram','TikTok','Site web','Publicité en ligne','Télévision','Affichage / Print','Tous supports'],
+
+    // contrats
+    contrats: [],
+    editingContrat: null,
+    contratModalOpen: false,
+    contratPreviewOpen: false,
+    previewingContrat: null,
+    supportsOptions: ['Web','Réseaux sociaux','TV','Print','Publicité en ligne','Usage interne'],
 
     // calendrier
     calMonth: new Date().getMonth(),
@@ -1325,6 +1497,7 @@ function app() {
         if (h) this.studioHistory = JSON.parse(h);
         this.loadIdeas();
         this.loadAutorisations();
+        this.loadContrats();
         this.syncStatus = 'ok';
         this.lastSyncAt = new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
       } catch(e) {
@@ -2384,27 +2557,35 @@ function app() {
         }
       }
     },
+    // Vérifie autorisations ET contrats envoyés par lien intégré.
     async verifierSignatures() {
-      const pending = this.autorisations.filter(a => a.signatureToken && a.statut !== 'signé');
+      const pending = [
+        ...this.autorisations.filter(a => a.signatureToken && a.statut !== 'signé').map(obj => ({ obj, col:'autorisations' })),
+        ...this.contrats.filter(c => c.signatureToken && c.statut !== 'signé').map(obj => ({ obj, col:'contrats' })),
+      ];
       if (!pending.length) { this.toast('Aucune signature en attente'); return; }
       this.checkingSignatures = true;
       try {
-        const res = await this.apiFetch('/api/signature', { method:'POST', body: JSON.stringify({ action:'status', tokens: pending.map(a => a.signatureToken) }) });
+        const res = await this.apiFetch('/api/signature', { method:'POST', body: JSON.stringify({ action:'status', tokens: pending.map(p => p.obj.signatureToken) }) });
         const data = await res.json();
         let updated = 0;
         for (const r of (data.results || [])) {
-          const a = pending.find(x => x.signatureToken === r.token);
-          if (!a) continue;
+          const item = pending.find(x => x.obj.signatureToken === r.token);
+          if (!item) continue;
+          const { obj, col } = item;
+          const ref = this.db.collection('users').doc(this.user.uid).collection(col).doc(obj.id);
           if (r.statut === 'signé') {
-            a.statut = 'signé';
-            a.signatureData = r.signatureData;
-            a.dateSignature = r.dateSignature;
-            a.nomSignataire = r.nomSignataire;
-            await this.db.collection('users').doc(this.user.uid).collection('autorisations').doc(a.id).set({ statut:'signé', signatureData: r.signatureData || null, dateSignature: r.dateSignature || null, nomSignataire: r.nomSignataire || null }, { merge:true });
+            obj.statut = 'signé';
+            obj.dateSignature = r.dateSignature;
+            obj.nomSignataire = r.nomSignataire;
+            const patch = { statut:'signé', dateSignature: r.dateSignature || null, nomSignataire: r.nomSignataire || null };
+            if (col === 'contrats') { obj.signatureClient = r.signatureData; patch.signatureClient = r.signatureData || null; }
+            else { obj.signatureData = r.signatureData; patch.signatureData = r.signatureData || null; }
+            await ref.set(patch, { merge:true });
             updated++;
           } else if (r.statut === 'refusé') {
-            a.statut = 'refusé';
-            await this.db.collection('users').doc(this.user.uid).collection('autorisations').doc(a.id).set({ statut:'refusé' }, { merge:true });
+            obj.statut = 'refusé';
+            await ref.set({ statut:'refusé', raisonRefus: r.raisonRefus || '' }, { merge:true });
             updated++;
           }
         }
@@ -2414,6 +2595,322 @@ function app() {
       } finally {
         this.checkingSignatures = false;
       }
+    },
+
+    // ---------- CONTRATS ----------
+    clientName(id) {
+      const c = this.allClients.find(x => x.id === id);
+      return c ? c.nom : '';
+    },
+    async loadContrats() {
+      try {
+        const col = this.db.collection('users').doc(this.user.uid).collection('contrats');
+        const snap = await col.get();
+        const list = [];
+        for (const d of snap.docs) {
+          const data = d.data();
+          if (d.id === 'items' && Array.isArray(data.items)) {
+            // Migration de l'ancien format blob du CRM
+            for (const item of data.items) {
+              const id = item.id || ('ct' + Date.now() + Math.random().toString(36).slice(2, 6));
+              const doc = { ...item, id };
+              await col.doc(id).set(doc);
+              list.push(doc);
+            }
+            await col.doc('items').delete();
+          } else {
+            list.push(data);
+          }
+        }
+        this.contrats = list;
+      } catch(e) {
+        console.error('loadContrats', e);
+      }
+    },
+    openContratModal() {
+      const n = 'C-' + new Date().toISOString().slice(0,7).replace('-','') + '-' + String(this.contrats.length + 1).padStart(2,'0');
+      this.editingContrat = { id:null, numero:n, clientId:'', projetId: this.currentProject?.id || '', type:'b2b', typePrestation:'', montantHT:null, acompte:30, nombreRevisions:2, delaiPaiement:30, cessionDroits:{ duree:'1 an', territoire:'France', support:['Web','Réseaux sociaux'], usage:'commercial' }, notes:'', statut:'brouillon', signatureToken:'', signatureClient:null };
+      this.contratModalOpen = true;
+    },
+    openEditContrat(c) {
+      this.editingContrat = JSON.parse(JSON.stringify(c));
+      if (!this.editingContrat.cessionDroits) this.editingContrat.cessionDroits = { duree:'1 an', territoire:'France', support:[], usage:'commercial' };
+      this.contratModalOpen = true;
+    },
+    toggleSupport(su) {
+      const arr = this.editingContrat.cessionDroits.support || (this.editingContrat.cessionDroits.support = []);
+      const i = arr.indexOf(su);
+      if (i > -1) arr.splice(i, 1); else arr.push(su);
+    },
+    async saveContrat() {
+      const c = this.editingContrat;
+      if (!c.clientId) { this.toast('Choisis un client', 'error'); return; }
+      if (!c.id) { c.id = 'ct' + Date.now(); c.dateCreation = new Date().toISOString(); }
+      try {
+        await this.db.collection('users').doc(this.user.uid).collection('contrats').doc(c.id).set(JSON.parse(JSON.stringify(c)), { merge:true });
+        const i = this.contrats.findIndex(x => x.id === c.id);
+        if (i > -1) this.contrats[i] = c; else this.contrats.push(c);
+        this.contratModalOpen = false;
+        this.toast('Contrat enregistré');
+      } catch(e) {
+        this.toast('Erreur Firestore', 'error');
+      }
+    },
+    async deleteContrat(c) {
+      if (!confirm('Supprimer ce contrat ?')) return;
+      try {
+        await this.db.collection('users').doc(this.user.uid).collection('contrats').doc(c.id).delete();
+        this.contrats = this.contrats.filter(x => x.id !== c.id);
+        this.toast('Contrat supprimé');
+      } catch(e) {
+        this.toast('Erreur de suppression', 'error');
+      }
+    },
+    // Document légal — porté du CRM, adapté au modèle de données Studio.
+    texteContratHtml(contrat) {
+      const projet = this.projects.find(p => p.id === contrat.projetId) || {};
+      const client = this.allClients.find(c => c.id === contrat.clientId) || {};
+      const totalHT = Number(contrat.montantHT) || 0;
+      const acompteEur = Math.round(totalHT * (contrat.acompte || 30) / 100);
+      const soldeEur = totalHT - acompteEur;
+      const s = this.settings;
+      const prestataire = `${s.prenom || 'Romain'} ${s.nom || 'ANDRE'}`;
+      const dateStr = new Date(contrat.dateCreation || Date.now()).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
+      const ville = s.ville || 'Montpellier';
+      const esc = t => String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const h1 = t => `<h2 style="font-size:11pt;font-weight:bold;margin:18px 0 6px;border-bottom:1px solid #ccc;padding-bottom:4px;text-transform:uppercase;letter-spacing:.05em">${esc(t)}</h2>`;
+      const p  = t => `<p style="margin:3px 0">${esc(t)}</p>`;
+      const pi = t => `<p style="margin:3px 0;font-style:italic">${esc(t)}</p>`;
+      const cd = contrat.cessionDroits || {};
+      const signaturePrestataire = contrat.signaturePrestataire || s.signaturePrestataire || '';
+
+      const b2cArticles = contrat.type === 'b2c' ? `
+        ${h1('Article 10 — Droit de rétractation')}
+        ${p("Conformément à l'article L221-18 du Code de la consommation, le Client dispose d'un délai de 14 jours à compter de la signature du présent contrat pour exercer son droit de rétractation, sauf si la prestation a commencé avec son accord exprès.")}
+        ${h1('Article 11 — Médiation consommation')}
+        ${p("En cas de litige non résolu à l'amiable, le Client peut recourir gratuitement à un médiateur de la consommation conformément à l'article L616-1 du Code de la consommation.")}
+        ${h1('Article 12 — Données personnelles (RGPD)')}
+        ${p("Les données personnelles du Client sont collectées et conservées pour la durée d'exécution du contrat, augmentée de 3 ans à des fins probatoires. Le Client dispose d'un droit d'accès, de rectification et de suppression en contactant : " + (s.emailPro || 'contact@moustikprod.fr'))}
+      ` : '';
+
+      return `
+        <div style="font-family:Georgia,serif;font-size:10.5pt;line-height:1.55;color:#000">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:28px;padding-bottom:16px;border-bottom:3px solid #3CD6D1">
+          <div>
+            <img src="${location.origin}/logo.png" style="height:56px" alt="Moustikprod">
+            <div style="font-size:9pt;color:#666;margin-top:2px">${esc(s.nomCommercial||'Moustikprod')} — SIRET ${esc(s.siret||'')}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:13pt;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#024059">Contrat de prestations</div>
+            <div style="font-size:9pt;color:#666;margin-top:4px">Type ${esc((contrat.type||'b2b').toUpperCase())} — ${dateStr}</div>
+            ${contrat.numero ? `<div style="font-size:9pt;color:#3CD6D1;font-weight:600;margin-top:2px">N° ${esc(contrat.numero)}</div>` : ''}
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px">
+          <div style="border:1px solid #ddd;border-radius:8px;padding:14px">
+            <div style="font-size:9pt;font-weight:bold;color:#888;text-transform:uppercase;margin-bottom:8px">Le Prestataire</div>
+            ${p(prestataire + ', auto-entrepreneur')}
+            ${p('SIRET : ' + (s.siret || ''))}
+            ${p('Nom commercial : ' + (s.nomCommercial || 'Moustikprod'))}
+            ${p('Email : ' + (s.emailPro || 'contact@moustikprod.fr'))}
+            ${s.ville ? p(s.ville) : ''}
+            <div style="margin-top:8px;font-size:9pt;font-style:italic;color:#666">Ci-après dénommé "le Prestataire"</div>
+          </div>
+          <div style="border:1px solid #ddd;border-radius:8px;padding:14px">
+            <div style="font-size:9pt;font-weight:bold;color:#888;text-transform:uppercase;margin-bottom:8px">Le Client</div>
+            ${p((client.entreprise && contrat.type==='b2b') ? (client.nom||'') + ' — ' + client.entreprise : (client.nom||'—'))}
+            ${client.siret && contrat.type==='b2b' ? p('SIRET : ' + client.siret) : ''}
+            ${client.adresse ? p(client.adresse) : ''}
+            ${(client.codePostal || client.ville) ? p([client.codePostal, client.ville].filter(Boolean).join(' ')) : ''}
+            ${client.email ? p(client.email) : ''}
+            <div style="margin-top:8px;font-size:9pt;font-style:italic;color:#666">Ci-après dénommé "le Client"</div>
+          </div>
+        </div>
+
+        ${h1('Prestation concernée')}
+        <table style="width:100%;margin:8px 0;font-size:10pt">
+          ${projet.title ? `<tr><td style="padding:2px 12px 2px 0;color:#666;width:140px">Projet</td><td style="font-weight:bold">${esc(projet.title)}</td></tr>` : ''}
+          ${contrat.typePrestation ? `<tr><td style="padding:2px 12px 2px 0;color:#666">Type</td><td>${esc(contrat.typePrestation)}</td></tr>` : ''}
+          ${totalHT ? `<tr><td style="padding:2px 12px 2px 0;color:#666">Montant</td><td style="font-weight:bold">${totalHT.toLocaleString('fr-FR')} € HT</td></tr>` : ''}
+        </table>
+        ${projet.pitch ? `<p style="margin:8px 0;padding:10px 12px;background:#f8f8f8;border-left:3px solid #3CD6D1;border-radius:4px;font-size:10pt">${esc(projet.pitch)}</p>` : ''}
+
+        ${h1('Article 1 — Objet et description de la mission')}
+        ${p('Le Prestataire s\'engage à réaliser la prestation suivante : ' + (contrat.typePrestation || projet.type || 'Production vidéo') + (projet.title ? ' pour le projet « ' + projet.title + ' »' : '') + '.')}
+        ${totalHT ? p('Montant total : ' + totalHT.toLocaleString('fr-FR') + ' € HT.') : ''}
+        ${pi('TVA non applicable, art. 293 B du CGI')}
+        ${h1('Article 2 — Livrables')}
+        ${p('— Format de livraison : MP4 H.264')}
+        ${p('— Résolution : 4K / 1080p selon plateforme')}
+        ${p('— Nombre de révisions incluses : ' + (contrat.nombreRevisions ?? 2))}
+        ${p('— Livraison via lien de téléchargement sécurisé')}
+        ${h1('Article 3 — Planning')}
+        ${projet.deadline ? p('— Date de livraison visée : ' + new Date(projet.deadline).toLocaleDateString('fr-FR')) : pi('Dates à définir d\'un commun accord')}
+        ${h1('Article 4 — Rémunération et conditions de paiement')}
+        ${totalHT ? p('— Montant total HT : ' + totalHT.toLocaleString('fr-FR') + '€') : p('— Montant : selon devis accepté')}
+        ${totalHT ? p('— Acompte à la signature (' + (contrat.acompte||30) + '%) : ' + acompteEur.toLocaleString('fr-FR') + '€') : ''}
+        ${totalHT ? p('— Solde à la livraison : ' + soldeEur.toLocaleString('fr-FR') + '€') : ''}
+        ${p('— Mode de paiement : virement bancaire')}
+        ${p('— Délai de paiement : ' + (contrat.delaiPaiement ?? 30) + ' jours')}
+        ${p('— Pénalités de retard : taux légal BCE + 10 points + indemnité forfaitaire 40€')}
+        ${h1('Article 5 — Cession de droits d\'auteur')}
+        ${p('Le Prestataire cède au Client les droits d\'exploitation de l\'œuvre pour :')}
+        ${p('— Durée : ' + (cd.duree || '1 an'))}
+        ${p('— Territoire : ' + (cd.territoire || 'France'))}
+        ${p('— Support(s) : ' + ((cd.support||[]).join(', ') || 'À définir'))}
+        ${p('— Usage : ' + (cd.usage || 'commercial'))}
+        ${p('Les droits moraux restent la propriété exclusive du Prestataire.')}
+        ${h1('Article 6 — Obligations du Client')}
+        ${p('Le Client s\'engage à fournir tous les éléments nécessaires dans les délais convenus, à désigner un interlocuteur unique, et à régler les sommes dues aux échéances prévues.')}
+        ${h1('Article 7 — Confidentialité')}
+        ${p('Les deux parties s\'engagent à la confidentialité de toutes les informations échangées dans le cadre de ce contrat.')}
+        ${h1('Article 8 — Résiliation')}
+        ${p('— Annulation après signature : l\'acompte reste acquis au Prestataire')}
+        ${p('— Annulation moins de 7 jours avant le tournage : 50% du montant total dû')}
+        ${p('— Annulation le jour J : 100% du montant total dû')}
+        ${h1('Article 9 — Litiges')}
+        ${p('Les parties s\'engagent à rechercher une solution amiable avant tout recours judiciaire.')}
+        ${p('Tribunal compétent : Tribunal de Commerce de ' + ville + '.')}
+        ${b2cArticles}
+        ${contrat.notes ? `${h1('Clauses particulières')}${p(contrat.notes)}` : ''}
+
+        ${totalHT ? `
+        <div style="background:#e8f7f6;border-radius:8px;padding:14px 18px;margin:16px 0;text-align:right">
+          <span style="font-size:10pt;color:#555">Montant total HT : </span>
+          <span style="font-size:16pt;font-weight:700;color:#024059">${totalHT.toLocaleString('fr-FR')} €</span>
+          <div style="font-size:9pt;color:#555;margin-top:4px">
+            Acompte à la signature (${contrat.acompte||30}%) : <strong>${acompteEur.toLocaleString('fr-FR')} €</strong>
+            &nbsp;|&nbsp; Solde à la livraison : <strong>${soldeEur.toLocaleString('fr-FR')} €</strong>
+          </div>
+        </div>
+        ` : ''}
+
+        <div style="margin-top:40px;padding-top:24px;border-top:2px solid #e2e8f0">
+          <p style="font-size:10pt;color:#555;margin-bottom:6px">Fait à ${esc(ville)}, le ${esc(dateStr)} — En deux exemplaires originaux.</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:28px">
+            <div style="border:1px solid #ddd;border-radius:8px;padding:14px;text-align:center">
+              <p style="font-size:9pt;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#024059;margin-bottom:12px">Le Prestataire</p>
+              ${signaturePrestataire
+                ? `<img src="${signaturePrestataire}" style="max-width:180px;max-height:70px;display:block;margin:0 auto 10px">`
+                : '<div style="height:70px;border-bottom:1px solid #999;margin-bottom:10px"></div>'}
+              <div style="font-size:10pt;color:#444">${esc(prestataire)}</div>
+              <div style="font-size:9pt;color:#888">${esc(s.nomCommercial||'Moustikprod')}</div>
+            </div>
+            <div style="border:1px solid #ddd;border-radius:8px;padding:14px;text-align:center">
+              <p style="font-size:9pt;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#024059;margin-bottom:12px">Le Client</p>
+              ${contrat.signatureClient
+                ? `<img src="${contrat.signatureClient}" style="max-width:180px;max-height:70px;display:block;margin:0 auto 10px">`
+                : '<div style="height:70px;border-bottom:1px solid #999;margin-bottom:10px"></div>'}
+              <div style="font-size:10pt;color:#444">${esc(client.nom||'—')}</div>
+              ${contrat.nomSignataire && contrat.nomSignataire !== client.nom ? `<div style="font-size:9pt;color:#888">${esc(contrat.nomSignataire)}</div>` : ''}
+              ${contrat.dateSignature ? `<div style="font-size:8pt;color:#aaa;margin-top:4px">Signé le ${new Date(contrat.dateSignature).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})}</div>` : ''}
+            </div>
+          </div>
+          <p style="font-size:8pt;color:#aaa;text-align:center;margin-top:20px">Signature électronique valable conformément à l'article 1367 du Code civil.</p>
+        </div>
+        </div>
+      `;
+    },
+    async telechargerContratPdf(c) {
+      if (!c) return;
+      const el = document.createElement('div');
+      el.style.cssText = 'position:fixed;left:-10000px;top:0;width:720px;background:#fff;padding:32px';
+      el.innerHTML = this.texteContratHtml(c);
+      document.body.appendChild(el);
+      try {
+        await html2pdf().set({
+          margin: [12, 12],
+          filename: `${c.numero || 'Contrat'} - ${this.clientName(c.clientId) || 'client'}.pdf`,
+          image: { type:'jpeg', quality: 0.95 },
+          html2canvas: { scale: 2, useCORS: true },
+          jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
+          pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+        }).from(el).save();
+        this.toast('PDF téléchargé');
+      } catch(e) {
+        this.toast('Erreur génération PDF', 'error');
+      } finally {
+        el.remove();
+      }
+    },
+    // Abonnement Creative Cloud : le PDF est téléchargé puis Adobe Acrobat web
+    // s'ouvre — utiliser "Demander des signatures électroniques" avec ce PDF.
+    async signerAvecAdobe(c) {
+      await this.telechargerContratPdf(c);
+      window.open('https://acrobat.adobe.com/', '_blank');
+      this.toast('Dans Acrobat : "Demander des signatures", puis glisse le PDF téléchargé');
+      if (c.statut === 'brouillon') {
+        c.statut = 'envoyé';
+        c.envoyeVia = 'adobe';
+        await this.db.collection('users').doc(this.user.uid).collection('contrats').doc(c.id).set({ statut:'envoyé', envoyeVia:'adobe' }, { merge:true });
+      }
+    },
+    async envoyerContratPourSignature(c) {
+      if (!this.settings.signaturePrestataire && !c.signaturePrestataire) {
+        if (!confirm('Ta signature n\'est pas enregistrée (Réglages → Ma signature). Envoyer quand même sans signature prestataire ?')) return;
+      }
+      const client = this.allClients.find(x => x.id === c.clientId) || {};
+      const token = (crypto.randomUUID ? crypto.randomUUID() + crypto.randomUUID() : (Date.now() + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2))).replace(/-/g,'');
+      const projet = this.projects.find(p => p.id === c.projetId) || {};
+      c.signaturePrestataire = c.signaturePrestataire || this.settings.signaturePrestataire || '';
+      const payload = {
+        token,
+        type: 'contrat',
+        docId: c.id,
+        clientEmail: client.email || '',
+        titre: projet.title || c.typePrestation || '',
+        montant: String(c.montantHT || ''),
+        contenu: { ...JSON.parse(JSON.stringify(c)), clientNom: client.nom || '', projetTitre: projet.title || '' },
+        htmlContent: this.texteContratHtml(c),
+        dateExpiration: new Date(Date.now() + 30*24*60*60*1000).toISOString(),
+      };
+      try {
+        const res = await this.apiFetch('/api/signature', { method:'POST', body: JSON.stringify({ action:'create', payload }) });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Erreur');
+      } catch(e) {
+        this.toast('Erreur création du lien : ' + e.message, 'error');
+        return;
+      }
+      c.signatureToken = token;
+      c.statut = 'envoyé';
+      c.envoyeVia = 'lien';
+      c.signatureEnvoyeLe = new Date().toISOString();
+      await this.db.collection('users').doc(this.user.uid).collection('contrats').doc(c.id).set({ signatureToken: token, statut:'envoyé', envoyeVia:'lien', signatureEnvoyeLe: c.signatureEnvoyeLe, signaturePrestataire: c.signaturePrestataire || '' }, { merge:true });
+      const lien = this.signLink(c);
+      try { await navigator.clipboard.writeText(lien); } catch(e) {}
+      this.toast('Lien de signature copié !');
+      if (client.email) {
+        try {
+          await this.apiFetch('/api/send-email', { method:'POST', body: JSON.stringify({
+            to: client.email,
+            subject: `Contrat à signer — ${projet.title || c.typePrestation || 'Prestation'} — ${this.settings.nomCommercial||'Moustikprod'}`,
+            html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto"><p>Bonjour ${client.nom || ''},</p><p>Voici le contrat de prestation${projet.title ? ' pour le projet <strong>' + projet.title + '</strong>' : ''} à signer électroniquement :</p><p style="text-align:center;margin:24px 0"><a href="${lien}" style="background:#3CD6D1;color:#024059;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">Lire et signer le contrat</a></p><p>Ce lien expire dans 30 jours.</p><p>Merci !<br><strong>${this.settings.prenom||'Romain'} — ${this.settings.nomCommercial||'Moustikprod'}</strong></p></div>`,
+          })});
+          this.toast('Email envoyé à ' + client.email);
+        } catch(e) {
+          this.toast('Lien copié mais email non envoyé', 'error');
+        }
+      }
+    },
+    // ---------- SIGNATURE PRESTATAIRE (Réglages) ----------
+    initSigPad(canvas) {
+      if (!window.SignaturePad) return;
+      canvas.width = canvas.offsetWidth * 2;
+      canvas.height = canvas.offsetHeight * 2;
+      canvas.getContext('2d').scale(2, 2);
+      window._mpSigPad = new SignaturePad(canvas, { minWidth: 1, maxWidth: 2.5, penColor: '#024059' });
+    },
+    saveSigPad() {
+      if (!window._mpSigPad || window._mpSigPad.isEmpty()) { this.toast('Dessine ta signature d\'abord', 'error'); return; }
+      this.settings.signaturePrestataire = window._mpSigPad.toDataURL('image/png');
+      this.saveSettings();
+    },
+    clearSigPad() {
+      window._mpSigPad?.clear();
+      this.settings.signaturePrestataire = '';
+      this.saveSettings();
     },
 
     // ---------- CALENDRIER ----------
