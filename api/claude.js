@@ -1,9 +1,18 @@
+import { requireUser } from './_verifyAuth.js';
+
+// Proxy Claude API — AUTHENTIFIÉ. Seul un utilisateur Firebase connecté
+// (et autorisé via ALLOWED_EMAILS) peut consommer la clé Anthropic.
+// Pas de CORS ouvert : l'endpoint n'est appelé qu'en same-origin.
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  const user = await requireUser(req, res);
+  if (!user) return; // 401/403 déjà envoyé
+
+  const { system, messages, max_tokens } = req.body || {};
+  if (!Array.isArray(messages) || !messages.length) {
+    return res.status(400).json({ error: 'messages requis' });
+  }
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -15,8 +24,9 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 4096,
-        ...req.body
+        max_tokens: Math.min(Number(max_tokens) || 4096, 8192),
+        system,
+        messages
       })
     });
     const data = await response.json();
