@@ -1,16 +1,41 @@
 {
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ],
   "functions": {
-    "api/claude.js": { "memory": 256 },
-    "api/notion.js": { "memory": 256 },
-    "api/ideas-ingest.js": { "memory": 256 },
-    "api/project-share.js": { "memory": 256 },
-    "api/signature.js": { "memory": 256 },
-    "api/sign.js": { "memory": 256 },
-    "api/submit-signature.js": { "memory": 256 },
-    "api/send-email.js": { "memory": 256 }
+    "api/claude.js": {
+      "memory": 256
+    },
+    "api/notion.js": {
+      "memory": 256
+    },
+    "api/ideas-ingest.js": {
+      "memory": 256
+    },
+    "api/project-share.js": {
+      "memory": 256
+    },
+    "api/signature.js": {
+      "memory": 256
+    },
+    "api/sign.js": {
+      "memory": 256
+    },
+    "api/submit-signature.js": {
+      "memory": 256
+    },
+    "api/send-email.js": {
+      "memory": 256
+    },
+    "api/abby.js": {
+      "memory": 256
+    }
   }
 }

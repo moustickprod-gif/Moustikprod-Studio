@@ -277,7 +277,7 @@ tailwind.config = {
             <div class="flex items-center justify-between mt-2">
               <p class="text-muted text-sm" x-text="currentProject.client + ' · ' + currentProject.type + ' · Deadline: ' + (currentProject.deadline || '—')"></p>
               <div class="flex items-center gap-2">
-                <button @click="openAbby()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition">Devis / Facture dans Abby ↗</button>
+                <button @click="openDevisAbby()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition" x-text="currentProject.abbyEstimateNumber ? 'Devis Abby ' + currentProject.abbyEstimateNumber + ' ✓' : 'Créer le devis dans Abby'"></button>
                 <button @click="currentProject.shareEnabled ? copyShareLink() : toggleShare()" class="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition" :class="currentProject.shareEnabled ? 'bg-accent/15 text-accent border border-accent/30' : 'bg-surface border border-line hover:border-accent/50'">
                   <span x-text="currentProject.shareEnabled ? 'Copier le lien client' : 'Partager avec le client'"></span>
                 </button>
@@ -812,13 +812,24 @@ tailwind.config = {
       <!-- ============ CLIENTS ============ -->
       <template x-if="view==='clients'">
         <div x-transition.opacity.duration.150ms>
-          <input x-model="clientSearch" placeholder="Rechercher un client..." class="text-sm px-3 py-2 rounded-lg border border-line w-72 mb-5">
-          <div x-show="filteredClients.length===0" class="text-center py-20 text-muted">Aucun client. Les clients apparaissent en créant des projets.</div>
+          <div class="flex items-center justify-between mb-5 gap-3 flex-wrap">
+            <input x-model="clientSearch" placeholder="Rechercher un client..." class="text-sm px-3 py-2 rounded-lg border border-line w-72">
+            <div class="flex gap-2">
+              <button @click="syncAllClientsAbby()" class="bg-surface border border-line text-sm px-3 py-1.5 rounded-lg flex items-center gap-2 hover:border-accent/50 transition">
+                <span x-show="abbySyncing" class="spinner"></span> Synchroniser avec Abby
+              </button>
+              <button @click="openNewClient()" class="bg-accent text-white text-sm font-medium px-3 py-1.5 rounded-lg">+ Nouveau client</button>
+            </div>
+          </div>
+          <div x-show="filteredClients.length===0" class="text-center py-20 text-muted">Aucun client. Crée une fiche ou un projet.</div>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <template x-for="c in filteredClients" :key="c.name">
+            <template x-for="c in filteredClients" :key="c.id">
               <div @click="openClient(c)" class="bg-surface border border-line rounded-xl p-4 cursor-pointer hover:border-accent/50 transition">
-                <p class="font-display font-bold" x-text="c.name"></p>
-                <p class="text-muted text-xs mt-1" x-text="c.count + ' projet(s)'"></p>
+                <div class="flex items-center justify-between">
+                  <p class="font-display font-bold" x-text="c.name"></p>
+                  <span x-show="c.abbyId" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 shrink-0" title="Synchronisé avec Abby">Abby ✓</span>
+                </div>
+                <p class="text-muted text-xs mt-1" x-text="c.count + ' projet(s)' + (c.entreprise ? ' · ' + c.entreprise : '')"></p>
               </div>
             </template>
           </div>
@@ -826,7 +837,10 @@ tailwind.config = {
           <div x-show="currentClient" class="mt-6 bg-surface border border-line rounded-xl p-5 max-w-2xl">
             <div class="flex items-center justify-between mb-4">
               <h3 class="font-display font-bold text-lg" x-text="currentClient?.name"></h3>
-              <button @click="goToNewProject(currentClient?.name)" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Nouveau projet pour ce client</button>
+              <div class="flex gap-2">
+                <button @click="openEditClient(currentClient?.id)" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">Modifier la fiche</button>
+                <button @click="goToNewProject(currentClient?.name)" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Nouveau projet pour ce client</button>
+              </div>
             </div>
             <div class="space-y-2">
               <template x-for="p in projects.filter(p=>p.client===currentClient?.name)" :key="p.id">
@@ -979,9 +993,12 @@ tailwind.config = {
       <template x-if="view==='reglages'">
         <div class="max-w-2xl space-y-5" x-transition.opacity.duration.150ms>
           <div class="bg-surface border border-line rounded-xl p-5">
-            <h3 class="font-display font-bold mb-3">Gestion financière</h3>
-            <p class="text-xs text-muted mb-3">Devis, factures, contrats, trésorerie, TVA et URSSAF sont gérés dans Abby. Cette app se concentre sur la création et le suivi de production.</p>
-            <button @click="openAbby()" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Ouvrir Abby ↗</button>
+            <h3 class="font-display font-bold mb-3">Abby (gestion financière)</h3>
+            <p class="text-xs text-muted mb-3">Devis, factures, trésorerie, TVA et URSSAF vivent dans Abby — pilotés depuis cette app : les fiches clients sont synchronisées automatiquement et les devis se créent depuis la fiche projet. Nécessite la variable <span class="font-mono">ABBY_API_KEY</span> sur Vercel.</p>
+            <div class="flex gap-2">
+              <button @click="testAbby()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">Tester la connexion</button>
+              <button @click="openAbby()" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Ouvrir Abby ↗</button>
+            </div>
           </div>
 
           <div class="bg-surface border border-line rounded-xl p-5">
@@ -1066,6 +1083,74 @@ tailwind.config = {
       </template>
     </div>
     <button @click="saveToProjectOpen=false" class="w-full mt-4 text-sm text-muted">Annuler</button>
+  </div>
+</div>
+
+<!-- ===================== MODAL FICHE CLIENT ===================== -->
+<div x-show="clientModalOpen" x-cloak class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @keydown.escape.window="clientModalOpen=false">
+  <div class="modal-slide-enter bg-surface border border-line rounded-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto" x-show="clientModalOpen">
+    <h3 class="font-display font-bold text-lg mb-1" x-text="editingClient?.id ? 'Modifier la fiche client' : 'Nouveau client'"></h3>
+    <p class="text-xs text-muted mb-4">La fiche est poussée automatiquement dans Abby à l'enregistrement.</p>
+    <template x-if="editingClient">
+      <div class="space-y-3">
+        <div class="flex gap-2">
+          <button type="button" @click="editingClient.typeClient='b2b'" :class="editingClient.typeClient==='b2b' ? 'bg-accent text-white border-accent' : 'bg-surface border-line'" class="text-sm px-3 py-1.5 rounded-lg border transition">Professionnel</button>
+          <button type="button" @click="editingClient.typeClient='b2c'" :class="editingClient.typeClient==='b2c' ? 'bg-accent text-white border-accent' : 'bg-surface border-line'" class="text-sm px-3 py-1.5 rounded-lg border transition">Particulier</button>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <input x-model="editingClient.prenom" placeholder="Prénom" class="text-sm px-3 py-2 rounded-lg border border-line">
+          <input x-model="editingClient.nom" placeholder="Nom *" class="text-sm px-3 py-2 rounded-lg border border-line">
+        </div>
+        <input x-show="editingClient.typeClient==='b2b'" x-model="editingClient.entreprise" placeholder="Entreprise" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+        <input x-show="editingClient.typeClient==='b2b'" x-model="editingClient.siret" placeholder="SIRET" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+        <div class="grid grid-cols-2 gap-3">
+          <input x-model="editingClient.email" type="email" placeholder="Email" class="text-sm px-3 py-2 rounded-lg border border-line">
+          <input x-model="editingClient.telephone" placeholder="Téléphone" class="text-sm px-3 py-2 rounded-lg border border-line">
+        </div>
+        <input x-model="editingClient.adresse" placeholder="Adresse" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+        <div class="grid grid-cols-2 gap-3">
+          <input x-model="editingClient.codePostal" placeholder="Code postal" class="text-sm px-3 py-2 rounded-lg border border-line">
+          <input x-model="editingClient.ville" placeholder="Ville" class="text-sm px-3 py-2 rounded-lg border border-line">
+        </div>
+        <textarea x-model="editingClient.notes" rows="2" placeholder="Notes" class="w-full text-sm px-3 py-2 rounded-lg border border-line"></textarea>
+        <p x-show="editingClient.abbyId" class="text-xs text-emerald-600">✓ Lié à Abby (mise à jour automatique)</p>
+        <div class="flex gap-2 justify-end pt-2">
+          <button @click="clientModalOpen=false" class="text-sm px-4 py-2 rounded-lg border border-line">Annuler</button>
+          <button @click="saveClient()" class="text-sm bg-accent text-white px-4 py-2 rounded-lg">Enregistrer</button>
+        </div>
+      </div>
+    </template>
+  </div>
+</div>
+
+<!-- ===================== MODAL DEVIS ABBY ===================== -->
+<div x-show="devisModalOpen" x-cloak class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @keydown.escape.window="devisModalOpen=false">
+  <div class="modal-slide-enter bg-surface border border-line rounded-xl w-full max-w-md p-6" x-show="devisModalOpen">
+    <h3 class="font-display font-bold text-lg mb-1">Créer le devis dans Abby</h3>
+    <p class="text-xs text-muted mb-4" x-text="'Client : ' + (clientName(currentProject?.clientId) || '—') + ' · Projet : ' + (currentProject?.title || '')"></p>
+    <div class="space-y-3">
+      <div>
+        <label class="text-xs font-mono text-muted uppercase block mb-1">Désignation</label>
+        <input x-model="devisForm.designation" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs font-mono text-muted uppercase block mb-1">Montant HT (€)</label>
+          <input x-model.number="devisForm.montant" type="number" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+        </div>
+        <div>
+          <label class="text-xs font-mono text-muted uppercase block mb-1">Quantité</label>
+          <input x-model.number="devisForm.quantite" type="number" min="1" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+        </div>
+      </div>
+      <p class="text-xs text-muted">Le devis est créé en brouillon dans Abby (TVA non applicable). Tu le finalises et l'envoies depuis Abby.</p>
+      <div class="flex gap-2 justify-end pt-2">
+        <button @click="devisModalOpen=false" class="text-sm px-4 py-2 rounded-lg border border-line">Annuler</button>
+        <button @click="creerDevisAbby()" :disabled="devisCreating" class="text-sm bg-accent text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-40">
+          <span x-show="devisCreating" class="spinner"></span> Créer le devis
+        </button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1348,6 +1433,12 @@ function app() {
 
     // clients
     clientSearch: '', currentClient: null,
+    clientModalOpen: false, editingClient: null,
+    abbySyncing: false,
+
+    // devis Abby
+    devisModalOpen: false, devisCreating: false,
+    devisForm: { designation:'', montant:null, quantite:1 },
 
     // droit à l'image
     autorisations: [],
@@ -1614,6 +1705,8 @@ function app() {
         notionUrl: data.notionUrl || '',
         shareToken: data.shareToken || '',
         shareEnabled: !!data.shareEnabled,
+        abbyEstimateId: data.abbyEstimateId || '',
+        abbyEstimateNumber: data.abbyEstimateNumber || '',
         statutCrm: data.statut || 'prospection',
         dateCreation: data.dateCreation || new Date().toISOString(),
       };
@@ -1670,6 +1763,8 @@ function app() {
           notionUrl: project.notionUrl || null,
           shareToken: project.shareToken || null,
           shareEnabled: !!project.shareEnabled,
+          abbyEstimateId: project.abbyEstimateId || null,
+          abbyEstimateNumber: project.abbyEstimateNumber || null,
           dateCreation: project.dateCreation || new Date().toISOString(),
         };
         await this.db.collection('users').doc(this.user.uid).collection('projets').doc(project.id).set(docData, { merge:true });
@@ -2321,10 +2416,187 @@ function app() {
     get filteredClients() {
       const q = this.clientSearch.toLowerCase();
       return this.allClients
-        .map(c => ({ name: c.nom, id: c.id, count: this.projects.filter(p => p.clientId === c.id).length }))
-        .filter(c => !q || c.name.toLowerCase().includes(q));
+        .map(c => ({ name: c.nom, id: c.id, entreprise: c.entreprise || '', abbyId: c.abbyId || '', count: this.projects.filter(p => p.clientId === c.id).length }))
+        .filter(c => !q || c.name.toLowerCase().includes(q) || c.entreprise.toLowerCase().includes(q));
     },
     openClient(c) { this.currentClient = c; },
+    openNewClient() {
+      this.editingClient = { id:null, nom:'', prenom:'', entreprise:'', email:'', telephone:'', adresse:'', codePostal:'', ville:'', siret:'', typeClient:'b2b', notes:'', abbyId:'', abbyKind:'', abbyContactId:'' };
+      this.clientModalOpen = true;
+    },
+    openEditClient(id) {
+      const c = this.allClients.find(x => x.id === id);
+      if (!c) return;
+      this.editingClient = { prenom:'', typeClient:'b2b', ...JSON.parse(JSON.stringify(c)) };
+      this.clientModalOpen = true;
+    },
+    async saveClient() {
+      const c = this.editingClient;
+      if (!c.nom.trim() && !c.entreprise.trim()) { this.toast('Nom ou entreprise requis', 'error'); return; }
+      if (!c.id) { c.id = 'c' + Date.now(); c.dateCreation = new Date().toISOString(); }
+      try {
+        await this.db.collection('users').doc(this.user.uid).collection('clients').doc(c.id).set(JSON.parse(JSON.stringify(c)), { merge:true });
+        const i = this.allClients.findIndex(x => x.id === c.id);
+        if (i > -1) this.allClients[i] = c; else this.allClients.push(c);
+        this.clientModalOpen = false;
+        this.toast('Fiche client enregistrée');
+        // Pousse vers Abby en arrière-plan
+        this.syncClientToAbby(c).catch(() => {});
+      } catch(e) {
+        this.toast('Erreur Firestore', 'error');
+      }
+    },
+
+    // ---------- ABBY ----------
+    async abbyCall(action, payload) {
+      const res = await this.apiFetch('/api/abby', { method:'POST', body: JSON.stringify({ action, payload }) });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Erreur Abby');
+      return data;
+    },
+    _abbyAddress(c) {
+      return (c.adresse && c.ville && c.codePostal)
+        ? { address: c.adresse, city: c.ville, zipCode: c.codePostal, country: 'FR' }
+        : undefined;
+    },
+    _splitNom(c) {
+      if (c.prenom) return { firstname: c.prenom, lastname: c.nom || '—' };
+      const parts = (c.nom || '').trim().split(/\s+/);
+      return parts.length > 1
+        ? { firstname: parts[0], lastname: parts.slice(1).join(' ') }
+        : { firstname: parts[0] || 'Contact', lastname: '—' };
+    },
+    // Pousse une fiche client vers Abby (création ou mise à jour), mémorise l'id.
+    async syncClientToAbby(c) {
+      const isOrg = c.typeClient !== 'b2c' && (c.entreprise || c.siret);
+      try {
+        if (isOrg) {
+          const body = {
+            name: c.entreprise || c.nom,
+            commercialName: c.entreprise || c.nom,
+            ...(c.email ? { emails: [c.email] } : {}),
+            ...(c.siret ? { siret: String(c.siret).replace(/\s/g,'') } : {}),
+            ...(this._abbyAddress(c) ? { billingAddress: this._abbyAddress(c) } : {}),
+            ...(c.notes ? { notes: c.notes } : {}),
+          };
+          if (c.abbyId && c.abbyKind === 'organization') {
+            await this.abbyCall('updateOrganization', { id: c.abbyId, body });
+          } else {
+            const r = await this.abbyCall('createOrganization', { body });
+            c.abbyId = r.data.id; c.abbyKind = 'organization';
+          }
+        } else {
+          const body = {
+            ...this._splitNom(c),
+            ...(c.telephone ? { phone: c.telephone } : {}),
+            ...(c.email ? { emails: [c.email] } : {}),
+            ...(this._abbyAddress(c) ? { billingAddress: this._abbyAddress(c) } : {}),
+            ...(c.notes ? { notes: c.notes } : {}),
+          };
+          if (c.abbyId && c.abbyKind === 'contact') {
+            await this.abbyCall('updateContact', { id: c.abbyId, body });
+          } else {
+            const r = await this.abbyCall('createContact', { body });
+            c.abbyId = r.data.id; c.abbyKind = 'contact';
+          }
+        }
+        await this.db.collection('users').doc(this.user.uid).collection('clients').doc(c.id).set({ abbyId: c.abbyId, abbyKind: c.abbyKind }, { merge:true });
+        this.toast((c.entreprise || c.nom) + ' synchronisé avec Abby ✓');
+        return c.abbyId;
+      } catch(e) {
+        this.toast('Abby : ' + e.message, 'error');
+        throw e;
+      }
+    },
+    // Rapprochement de tous les clients : match par nom/email dans Abby, sinon création.
+    async syncAllClientsAbby() {
+      this.abbySyncing = true;
+      let done = 0, errors = 0;
+      try {
+        for (const c of this.allClients) {
+          if (c.abbyId) continue;
+          try {
+            const search = await this.abbyCall('search', { q: (c.entreprise || c.nom || '').trim() });
+            const norm = s => (s || '').toLowerCase().trim();
+            const org = (search.organizations || []).find(o => norm(o.name) === norm(c.entreprise || c.nom) || norm(o.commercialName) === norm(c.entreprise || c.nom));
+            const contact = (search.contacts || []).find(ct => norm(ct.fullname) === norm(c.nom) || (c.email && (ct.emails || []).map(norm).includes(norm(c.email))));
+            if (org) { c.abbyId = org.id; c.abbyKind = 'organization'; }
+            else if (contact) { c.abbyId = contact.id; c.abbyKind = 'contact'; }
+            if (c.abbyId) {
+              await this.db.collection('users').doc(this.user.uid).collection('clients').doc(c.id).set({ abbyId: c.abbyId, abbyKind: c.abbyKind }, { merge:true });
+            } else {
+              await this.syncClientToAbby(c);
+            }
+            done++;
+          } catch(e) { errors++; }
+        }
+        this.toast(`Sync Abby : ${done} client(s) traité(s)` + (errors ? `, ${errors} erreur(s)` : ''));
+      } finally {
+        this.abbySyncing = false;
+      }
+    },
+    async testAbby() {
+      try {
+        await this.abbyCall('ping', {});
+        this.toast('Connexion Abby OK ✓');
+      } catch(e) {
+        this.toast('Abby : ' + e.message, 'error');
+      }
+    },
+    // ---------- DEVIS ABBY ----------
+    openDevisAbby() {
+      const p = this.currentProject;
+      if (!p) return;
+      if (!p.clientId) { this.toast('Associe d\'abord un client au projet', 'error'); return; }
+      this.devisForm = {
+        designation: (p.type ? p.type + ' — ' : '') + p.title,
+        montant: p.budget ? Number(String(p.budget).replace(/[^\d.]/g,'')) || null : null,
+        quantite: 1,
+      };
+      this.devisModalOpen = true;
+    },
+    async creerDevisAbby() {
+      const p = this.currentProject;
+      const client = this.allClients.find(c => c.id === p.clientId);
+      if (!client) { this.toast('Client introuvable', 'error'); return; }
+      if (!this.devisForm.montant) { this.toast('Indique le montant HT', 'error'); return; }
+      this.devisCreating = true;
+      try {
+        if (!client.abbyId) await this.syncClientToAbby(client);
+        let customerId = client.abbyContactId || client.abbyId;
+        let estimate;
+        try {
+          estimate = await this.abbyCall('createEstimate', { customerId });
+        } catch(e) {
+          // Une organisation peut nécessiter un contact rattaché comme destinataire
+          if (client.abbyKind === 'organization' && !client.abbyContactId) {
+            const ct = await this.abbyCall('createOrganizationContact', { id: client.abbyId, body: { ...this._splitNom(client), ...(client.email ? { emails: [client.email] } : {}) } });
+            client.abbyContactId = ct.data.id;
+            await this.db.collection('users').doc(this.user.uid).collection('clients').doc(client.id).set({ abbyContactId: client.abbyContactId }, { merge:true });
+            estimate = await this.abbyCall('createEstimate', { customerId: client.abbyContactId });
+          } else {
+            throw e;
+          }
+        }
+        const billingId = estimate.data.id;
+        await this.abbyCall('setLines', { billingId, lines: [{
+          designation: this.devisForm.designation || p.title,
+          quantity: Number(this.devisForm.quantite) || 1,
+          unitPrice: Math.round(Number(this.devisForm.montant) * 100),
+          vatCode: 'FR_00HT',
+        }]});
+        p.abbyEstimateId = billingId;
+        p.abbyEstimateNumber = estimate.data.number || '';
+        await this.db.collection('users').doc(this.user.uid).collection('projets').doc(p.id).set({ abbyEstimateId: billingId, abbyEstimateNumber: p.abbyEstimateNumber }, { merge:true });
+        this.devisModalOpen = false;
+        this.toast('Devis créé dans Abby ✓');
+        window.open('https://app.abby.fr', '_blank');
+      } catch(e) {
+        this.toast('Devis Abby : ' + e.message, 'error');
+      } finally {
+        this.devisCreating = false;
+      }
+    },
 
     // ---------- SETTINGS / DATA ----------
     exportData() {
