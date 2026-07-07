@@ -132,7 +132,7 @@ tailwind.config = {
         <h1 class="font-display font-bold text-lg" x-text="navItems.find(n=>n.id===view)?.label || (view==='nouveau-projet' ? 'Nouveau projet' : '')"></h1>
         <span x-show="db && user" class="text-xs font-mono px-2 py-0.5 rounded bg-accent/15 text-accent border border-accent/30 flex items-center gap-1.5">
           <span class="w-1.5 h-1.5 rounded-full" :class="syncStatus==='syncing' ? 'bg-amber-400 animate-pulse' : syncStatus==='error' ? 'bg-red-500' : 'bg-emerald-400'"></span>
-          <span x-text="syncStatus==='syncing' ? 'Synchronisation...' : syncStatus==='error' ? 'Erreur de sync' : 'Synchronisé avec le CRM' + (lastSyncAt ? ' · ' + lastSyncAt : '')"></span>
+          <span x-text="syncStatus==='syncing' ? 'Synchronisation...' : syncStatus==='error' ? 'Erreur de sync' : 'Synchronisé' + (lastSyncAt ? ' · ' + lastSyncAt : '')"></span>
         </span>
       </div>
       <div class="flex items-center gap-3">
@@ -275,7 +275,7 @@ tailwind.config = {
             <div class="flex items-center justify-between mt-2">
               <p class="text-muted text-sm" x-text="currentProject.client + ' · ' + currentProject.type + ' · Deadline: ' + (currentProject.deadline || '—')"></p>
               <div class="flex items-center gap-2">
-                <button @click="createDevisInCrm()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition">Créer un devis →</button>
+                <button @click="openAbby()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition">Devis / Facture dans Abby ↗</button>
                 <button @click="currentProject.shareEnabled ? copyShareLink() : toggleShare()" class="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition" :class="currentProject.shareEnabled ? 'bg-accent/15 text-accent border border-accent/30' : 'bg-surface border border-line hover:border-accent/50'">
                   <span x-text="currentProject.shareEnabled ? 'Copier le lien client' : 'Partager avec le client'"></span>
                 </button>
@@ -838,12 +838,112 @@ tailwind.config = {
         </div>
       </template>
 
+      <!-- ============ CALENDRIER ============ -->
+      <template x-if="view==='calendrier'">
+        <div class="max-w-4xl space-y-6" x-transition.opacity.duration.150ms>
+          <div class="bg-surface border border-line rounded-xl p-5">
+            <div class="flex items-center justify-between mb-4">
+              <button @click="calPrev()" class="px-3 py-1.5 rounded-lg border border-line text-sm hover:border-accent/50">←</button>
+              <p class="font-display font-bold" x-text="calTitle()"></p>
+              <button @click="calNext()" class="px-3 py-1.5 rounded-lg border border-line text-sm hover:border-accent/50">→</button>
+            </div>
+            <div class="grid grid-cols-7 gap-1 text-center text-xs font-mono text-muted mb-1">
+              <template x-for="d in ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']" :key="d"><div x-text="d"></div></template>
+            </div>
+            <div class="grid grid-cols-7 gap-1">
+              <template x-for="(day,i) in calDays()" :key="i">
+                <div class="min-h-[72px] rounded-lg border p-1 text-left" :class="day ? (day.isToday ? 'border-accent bg-accent/5' : 'border-line bg-bg') : 'border-transparent'">
+                  <template x-if="day">
+                    <div>
+                      <p class="text-xs font-mono" :class="day.isToday ? 'text-accent font-bold' : 'text-muted'" x-text="day.n"></p>
+                      <template x-for="(ev,j) in day.events.slice(0,3)" :key="j">
+                        <div @click="ev.projectId && openProjectById(ev.projectId)" class="text-[10px] leading-tight truncate rounded px-1 py-0.5 mt-0.5" :class="ev.cls + (ev.projectId ? ' cursor-pointer' : '')" :title="ev.label" x-text="ev.label"></div>
+                      </template>
+                      <p x-show="day.events.length>3" class="text-[10px] text-muted" x-text="'+' + (day.events.length-3)"></p>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="bg-surface border border-line rounded-xl p-5">
+            <h3 class="font-display font-bold mb-3">À venir</h3>
+            <div x-show="!upcomingEvents().length" class="text-muted text-sm">Rien à l'horizon — profite pour prospecter ou tourner pour toi.</div>
+            <div class="space-y-2">
+              <template x-for="(ev,i) in upcomingEvents()" :key="i">
+                <div @click="ev.projectId && openProjectById(ev.projectId)" class="flex items-center justify-between p-3 bg-bg border border-line rounded-lg" :class="ev.projectId ? 'cursor-pointer hover:border-accent/50' : ''">
+                  <div class="flex items-center gap-3">
+                    <span class="text-xs font-mono px-2 py-0.5 rounded" :class="ev.cls" x-text="ev.tag"></span>
+                    <span class="text-sm" x-text="ev.label"></span>
+                  </div>
+                  <span class="text-xs font-mono" :class="ev.overdue ? 'text-red-500 font-bold' : 'text-muted'" x-text="ev.dateLabel"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- ============ DROIT À L'IMAGE ============ -->
+      <template x-if="view==='droitimage'">
+        <div class="max-w-4xl" x-transition.opacity.duration.150ms>
+          <div class="flex items-center justify-between mb-5">
+            <p class="text-muted text-sm">Autorisations d'exploitation de l'image — envoyables pour signature électronique.</p>
+            <div class="flex gap-2">
+              <button @click="verifierSignatures()" class="bg-surface border border-line text-sm px-3 py-1.5 rounded-lg flex items-center gap-2 hover:border-accent/50 transition">
+                <span x-show="checkingSignatures" class="spinner"></span> Vérifier les signatures
+              </button>
+              <button @click="openDroitImageModal()" class="bg-accent text-white text-sm font-medium px-3 py-1.5 rounded-lg">+ Nouvelle autorisation</button>
+            </div>
+          </div>
+
+          <div x-show="autorisations.length===0" class="text-center py-20 text-muted">
+            <p class="mb-3">Aucune autorisation pour l'instant.</p>
+            <button @click="openDroitImageModal()" class="bg-accent text-white px-4 py-2 rounded-lg text-sm">Créer la première autorisation</button>
+          </div>
+
+          <div class="space-y-2">
+            <template x-for="a in [...autorisations].sort((x,y)=>(y.dateCreation||'').localeCompare(x.dateCreation||''))" :key="a.id">
+              <div class="bg-surface border border-line rounded-xl p-4 flex items-center justify-between gap-3 card-slide-enter">
+                <div class="min-w-0">
+                  <p class="font-display font-bold text-sm truncate" x-text="(a.prenom+' '+a.nom).trim() || 'Sans nom'"></p>
+                  <p class="text-xs text-muted truncate" x-text="(projectTitle(a.projetId) || 'Aucun projet') + (a.email ? ' · ' + a.email : '')"></p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                  <span class="text-xs font-mono px-2 py-0.5 rounded" :class="a.statut==='signé' ? 'bg-emerald-100 text-emerald-700' : a.statut==='envoyé' ? 'bg-amber-100 text-amber-700' : a.statut==='refusé' ? 'bg-red-100 text-red-600' : 'bg-bg text-muted border border-line'" x-text="a.statut || 'brouillon'"></span>
+                  <button @click="previewingAutorisation=a; autorisationPreviewOpen=true" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">Aperçu</button>
+                  <button @click="openEditAutorisation(a)" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">Modifier</button>
+                  <button x-show="a.statut!=='signé'" @click="envoyerPourSignature(a)" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Envoyer à signer</button>
+                  <button x-show="a.signatureToken && a.statut!=='signé'" @click="copySignLink(a)" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">Copier le lien</button>
+                  <button @click="deleteAutorisation(a)" class="text-xs text-muted hover:text-red-500 px-1">✕</button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
       <!-- ============ RÉGLAGES ============ -->
       <template x-if="view==='reglages'">
         <div class="max-w-2xl space-y-5" x-transition.opacity.duration.150ms>
           <div class="bg-surface border border-line rounded-xl p-5">
-            <h3 class="font-display font-bold mb-3">Données partagées</h3>
-            <p class="text-xs text-muted" x-show="db && user">✓ Connecté au même projet Firebase que le CRM Moustikprod — clients et projets sont synchronisés automatiquement entre les deux apps.</p>
+            <h3 class="font-display font-bold mb-3">Gestion financière</h3>
+            <p class="text-xs text-muted mb-3">Devis, factures, contrats, trésorerie, TVA et URSSAF sont gérés dans Abby. Cette app se concentre sur la création et le suivi de production.</p>
+            <button @click="openAbby()" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Ouvrir Abby ↗</button>
+          </div>
+
+          <div class="bg-surface border border-line rounded-xl p-5">
+            <h3 class="font-display font-bold mb-3">Identité (documents légaux)</h3>
+            <p class="text-xs text-muted mb-3">Utilisée dans les autorisations de droit à l'image.</p>
+            <div class="grid grid-cols-2 gap-2">
+              <input x-model="settings.prenom" @blur="saveSettings()" placeholder="Prénom" class="text-sm px-3 py-2 rounded-lg border border-line">
+              <input x-model="settings.nom" @blur="saveSettings()" placeholder="Nom" class="text-sm px-3 py-2 rounded-lg border border-line">
+              <input x-model="settings.nomCommercial" @blur="saveSettings()" placeholder="Nom commercial" class="text-sm px-3 py-2 rounded-lg border border-line">
+              <input x-model="settings.siret" @blur="saveSettings()" placeholder="SIRET" class="text-sm px-3 py-2 rounded-lg border border-line">
+              <input x-model="settings.ville" @blur="saveSettings()" placeholder="Ville" class="text-sm px-3 py-2 rounded-lg border border-line">
+              <input x-model="settings.emailPro" @blur="saveSettings()" placeholder="Email pro (RGPD)" class="text-sm px-3 py-2 rounded-lg border border-line">
+            </div>
           </div>
 
           <div class="bg-surface border border-line rounded-xl p-5">
@@ -905,6 +1005,90 @@ tailwind.config = {
   </div>
 </div>
 
+<!-- ===================== MODAL AUTORISATION ===================== -->
+<div x-show="autorisationModalOpen" x-cloak class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @keydown.escape.window="autorisationModalOpen=false">
+  <div class="modal-slide-enter bg-surface border border-line rounded-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto" x-show="autorisationModalOpen">
+    <h3 class="font-display font-bold text-lg mb-4" x-text="editingAutorisation?.id ? 'Modifier l\'autorisation' : 'Nouvelle autorisation'"></h3>
+    <template x-if="editingAutorisation">
+      <div class="space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <input x-model="editingAutorisation.prenom" placeholder="Prénom *" class="text-sm px-3 py-2 rounded-lg border border-line">
+          <input x-model="editingAutorisation.nom" placeholder="Nom *" class="text-sm px-3 py-2 rounded-lg border border-line">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <input x-model="editingAutorisation.email" type="email" placeholder="Email" class="text-sm px-3 py-2 rounded-lg border border-line">
+          <input x-model="editingAutorisation.telephone" placeholder="Téléphone" class="text-sm px-3 py-2 rounded-lg border border-line">
+        </div>
+        <div>
+          <label class="text-xs font-mono text-muted uppercase block mb-1">Date de naissance</label>
+          <input x-model="editingAutorisation.dateNaissance" type="date" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+          <p x-show="isMineur(editingAutorisation.dateNaissance)" class="text-xs text-amber-600 mt-1">Mineur(e) — le représentant légal doit signer.</p>
+        </div>
+        <input x-show="isMineur(editingAutorisation.dateNaissance)" x-model="editingAutorisation.tuteurLegal" placeholder="Nom du représentant légal *" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+        <div>
+          <label class="text-xs font-mono text-muted uppercase block mb-1">Projet associé</label>
+          <select x-model="editingAutorisation.projetId" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+            <option value="">— Aucun —</option>
+            <template x-for="p in projects" :key="p.id"><option :value="p.id" x-text="p.title"></option></template>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-mono text-muted uppercase block mb-1">Supports de diffusion</label>
+          <div class="flex gap-2 flex-wrap">
+            <template x-for="u in usagesOptions" :key="u">
+              <button type="button" @click="toggleUsage(u)" :class="(editingAutorisation.usages||[]).includes(u) ? 'bg-accent text-white border-accent' : 'bg-surface text-ink border-line'" class="text-xs px-2.5 py-1 rounded-lg border transition" x-text="u"></button>
+            </template>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-mono text-muted uppercase block mb-1">Territoire</label>
+            <select x-model="editingAutorisation.territoire" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+              <option>France</option><option>Europe</option><option>Monde</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs font-mono text-muted uppercase block mb-1">Durée</label>
+            <select x-model="editingAutorisation.duree" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+              <option>1 an</option><option>3 ans</option><option>5 ans</option><option>10 ans</option><option>Illimitée</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="text-xs font-mono text-muted uppercase block mb-1">Rémunération</label>
+          <select x-model="editingAutorisation.remuneration" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+            <option value="gratuit">À titre gratuit</option>
+            <option value="cachets">À titre onéreux (cachets)</option>
+          </select>
+        </div>
+        <textarea x-model="editingAutorisation.notes" rows="2" placeholder="Notes (optionnel)" class="w-full text-sm px-3 py-2 rounded-lg border border-line"></textarea>
+        <div class="flex justify-between items-center pt-2">
+          <button x-show="editingAutorisation.id" @click="deleteAutorisation(editingAutorisation); autorisationModalOpen=false" class="text-sm text-red-500">Supprimer</button>
+          <div class="flex gap-2 ml-auto">
+            <button @click="autorisationModalOpen=false" class="text-sm px-4 py-2 rounded-lg border border-line">Annuler</button>
+            <button @click="saveAutorisation()" class="text-sm bg-accent text-white px-4 py-2 rounded-lg">Enregistrer</button>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+</div>
+
+<!-- ===================== MODAL APERÇU AUTORISATION ===================== -->
+<div x-show="autorisationPreviewOpen" x-cloak class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @keydown.escape.window="autorisationPreviewOpen=false" @click.self="autorisationPreviewOpen=false">
+  <div class="modal-slide-enter bg-surface rounded-xl w-full max-w-3xl max-h-[90vh] flex flex-col" x-show="autorisationPreviewOpen">
+    <div class="flex items-center justify-between p-4 border-b border-line shrink-0">
+      <h3 class="font-display font-bold">Aperçu de l'autorisation</h3>
+      <div class="flex gap-2">
+        <button @click="imprimerAutorisation()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">Imprimer / PDF</button>
+        <button x-show="previewingAutorisation && previewingAutorisation.statut!=='signé'" @click="envoyerPourSignature(previewingAutorisation); autorisationPreviewOpen=false" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Envoyer à signer</button>
+        <button @click="autorisationPreviewOpen=false" class="text-muted hover:text-ink px-2">✕</button>
+      </div>
+    </div>
+    <div class="overflow-y-auto p-8 bg-white" x-html="previewingAutorisation ? texteAutorisationHtml(previewingAutorisation) : ''"></div>
+  </div>
+</div>
+
 <!-- ===================== TOASTS ===================== -->
 <div class="fixed bottom-4 right-4 space-y-2 z-50">
   <template x-for="t in toasts" :key="t.id">
@@ -930,6 +1114,8 @@ function app() {
       { id:'studio', label:'Studio IA', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.5 6.5L21 11l-6.5 2.5L12 20l-2.5-6.5L3 11l6.5-2.5z"/></svg>' },
       { id:'idees', label:'Idées', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7V17h8v-2.3A7 7 0 0012 2z"/></svg>' },
       { id:'clients', label:'Clients', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0116 0v1"/></svg>' },
+      { id:'calendrier', label:'Calendrier', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>' },
+      { id:'droitimage', label:'Droit à l\'image', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>' },
       { id:'reglages', label:'Réglages', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 008.6 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H2a2 2 0 110-4h.09A1.65 1.65 0 003.6 8.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H8a1.65 1.65 0 001-1.51V2a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V8a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>' },
     ],
 
@@ -999,8 +1185,21 @@ function app() {
     // clients
     clientSearch: '', currentClient: null,
 
+    // droit à l'image
+    autorisations: [],
+    editingAutorisation: null,
+    autorisationModalOpen: false,
+    autorisationPreviewOpen: false,
+    previewingAutorisation: null,
+    checkingSignatures: false,
+    usagesOptions: ['YouTube','Instagram','TikTok','Site web','Publicité en ligne','Télévision','Affichage / Print','Tous supports'],
+
+    // calendrier
+    calMonth: new Date().getMonth(),
+    calYear: new Date().getFullYear(),
+
     // settings
-    settings: { profileName:'Moustikprod', billingInfo:'' },
+    settings: { profileName:'Moustikprod', billingInfo:'', prenom:'Romain', nom:'ANDRE', nomCommercial:'Moustikprod', siret:'89033460000040', ville:'Montpellier', emailPro:'contact@moustikprod.fr' },
 
     // toasts
     toasts: [],
@@ -1125,6 +1324,7 @@ function app() {
         const h = localStorage.getItem('mp_studio_history');
         if (h) this.studioHistory = JSON.parse(h);
         this.loadIdeas();
+        this.loadAutorisations();
         this.syncStatus = 'ok';
         this.lastSyncAt = new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
       } catch(e) {
@@ -1341,11 +1541,19 @@ function app() {
       this.toast('Copié dans le presse-papier');
     },
 
-    // ---------- CLAUDE PROXY ----------
+    // ---------- API AUTHENTIFIÉE ----------
+    // Tous les endpoints serverless exigent désormais un token Firebase
+    // (voir api/_verifyAuth.js) : on joint systématiquement l'ID token.
+    async apiFetch(url, options = {}) {
+      const idToken = await firebase.auth().currentUser.getIdToken();
+      return fetch(url, {
+        ...options,
+        headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${idToken}`, ...(options.headers||{}) },
+      });
+    },
     async callClaude(systemPrompt, userMessage) {
-      const res = await fetch('/api/claude.js', {
+      const res = await this.apiFetch('/api/claude.js', {
         method: 'POST',
-        headers: { 'Content-Type':'application/json' },
         body: JSON.stringify({
           system: systemPrompt,
           messages: [{ role:'user', content: userMessage }]
@@ -1442,10 +1650,9 @@ function app() {
       const url = `${location.origin}/share.html?token=${this.currentProject.shareToken}`;
       navigator.clipboard.writeText(url).then(() => this.toast('Lien copié !', 'success')).catch(() => this.toast(url, 'success'));
     },
-    createDevisInCrm() {
-      if (!this.currentProject || !this.currentProject.id) return;
-      const url = `https://moustikprod-crm.vercel.app/?devisFromProjet=${encodeURIComponent(this.currentProject.id)}`;
-      window.open(url, '_blank');
+    // Devis, factures, contrats et compta sont gérés dans Abby.
+    openAbby() {
+      window.open('https://app.abby.fr', '_blank');
     },
     confirmDeleteProject(p) {
       this.projectPendingDelete = p || this.currentProject;
@@ -1836,15 +2043,13 @@ function app() {
         if (p.deadline) properties.Deadline = { date: { start: p.deadline } };
 
         if (p.notionPageId) {
-          await fetch(`/api/notion.js?endpoint=pages/${p.notionPageId}`, {
+          await this.apiFetch(`/api/notion.js?endpoint=pages/${p.notionPageId}`, {
             method: 'PATCH',
-            headers: { 'Content-Type':'application/json' },
             body: JSON.stringify({ properties }),
           });
         } else {
-          const res = await fetch(`/api/notion.js?endpoint=pages`, {
+          const res = await this.apiFetch(`/api/notion.js?endpoint=pages`, {
             method: 'POST',
-            headers: { 'Content-Type':'application/json' },
             body: JSON.stringify({
               parent: { database_id: '387ad81d-a4bc-812a-9650-e8b28b058e76' },
               properties,
@@ -1977,6 +2182,285 @@ function app() {
       localStorage.removeItem('mp_studio_history');
       this.studioHistory = [];
       this.toast('Cache local effacé');
+    },
+
+    // ---------- DROIT À L'IMAGE ----------
+    projectTitle(id) {
+      return (this.projects.find(p => p.id === id) || {}).title || '';
+    },
+    openProjectById(id) {
+      const p = this.projects.find(pr => pr.id === id);
+      if (p) this.openProject(p);
+    },
+    isMineur(dateNaissance) {
+      if (!dateNaissance) return false;
+      const d = new Date(dateNaissance), now = new Date();
+      let age = now.getFullYear() - d.getFullYear();
+      if (now < new Date(now.getFullYear(), d.getMonth(), d.getDate())) age--;
+      return age < 18;
+    },
+    // Chargement — collection par document (users/{uid}/autorisations/{id}).
+    // Migre automatiquement l'ancien format blob du CRM (doc unique "items").
+    async loadAutorisations() {
+      try {
+        const col = this.db.collection('users').doc(this.user.uid).collection('autorisations');
+        const snap = await col.get();
+        const list = [];
+        for (const d of snap.docs) {
+          const data = d.data();
+          if (d.id === 'items' && Array.isArray(data.items)) {
+            for (const item of data.items) {
+              const id = item.id || ('a' + Date.now() + Math.random().toString(36).slice(2, 6));
+              const doc = { ...item, id };
+              await col.doc(id).set(doc);
+              list.push(doc);
+            }
+            await col.doc('items').delete();
+          } else {
+            list.push(data);
+          }
+        }
+        this.autorisations = list;
+      } catch(e) {
+        console.error('loadAutorisations', e);
+      }
+    },
+    openDroitImageModal() {
+      this.editingAutorisation = { id:null, prenom:'', nom:'', email:'', telephone:'', dateNaissance:'', tuteurLegal:'', projetId: this.currentProject?.id || '', usages:[], territoire:'France', duree:'1 an', remuneration:'gratuit', notes:'', statut:'brouillon', signatureToken:'', signatureData:null };
+      this.autorisationModalOpen = true;
+    },
+    openEditAutorisation(a) {
+      this.editingAutorisation = JSON.parse(JSON.stringify(a));
+      this.autorisationModalOpen = true;
+    },
+    toggleUsage(u) {
+      if (!this.editingAutorisation.usages) this.editingAutorisation.usages = [];
+      const i = this.editingAutorisation.usages.indexOf(u);
+      if (i > -1) this.editingAutorisation.usages.splice(i, 1); else this.editingAutorisation.usages.push(u);
+    },
+    async saveAutorisation() {
+      const a = this.editingAutorisation;
+      if (!a.prenom.trim() && !a.nom.trim()) { this.toast('Nom ou prénom requis', 'error'); return; }
+      if (this.isMineur(a.dateNaissance) && !a.tuteurLegal?.trim()) { this.toast('Représentant légal requis pour un mineur', 'error'); return; }
+      if (!a.id) { a.id = 'a' + Date.now(); a.dateCreation = new Date().toISOString(); }
+      try {
+        await this.db.collection('users').doc(this.user.uid).collection('autorisations').doc(a.id).set(JSON.parse(JSON.stringify(a)), { merge:true });
+        const i = this.autorisations.findIndex(x => x.id === a.id);
+        if (i > -1) this.autorisations[i] = a; else this.autorisations.push(a);
+        this.autorisationModalOpen = false;
+        this.toast('Autorisation enregistrée');
+      } catch(e) {
+        this.toast('Erreur Firestore', 'error');
+      }
+    },
+    async deleteAutorisation(a) {
+      if (!confirm('Supprimer cette autorisation ?')) return;
+      try {
+        await this.db.collection('users').doc(this.user.uid).collection('autorisations').doc(a.id).delete();
+        this.autorisations = this.autorisations.filter(x => x.id !== a.id);
+        this.toast('Autorisation supprimée');
+      } catch(e) {
+        this.toast('Erreur de suppression', 'error');
+      }
+    },
+    // Document légal — repris du CRM, alimenté par les réglages (SIRET, ville…).
+    texteAutorisationHtml(a) {
+      const projet = this.projects.find(p => p.id === a.projetId) || {};
+      const s = this.settings;
+      const prestataire = `${s.prenom||'Romain'} ${s.nom||'ANDRE'}`;
+      const esc = t => String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const mineur = this.isMineur(a.dateNaissance);
+      const lieu = a.lieuSignature || s.ville || 'Montpellier';
+      const dateStr = new Date().toLocaleDateString('fr-FR', {day:'numeric',month:'long',year:'numeric'});
+      const usages = (a.usages||[]).join(', ') || 'À définir';
+      const sigImg = (data, label) => data
+        ? `<div style="margin-bottom:4px;font-size:9pt;color:#555">${label}</div><img src="${data}" style="max-height:80px;border:1px solid #eee;border-radius:4px;display:block">`
+        : `<div style="height:70px;border:1px solid #ccc;border-radius:4px;margin-bottom:4px"></div><div style="font-size:9pt;color:#aaa">${label}</div>`;
+      return `
+        <div style="font-family:Georgia,serif;font-size:11pt;line-height:1.6;color:#000">
+        <div style="border-bottom:2px solid #024059;padding-bottom:16px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <div style="font-size:9pt;font-weight:bold;color:#3CD6D1;letter-spacing:.08em;text-transform:uppercase">${esc(s.nomCommercial||'Moustikprod')}</div>
+            <div style="font-size:7pt;color:#888;margin-top:2px">SIRET ${esc(s.siret||'')}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:13pt;font-weight:bold;text-transform:uppercase;letter-spacing:.06em;color:#024059">Autorisation droit à l'image</div>
+            <div style="font-size:9pt;color:#888;margin-top:2px">Projet : ${esc(projet.title||'—')}</div>
+          </div>
+        </div>
+        <p style="margin-bottom:16px"><strong>Je soussigné(e) :</strong></p>
+        <table style="width:100%;margin-bottom:20px;font-size:10.5pt;border-collapse:collapse">
+          <tr style="border-bottom:1px solid #eee"><td style="padding:5px 16px 5px 0;color:#555;width:150px">Nom / Prénom</td><td style="font-weight:bold">${esc(a.prenom)} ${esc(a.nom)}</td></tr>
+          ${a.dateNaissance?`<tr style="border-bottom:1px solid #eee"><td style="padding:5px 16px 5px 0;color:#555">Date de naissance</td><td>${new Date(a.dateNaissance).toLocaleDateString('fr-FR')}${mineur?' <strong style="color:#b45309"> — Mineur(e)</strong>':''}</td></tr>`:''}
+          ${a.email?`<tr style="border-bottom:1px solid #eee"><td style="padding:5px 16px 5px 0;color:#555">Email</td><td>${esc(a.email)}</td></tr>`:''}
+          ${a.telephone?`<tr style="border-bottom:1px solid #eee"><td style="padding:5px 16px 5px 0;color:#555">Téléphone</td><td>${esc(a.telephone)}</td></tr>`:''}
+        </table>
+        <p style="margin-bottom:10px">Autorise <strong>${esc(prestataire)} (${esc(s.nomCommercial||'Moustikprod')}, SIRET ${esc(s.siret||'')})</strong> à :</p>
+        <ul style="margin:0 0 16px 20px;line-height:2">
+          <li>Filmer, photographier et enregistrer mon image et ma voix</li>
+          <li>Utiliser ces enregistrements dans le cadre du projet : <strong>${esc(projet.title||'—')}</strong></li>
+          <li>Diffuser sur : <strong>${esc(usages)}</strong></li>
+          <li>Territoire : <strong>${esc(a.territoire||'France')}</strong></li>
+          <li>Durée : <strong>${esc(a.duree||'1 an')}</strong></li>
+        </ul>
+        <p style="margin-bottom:16px">Autorisation accordée à titre <strong>${esc(a.remuneration==='cachets'?'onéreux (avec cachets)':'gratuit')}</strong>.</p>
+        <p style="margin-bottom:6px"><strong>Droits :</strong></p>
+        <ul style="margin:0 0 20px 20px;line-height:1.8;font-size:10pt">
+          <li>Droit de retrait avant toute diffusion</li>
+          <li>Données traitées conformément au RGPD — contact : ${esc(s.emailPro||'contact@moustikprod.fr')}</li>
+        </ul>
+        ${mineur&&a.tuteurLegal?`<div style="border:1px solid #fcd34d;border-radius:6px;padding:12px;margin-bottom:20px;background:#fffbeb"><p style="margin:0 0 6px;font-weight:bold;color:#b45309">Représentant légal</p><p style="margin:0">Le/la soussigné(e) <strong>${esc(a.tuteurLegal)}</strong>, représentant légal du mineur, autorise en son nom la présente cession.</p></div>`:''}
+        ${a.notes?`<p style="margin-bottom:20px;padding:10px 12px;background:#f8f8f8;border-left:3px solid #3CD6D1;border-radius:4px;font-size:10pt"><strong>Notes :</strong> ${esc(a.notes)}</p>`:''}
+        <div style="margin-top:32px;padding-top:20px;border-top:1px solid #ddd">
+          <p style="margin:0 0 24px;font-size:10pt">Fait à <strong>${esc(lieu)}</strong>, le <strong>${dateStr}</strong></p>
+          <div style="display:grid;grid-template-columns:${mineur&&a.tuteurLegal?'1fr 1fr 1fr':'1fr 1fr'};gap:24px">
+            <div>${sigImg(a.signatureData, mineur?'Signature du/de la mineur(e)':'Signature du/de la signataire')}</div>
+            ${mineur&&a.tuteurLegal?`<div>${sigImg(a.signatureTuteurData,'Signature du tuteur légal<br>'+esc(a.tuteurLegal))}</div>`:''}
+            <div>
+              <div style="height:70px;border:1px solid #ccc;border-radius:4px;margin-bottom:4px"></div>
+              <div style="font-size:9pt;color:#555">Pour ${esc(s.nomCommercial||'Moustikprod')}<br>${esc(prestataire)}</div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:32px;padding-top:12px;border-top:1px solid #eee;text-align:center;font-size:8pt;color:#aaa">
+          Document généré par Moustikprod Studio — ${dateStr}
+        </div>
+        </div>
+      `;
+    },
+    imprimerAutorisation() {
+      if (!this.previewingAutorisation) return;
+      const w = window.open('', '_blank');
+      w.document.write(`<html><head><title>Autorisation droit à l'image</title></head><body style="padding:2cm">${this.texteAutorisationHtml(this.previewingAutorisation)}</body></html>`);
+      w.document.close();
+      setTimeout(() => w.print(), 300);
+    },
+    signLink(a) {
+      return `${location.origin}/sign.html?token=${a.signatureToken}`;
+    },
+    copySignLink(a) {
+      this.copyText(this.signLink(a));
+    },
+    // Création de la demande via /api/signature (authentifié, compte de service) :
+    // la collection signatureRequests reste inaccessible depuis le navigateur.
+    async envoyerPourSignature(a) {
+      const token = (crypto.randomUUID ? crypto.randomUUID() + crypto.randomUUID() : (Date.now() + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2))).replace(/-/g,'');
+      const projet = this.projects.find(p => p.id === a.projetId) || {};
+      const payload = {
+        token,
+        type: 'autorisation',
+        docId: a.id,
+        clientEmail: a.email || '',
+        titre: projet.title || '',
+        contenu: { ...JSON.parse(JSON.stringify(a)), clientNom: (a.prenom+' '+a.nom).trim(), projetTitre: projet.title || '' },
+        htmlContent: this.texteAutorisationHtml(a),
+        dateExpiration: new Date(Date.now() + 30*24*60*60*1000).toISOString(),
+      };
+      try {
+        const res = await this.apiFetch('/api/signature', { method:'POST', body: JSON.stringify({ action:'create', payload }) });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Erreur');
+      } catch(e) {
+        this.toast('Erreur création du lien : ' + e.message, 'error');
+        return;
+      }
+      a.signatureToken = token;
+      a.statut = 'envoyé';
+      a.signatureEnvoyeLe = new Date().toISOString();
+      await this.db.collection('users').doc(this.user.uid).collection('autorisations').doc(a.id).set({ signatureToken: token, statut:'envoyé', signatureEnvoyeLe: a.signatureEnvoyeLe }, { merge:true });
+      const lien = this.signLink(a);
+      try { await navigator.clipboard.writeText(lien); } catch(e) {}
+      this.toast('Lien de signature copié !');
+      if (a.email) {
+        try {
+          await this.apiFetch('/api/send-email', { method:'POST', body: JSON.stringify({
+            to: a.email,
+            subject: `Autorisation de droit à l'image à signer — ${this.settings.nomCommercial||'Moustikprod'}`,
+            html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto"><p>Bonjour ${a.prenom || ''},</p><p>Dans le cadre du projet <strong>${projet.title || ''}</strong>, merci de signer électroniquement l'autorisation d'exploitation de l'image via ce lien :</p><p style="text-align:center;margin:24px 0"><a href="${lien}" style="background:#3CD6D1;color:#024059;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">Signer le document</a></p><p>Ce lien expire dans 30 jours.</p><p>Merci !<br><strong>${this.settings.prenom||'Romain'} — ${this.settings.nomCommercial||'Moustikprod'}</strong></p></div>`,
+          })});
+          this.toast('Email envoyé à ' + a.email);
+        } catch(e) {
+          this.toast('Lien copié mais email non envoyé', 'error');
+        }
+      }
+    },
+    async verifierSignatures() {
+      const pending = this.autorisations.filter(a => a.signatureToken && a.statut !== 'signé');
+      if (!pending.length) { this.toast('Aucune signature en attente'); return; }
+      this.checkingSignatures = true;
+      try {
+        const res = await this.apiFetch('/api/signature', { method:'POST', body: JSON.stringify({ action:'status', tokens: pending.map(a => a.signatureToken) }) });
+        const data = await res.json();
+        let updated = 0;
+        for (const r of (data.results || [])) {
+          const a = pending.find(x => x.signatureToken === r.token);
+          if (!a) continue;
+          if (r.statut === 'signé') {
+            a.statut = 'signé';
+            a.signatureData = r.signatureData;
+            a.dateSignature = r.dateSignature;
+            a.nomSignataire = r.nomSignataire;
+            await this.db.collection('users').doc(this.user.uid).collection('autorisations').doc(a.id).set({ statut:'signé', signatureData: r.signatureData || null, dateSignature: r.dateSignature || null, nomSignataire: r.nomSignataire || null }, { merge:true });
+            updated++;
+          } else if (r.statut === 'refusé') {
+            a.statut = 'refusé';
+            await this.db.collection('users').doc(this.user.uid).collection('autorisations').doc(a.id).set({ statut:'refusé' }, { merge:true });
+            updated++;
+          }
+        }
+        this.toast(updated ? `${updated} signature(s) mise(s) à jour` : 'Rien de nouveau — toujours en attente');
+      } catch(e) {
+        this.toast('Erreur de vérification', 'error');
+      } finally {
+        this.checkingSignatures = false;
+      }
+    },
+
+    // ---------- CALENDRIER ----------
+    calTitle() {
+      return new Date(this.calYear, this.calMonth, 1).toLocaleDateString('fr-FR', { month:'long', year:'numeric' }).replace(/^./, c => c.toUpperCase());
+    },
+    calPrev() { this.calMonth--; if (this.calMonth < 0) { this.calMonth = 11; this.calYear--; } },
+    calNext() { this.calMonth++; if (this.calMonth > 11) { this.calMonth = 0; this.calYear++; } },
+    calendarEvents() {
+      const evs = [];
+      for (const p of this.projects) {
+        if (p.deadline && !['facture'].includes(p.status)) {
+          evs.push({ date: p.deadline, label: '🎬 ' + p.title, tag:'Deadline', cls:'bg-accent/15 text-accent', projectId: p.id, done: p.status==='livraison' });
+        }
+        if (p.status === 'tournage' && p.deadline) {
+          evs.push({ date: p.deadline, label: '📷 Tournage — ' + p.title, tag:'Tournage', cls:'bg-amber-100 text-amber-700', projectId: p.id });
+        }
+      }
+      for (const a of this.autorisations) {
+        if (a.statut === 'envoyé' && a.signatureEnvoyeLe) {
+          const exp = new Date(new Date(a.signatureEnvoyeLe).getTime() + 30*24*60*60*1000).toISOString().slice(0,10);
+          evs.push({ date: exp, label: '✍️ Expiration signature — ' + (a.prenom+' '+a.nom).trim(), tag:'Signature', cls:'bg-red-100 text-red-600', projectId: a.projetId || null });
+        }
+      }
+      return evs;
+    },
+    calDays() {
+      const first = new Date(this.calYear, this.calMonth, 1);
+      const daysInMonth = new Date(this.calYear, this.calMonth + 1, 0).getDate();
+      const offset = (first.getDay() + 6) % 7; // lundi = 0
+      const todayStr = new Date().toISOString().slice(0,10);
+      const evs = this.calendarEvents();
+      const cells = Array(offset).fill(null);
+      for (let n = 1; n <= daysInMonth; n++) {
+        const dateStr = `${this.calYear}-${String(this.calMonth+1).padStart(2,'0')}-${String(n).padStart(2,'0')}`;
+        cells.push({ n, dateStr, isToday: dateStr === todayStr, events: evs.filter(e => e.date === dateStr) });
+      }
+      return cells;
+    },
+    upcomingEvents() {
+      const todayStr = new Date().toISOString().slice(0,10);
+      return this.calendarEvents()
+        .filter(e => !e.done)
+        .map(e => ({ ...e, overdue: e.date < todayStr, dateLabel: new Date(e.date + 'T00:00:00').toLocaleDateString('fr-FR', { day:'numeric', month:'short' }) + (e.date < todayStr ? ' — en retard' : '') }))
+        .filter(e => e.overdue || (new Date(e.date) - new Date()) < 60*24*60*60*1000)
+        .sort((a,b) => a.date.localeCompare(b.date))
+        .slice(0, 12);
     },
 
     // ---------- DELETE PROJECT ----------

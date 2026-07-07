@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Signature de document — Moustikprod</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Georgia, serif; font-size: 11pt; color: #1a1a1a; background: #f8fafc; }
+
+    .doc-body { font-family: Georgia, serif; font-size: 11pt; line-height: 1.7; color: #1a2633; }
+    .doc-body h2 { font-size: 13pt; font-weight: bold; margin: 1.2em 0 0.4em; text-align: left; }
+    .doc-body p  { margin: 0.4em 0; text-align: left; }
+    #sig-canvas { touch-action: none; cursor: crosshair; }
+
+    @media print {
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { background: white; font-family: Georgia, serif; font-size: 11pt; color: #1a1a1a; }
+      .no-print { display: none !important; }
+      #state-signed { display: block !important; }
+      #state-signed .max-w-3xl { max-width: 100%; padding: 0; }
+      .print-document { padding: 0; }
+      .print-header { display: flex !important; justify-content: space-between; align-items: center; border-bottom: 3px solid #3CD6D1; padding-bottom: 16px; margin-bottom: 24px; }
+      .print-header .logo { font-size: 18pt; font-weight: 700; color: #024059; }
+      .print-header .ref { font-size: 9pt; color: #666; text-align: right; }
+      .doc-content-print { margin-bottom: 24px; }
+      .doc-content-print h2 { font-size: 11pt; font-weight: 700; color: #024059; text-transform: uppercase; border-bottom: 1px solid #3CD6D1; padding-bottom: 4px; margin-bottom: 10px; text-align: left !important; }
+      .doc-content-print p, .doc-content-print li { text-align: left !important; line-height: 1.7; }
+      table { width: 100%; border-collapse: collapse; }
+      th { background: #024059; color: white; padding: 8px 10px; text-align: left; }
+      td { padding: 7px 10px; border-bottom: 1px solid #eee; }
+      tr:nth-child(even) td { background: #f9f9f9; }
+      .statut-signe { text-align: center; background: #f0fff4; border: 1px solid #3CD6D1; border-radius: 8px; padding: 12px; margin-bottom: 20px; }
+      .signatures-block { display: grid !important; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 24px; padding-top: 20px; border-top: 2px solid #eee; }
+      .sig-box { text-align: center; }
+      .sig-label { font-size: 9pt; font-weight: 700; text-transform: uppercase; color: #024059; letter-spacing: 0.5px; margin-bottom: 12px; display: block; }
+      .sig-img { max-width: 180px; max-height: 70px; display: block; margin: 0 auto 8px; }
+      .sig-line { border-bottom: 1px solid #000; margin: 40px 10px 8px; }
+      .sig-name { font-size: 10pt; color: #333; }
+      .mention-legale { text-align: center; font-size: 8pt; color: #999; margin-top: 20px; padding-top: 12px; border-top: 1px solid #eee; }
+      .signed-card-wrapper { box-shadow: none !important; border: none !important; border-radius: 0 !important; padding: 0 !important; margin: 0 !important; }
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- Header -->
+  <header class="no-print bg-white border-b border-slate-200 shadow-sm sticky top-0 z-10">
+    <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <img src="/logo.png" style="height:36px" alt="Moustikprod">
+        <div>
+          <p class="font-bold text-slate-800 leading-none">Moustikprod</p>
+          <p class="text-xs text-slate-400">SIRET : 89033460000040</p>
+        </div>
+      </div>
+      <span id="badge-type" class="text-xs font-bold px-3 py-1 rounded-full bg-teal-50 text-teal-700 uppercase tracking-wide"></span>
+    </div>
+  </header>
+
+  <!-- Loading -->
+  <div id="state-loading" class="max-w-3xl mx-auto px-4 py-20 text-center">
+    <div class="inline-block w-8 h-8 border-4 border-teal-400 border-t-transparent rounded-full animate-spin mb-4"></div>
+    <p class="text-slate-500">Chargement du document…</p>
+  </div>
+
+  <!-- Error -->
+  <div id="state-error" class="hidden max-w-3xl mx-auto px-4 py-20 text-center">
+    <p class="text-4xl mb-4">⚠️</p>
+    <p id="error-msg" class="text-slate-600 font-medium text-lg"></p>
+    <p class="text-slate-400 text-sm mt-2">Contactez Moustikprod si le problème persiste.</p>
+  </div>
+
+  <!-- Already signed -->
+  <div id="state-signed" class="hidden max-w-3xl mx-auto px-4 py-8"></div>
+
+  <!-- Document + actions -->
+  <div id="state-doc" class="hidden max-w-3xl mx-auto px-4 py-8 pb-24">
+
+    <!-- Info banner -->
+    <div class="no-print bg-teal-50 border border-teal-200 rounded-2xl px-5 py-4 mb-6 flex items-start gap-3">
+      <span class="text-xl mt-0.5">📄</span>
+      <div>
+        <p class="font-bold text-teal-800 text-sm" id="doc-title">Document à signer</p>
+        <p id="doc-subtitle" class="text-teal-600 text-xs mt-0.5">Lisez attentivement le document ci-dessous avant de signer.</p>
+      </div>
+    </div>
+
+    <!-- Étape du pack (devis + contrat/CGV + droit à l'image) -->
+    <p id="pack-step-label" class="hidden no-print text-xs font-bold text-teal-600 uppercase tracking-wide mb-2 text-center"></p>
+
+    <!-- Document content -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-8 md:p-12 mb-8 doc-body">
+      <div id="doc-content"></div>
+    </div>
+
+    <!-- Actions des étapes 2 et 3 du pack -->
+    <div id="section-pack-actions" class="hidden no-print mb-6"></div>
+
+    <!-- CGV (devis uniquement) -->
+    <div id="section-cgv" class="hidden bg-white rounded-2xl shadow-sm border border-slate-100 p-8 md:p-12 mb-8">
+      <div class="flex items-center gap-3 mb-6">
+        <span class="text-xl">📋</span>
+        <div>
+          <p class="font-bold text-slate-700">Conditions Générales de Vente</p>
+          <p class="text-xs text-slate-400 mt-0.5">À lire avant de signer — ces CGV font partie intégrante du devis.</p>
+        </div>
+      </div>
+      <div class="text-sm text-slate-600 space-y-4 leading-relaxed" style="font-size:10pt">
+        <div><strong class="text-slate-800">Article 1 — Objet</strong><br>Les présentes CGV s'appliquent à toutes les prestations de production vidéo et audiovisuelle (tournage, montage, motion design, photographie) réalisées par Moustikprod — Auto-entrepreneur. Toute commande implique l'acceptation sans réserve des présentes conditions.</div>
+        <div><strong class="text-slate-800">Article 2 — Devis et commande</strong><br>Tout devis est valable 30 jours. Sa signature vaut acceptation des prestations, du prix et des présentes CGV. Aucune commande n'est ferme sans devis signé et acompte reçu.</div>
+        <div><strong class="text-slate-800">Article 3 — Prix et paiement</strong><br>Prix en euros HT. TVA non applicable, art. 293 B du CGI. Par défaut : 50 % à la signature, solde à la livraison. Tout retard de paiement entraîne des pénalités au taux BCE + 10 points, ainsi qu'une indemnité forfaitaire de 40 € pour frais de recouvrement (art. L441-10 C. com.).</div>
+        <div><strong class="text-slate-800">Article 4 — Droits de propriété intellectuelle</strong><br>Les droits d'exploitation sont cédés au Client après règlement intégral, pour l'usage défini au devis. Toute utilisation complémentaire requiert un avenant. Les droits des tiers (musiques, images de stock) restent à la charge du Client si celui-ci en impose l'usage.</div>
+        <div><strong class="text-slate-800">Article 5 — Délais de livraison</strong><br>Les délais sont indicatifs et peuvent varier en cas de force majeure, retard de fourniture d'éléments par le Client, ou demandes de modifications excédant le périmètre initial.</div>
+        <div><strong class="text-slate-800">Article 6 — Corrections</strong><br>2 allers-retours de correction sont inclus par défaut. Tout retour supplémentaire sera facturé au taux horaire en vigueur (50 € HT/h).</div>
+        <div><strong class="text-slate-800">Article 7 — Annulation</strong><br>Annulation après signature : l'acompte est acquis à titre de dédit. Annulation moins de 48h avant tournage : +30 % du total pour immobilisation. Annulation par le Prestataire : remboursement intégral de l'acompte.</div>
+        <div><strong class="text-slate-800">Article 8 — Confidentialité</strong><br>Les deux parties s'engagent à la confidentialité. Le Prestataire peut mentionner la collaboration dans ses références, sauf opposition écrite du Client.</div>
+        <div><strong class="text-slate-800">Article 9 — Responsabilité</strong><br>La responsabilité du Prestataire est limitée au montant de la prestation. Le Client garantit la légalité des contenus commandés.</div>
+        <div><strong class="text-slate-800">Article 10 — Droit applicable</strong><br>Droit français. Recherche amiable avant tout recours judiciaire. À défaut : tribunaux compétents du ressort du domicile du Prestataire.</div>
+      </div>
+      <p class="text-xs text-slate-400 mt-6 text-center">Moustikprod — SIRET 89033460000040 — CGV v1.0</p>
+    </div>
+
+    <!-- Decision buttons (devis only) -->
+    <div id="section-decision" class="hidden no-print mb-6">
+      <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
+        <button onclick="afficherPadSignature()"
+          style="background:#3CD6D1;color:#024059;border:none;padding:14px 28px;border-radius:8px;font-weight:bold;font-size:16px;cursor:pointer;min-width:200px;">
+          ✅ Accepter et signer
+        </button>
+        <button onclick="afficherFormulaireRefus()"
+          style="background:#fff;color:#e53e3e;border:2px solid #e53e3e;padding:14px 28px;border-radius:8px;font-weight:bold;font-size:16px;cursor:pointer;min-width:200px;">
+          ❌ Refuser le devis
+        </button>
+      </div>
+    </div>
+
+    <!-- Refuse form -->
+    <div id="section-refus" class="hidden no-print mb-6">
+      <div style="background:#fff;border:1px solid #eee;border-radius:12px;padding:24px;max-width:440px;margin:0 auto;">
+        <h3 style="color:#e53e3e;margin-bottom:16px;font-size:16px;">❌ Refuser le devis</h3>
+        <p style="color:#666;margin-bottom:16px;font-size:14px;">Pouvez-vous nous indiquer la raison de votre refus ?</p>
+        <select id="raison-refus" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;margin-bottom:12px;font-size:14px;">
+          <option value="">-- Sélectionner une raison --</option>
+          <option value="budget">Budget trop élevé</option>
+          <option value="delai">Délais non adaptés</option>
+          <option value="prestations">Prestations non adaptées</option>
+          <option value="concurrent">J'ai choisi un autre prestataire</option>
+          <option value="projet_annule">Projet annulé</option>
+          <option value="autre">Autre raison</option>
+        </select>
+        <textarea id="commentaire-refus" placeholder="Commentaire (optionnel)..."
+          style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;height:80px;resize:none;font-size:14px;margin-bottom:12px;"></textarea>
+        <div style="display:flex;gap:12px;">
+          <button onclick="annulerRefus()"
+            style="flex:1;background:#f5f5f5;border:none;padding:12px;border-radius:8px;cursor:pointer;font-size:14px;">
+            Annuler
+          </button>
+          <button onclick="confirmerRefus()" id="btn-confirmer-refus"
+            style="flex:1;background:#e53e3e;color:white;border:none;padding:12px;border-radius:8px;font-weight:bold;cursor:pointer;font-size:14px;">
+            Confirmer le refus
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Signature prestataire déjà présente -->
+    <div id="sig-prestataire-section" class="no-print hidden bg-white rounded-2xl shadow-sm border border-emerald-100 p-6 md:p-8 mb-6">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="text-xl">✅</span>
+        <div>
+          <p class="font-bold text-emerald-700 text-sm">Document déjà signé par le prestataire</p>
+          <p id="sig-prestataire-nom" class="text-xs text-gray-500 mt-0.5"></p>
+        </div>
+      </div>
+      <img id="sig-prestataire-img" src="" class="h-16 border border-emerald-100 rounded-lg bg-emerald-50/30 p-1">
+    </div>
+
+    <!-- Signature section (hidden for devis until accept clicked) -->
+    <div id="section-signature" class="no-print bg-white rounded-2xl shadow-sm border border-slate-100 p-6 md:p-8">
+      <h3 id="sig-title" class="font-bold text-slate-700 mb-5 text-base">✍️ Votre signature</h3>
+
+      <div class="mb-4">
+        <label class="block text-sm font-semibold text-slate-600 mb-1.5">Nom complet *</label>
+        <input id="input-nom" type="text" placeholder="Prénom Nom"
+          class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-300 focus:border-transparent">
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-semibold text-slate-600 mb-1.5">Date</label>
+        <input id="input-date" type="text" readonly
+          class="w-full border border-slate-100 bg-slate-50 rounded-xl px-4 py-2.5 text-sm text-slate-500 cursor-not-allowed">
+      </div>
+
+      <div class="mb-6">
+        <div class="flex items-center justify-between mb-1.5">
+          <label class="block text-sm font-semibold text-slate-600">Signature *</label>
+          <button onclick="clearPad()" class="text-xs text-slate-400 hover:text-red-400 transition-colors">🗑 Effacer</button>
+        </div>
+        <div class="rounded-2xl border-2 border-dashed border-teal-300 overflow-hidden bg-slate-50">
+          <canvas id="sig-canvas" class="w-full block" style="height:160px"></canvas>
+        </div>
+        <p class="text-xs text-slate-400 mt-1.5 text-center">Signez avec votre doigt ou votre souris</p>
+      </div>
+
+      <div id="section-cgv-check" class="hidden mb-5 bg-teal-50 border border-teal-200 rounded-xl px-4 py-3.5">
+        <label class="flex items-start gap-2.5 cursor-pointer">
+          <input id="check-cgv" type="checkbox" onchange="majBoutonSigner()" class="mt-0.5 w-4 h-4 accent-teal-500 cursor-pointer">
+          <span class="text-sm text-slate-700">J'ai lu et j'accepte les <a href="#section-cgv" class="font-semibold text-teal-700 underline">Conditions Générales de Vente</a> de Moustikprod</span>
+        </label>
+      </div>
+
+      <button id="btn-signer" onclick="soumettre()"
+        class="w-full py-3.5 rounded-2xl font-bold text-white text-base transition-all hover:opacity-90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+        style="background:linear-gradient(135deg,#3CD6D1,#024059)">
+        Je signe ce document ✅
+      </button>
+
+      <p class="text-xs text-slate-400 text-center mt-4 leading-relaxed">
+        Signature électronique valable conformément à l'article 1367 du Code civil.<br>
+        En signant, vous acceptez les termes du document ci-dessus.
+      </p>
+    </div>
+  </div>
+
+  <!-- Success (contrat / autorisation) -->
+  <div id="state-success" class="hidden max-w-3xl mx-auto px-4 py-24 text-center">
+    <div class="bg-white rounded-3xl shadow-sm border border-slate-100 p-12">
+      <p class="text-6xl mb-6" id="success-icon">✅</p>
+      <p class="text-slate-800 font-bold text-2xl mb-3" id="success-title">Document signé avec succès !</p>
+      <p class="text-slate-500 text-base mb-6" id="success-msg">Moustikprod a été notifié de votre signature.</p>
+      <div class="bg-slate-50 rounded-2xl px-6 py-4 text-sm text-slate-500 inline-block">
+        <p id="success-date"></p>
+      </div>
+      <p class="text-xs text-slate-400 mt-8 leading-relaxed max-w-md mx-auto">
+        Signature électronique valable conformément à l'article 1367 du Code civil.<br>
+        Conservez cette page comme preuve de signature.
+      </p>
+    </div>
+  </div>
+
+  <!-- Refused -->
+  <div id="state-refused" class="hidden max-w-3xl mx-auto px-4 py-20">
+    <div style="text-align:center;padding:40px 20px;max-width:500px;margin:0 auto;">
+      <div style="font-size:64px;margin-bottom:16px;">😢</div>
+      <h2 style="color:#024059;font-size:22px;margin-bottom:12px;">Aïe… on aurait pu faire des trucs géniaux ensemble !</h2>
+      <p style="color:#666;margin:12px 0;font-size:15px;">
+        Votre refus a bien été pris en compte.<br>
+        Moustikprod a été notifié — et il prend ça avec beaucoup de… <em>dignité</em>. 🎬
+      </p>
+      <div style="background:#f8f9fa;border-radius:12px;padding:20px;margin:24px auto;">
+        <p style="margin:0;font-size:13px;color:#888;font-style:italic;">
+          "Chaque 'non' est un 'oui' à quelque chose d'autre."<br>
+          — Romain, en train de regarder ses rushes en pleurant 😅
+        </p>
+      </div>
+      <p style="color:#666;font-size:14px;">
+        Si vous changez d'avis ou souhaitez discuter :<br>
+        <a href="mailto:contact@moustikprod.fr" style="color:#3CD6D1;font-weight:bold;">contact@moustikprod.fr</a>
+      </p>
+      <p style="color:#999;font-size:12px;margin-top:24px;">Moustikprod — On reviendra plus fort !</p>
+    </div>
+  </div>
+
+  <script>
+    const params  = new URLSearchParams(location.search);
+    const token   = params.get('token');
+    let   sigPad  = null;
+    let   docData = null;
+    let   isDevis = false;
+    let   isB2C   = false;
+    let   isPack  = false;
+    let   packTypeClient = 'b2b';
+    let   packDroitImageInclus = null;
+    let   cgvHtmlCache = document.getElementById('section-cgv') ? document.getElementById('section-cgv').innerHTML : '';
+
+    function majBoutonSigner() {
+      const check = document.getElementById('check-cgv');
+      const btn = document.getElementById('btn-signer');
+      if (!isB2C || isPack) return;
+      btn.disabled = !check.checked;
+    }
+
+    // ── Pack : étape 2 (contrat B2B ou CGV B2C) ──
+    function packGoStep2() {
+      const isB2Cpack = packTypeClient === 'b2c';
+      document.getElementById('pack-step-label').classList.remove('hidden');
+      document.getElementById('pack-step-label').textContent = `Étape 2/3 — ${isB2Cpack ? 'Conditions Générales de Vente' : 'Contrat'}`;
+      document.getElementById('doc-content').innerHTML = isB2Cpack
+        ? cgvHtmlCache
+        : (docData.htmlContrat || '<p>Aucun contrat à afficher.</p>');
+      const actions = document.getElementById('section-pack-actions');
+      actions.classList.remove('hidden');
+      if (isB2Cpack) {
+        actions.innerHTML = `
+          <div style="background:#ecfeff;border:1px solid #99f6e4;border-radius:12px;padding:16px;max-width:480px;margin:0 auto 16px">
+            <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer">
+              <input type="checkbox" id="pack-check-cgv" onchange="document.getElementById('pack-btn-step2').disabled=!this.checked">
+              <span style="font-size:14px;color:#334155">J'ai lu et j'accepte les Conditions Générales de Vente de Moustikprod</span>
+            </label>
+          </div>
+          <div style="text-align:center">
+            <button id="pack-btn-step2" disabled onclick="packAfterStep2()"
+              style="background:#3CD6D1;color:#024059;border:none;padding:14px 28px;border-radius:8px;font-weight:bold;font-size:16px;cursor:pointer;min-width:240px;opacity:.5">
+              ✅ J'accepte et je continue
+            </button>
+          </div>`;
+      } else {
+        actions.innerHTML = `
+          <div style="text-align:center">
+            <button onclick="packAfterStep2()"
+              style="background:#3CD6D1;color:#024059;border:none;padding:14px 28px;border-radius:8px;font-weight:bold;font-size:16px;cursor:pointer;min-width:260px;">
+              ✅ J'accepte ce contrat et je continue
+            </button>
+          </div>`;
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ── Pack : passe à l'étape 3 si proposée par Moustikprod, sinon direct à la signature ──
+    function packAfterStep2() {
+      if (docData.proposeDroitImage) { packGoStep3(); }
+      else { packGoSignature(false); }
+    }
+
+    // ── Pack : étape 3 (droit à l'image, ignorable) ──
+    function packGoStep3() {
+      document.getElementById('pack-step-label').textContent = `Étape 3/3 — Droit à l'image (facultatif)`;
+      document.getElementById('doc-content').innerHTML = docData.htmlDroitImage || '<p>Aucune clause à afficher.</p>';
+      const actions = document.getElementById('section-pack-actions');
+      actions.innerHTML = `
+        <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap">
+          <button onclick="packGoSignature(true)"
+            style="background:#a855f7;color:white;border:none;padding:14px 28px;border-radius:8px;font-weight:bold;font-size:16px;cursor:pointer;min-width:240px;">
+            📸 J'accepte et j'inclus cette clause
+          </button>
+          <button onclick="packGoSignature(false)"
+            style="background:#fff;color:#64748b;border:2px solid #cbd5e1;padding:14px 28px;border-radius:8px;font-weight:bold;font-size:16px;cursor:pointer;min-width:200px;">
+            ⏭ Ignorer cette étape
+          </button>
+        </div>`;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ── Pack : étape finale (signature unique) ──
+    function packGoSignature(droitImageOui) {
+      packDroitImageInclus = droitImageOui;
+      document.getElementById('section-pack-actions').classList.add('hidden');
+      document.getElementById('pack-step-label').textContent = `Signature finale`;
+      document.getElementById('doc-content').innerHTML = '<p style="color:#64748b;font-size:14px;text-align:center">Vous avez parcouru toutes les étapes. Signez ci-dessous pour valider l\'ensemble.</p>';
+      document.getElementById('section-signature').classList.remove('hidden');
+      const recap = (packTypeClient === 'b2c' ? 'devis + CGV' : 'devis + contrat') + (droitImageOui ? ' + droit à l\'image' : '');
+      document.getElementById('sig-title').textContent = '✍️ Signature finale — ' + recap;
+      document.getElementById('btn-signer').textContent = '✍️ Je signe et valide l\'ensemble ✅';
+      window.scrollTo({ top: document.getElementById('section-signature').offsetTop - 80, behavior: 'smooth' });
+    }
+
+    const STATES = ['loading','error','signed','doc','success','refused'];
+
+    function show(state) {
+      STATES.forEach(s => {
+        const el = document.getElementById('state-'+s);
+        if (el) el.classList.toggle('hidden', s !== state);
+      });
+    }
+
+    function clearPad() { sigPad?.clear(); }
+
+    // ── Devis decision flow ──
+
+    function afficherPadSignature() {
+      document.getElementById('section-decision').classList.add('hidden');
+      document.getElementById('section-refus').classList.add('hidden');
+      if (isPack) { packGoStep2(); return; }
+      document.getElementById('section-signature').classList.remove('hidden');
+      document.getElementById('sig-title').textContent = '✍️ Signer et accepter ce bon de commande';
+      document.getElementById('btn-signer').textContent = '✍️ Je signe et accepte ce devis ✅';
+      if (isB2C) {
+        document.getElementById('section-cgv-check').classList.remove('hidden');
+        document.getElementById('check-cgv').checked = false;
+        document.getElementById('btn-signer').disabled = true;
+      }
+      window.scrollTo({ top: document.getElementById('section-signature').offsetTop - 80, behavior: 'smooth' });
+    }
+
+    function afficherFormulaireRefus() {
+      document.getElementById('section-decision').classList.add('hidden');
+      document.getElementById('section-signature').classList.add('hidden');
+      document.getElementById('section-refus').classList.remove('hidden');
+      window.scrollTo({ top: document.getElementById('section-refus').offsetTop - 80, behavior: 'smooth' });
+    }
+
+    function annulerRefus() {
+      document.getElementById('section-refus').classList.add('hidden');
+      document.getElementById('section-decision').classList.remove('hidden');
+      window.scrollTo({ top: document.getElementById('section-decision').offsetTop - 80, behavior: 'smooth' });
+    }
+
+    async function confirmerRefus() {
+      const raison = document.getElementById('raison-refus').value;
+      const commentaire = document.getElementById('commentaire-refus').value.trim();
+      const btn = document.getElementById('btn-confirmer-refus');
+      btn.disabled = true;
+      btn.textContent = 'Envoi en cours…';
+      try {
+        const res = await fetch('/api/submit-signature', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, decision: 'refusé', raisonRefus: raison, commentaireRefus: commentaire }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.error || 'Erreur lors de l\'envoi.');
+          btn.disabled = false;
+          btn.textContent = 'Confirmer le refus';
+          return;
+        }
+        show('refused');
+      } catch(e) {
+        alert('Erreur réseau. Réessayez.');
+        btn.disabled = false;
+        btn.textContent = 'Confirmer le refus';
+      }
+    }
+
+    async function init() {
+      if (!token) { showError('Lien invalide — token manquant.'); return; }
+      try {
+        const res = await fetch(`/api/sign?token=${encodeURIComponent(token)}`);
+        const data = await res.json();
+        if (!res.ok) {
+          if (res.status === 409) { showSignedDocument(data); return; }
+          showError(data.error || 'Erreur lors du chargement.'); return;
+        }
+        docData = data;
+        renderDoc(data);
+        show('doc');
+      } catch(e) {
+        showError('Impossible de charger le document. Vérifiez votre connexion.');
+      }
+    }
+
+    function showError(msg) {
+      document.getElementById('error-msg').textContent = msg;
+      show('error');
+    }
+
+    function showSignedDocument(data) {
+      // Si refusé
+      if (data.statut === 'refusé') { show('refused'); return; }
+
+      show('signed');
+      const dateStr = data.dateSignature
+        ? new Date(data.dateSignature).toLocaleDateString('fr-FR', {day:'numeric',month:'long',year:'numeric'})
+          + ' à ' + new Date(data.dateSignature).toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'})
+        : '';
+      const sigPrestataire = data.contenu?.signaturePrestataire || '';
+      const sigClient = data.signatureData || '';
+      const nomSignataire = data.nomSignataire || data.contenu?.clientNom || data.clientNom || '';
+      const prestataire = data.contenu?.prestataire || 'Romain ANDRE / Moustikprod';
+
+      document.getElementById('state-signed').innerHTML = `
+        <div class="no-print bg-emerald-50 border border-emerald-200 rounded-2xl px-6 py-5 mb-6 text-center">
+          <p class="text-5xl mb-3">✅</p>
+          <p class="font-bold text-emerald-800 text-xl">Document signé par les deux parties</p>
+          ${dateStr ? `<p class="text-emerald-600 text-sm mt-1">Signé le ${dateStr}</p>` : ''}
+        </div>
+        <div class="statut-signe" style="display:none">
+          <strong style="color:#024059;font-size:13pt">✅ Document signé par les deux parties</strong>
+          ${dateStr ? `<p style="color:#666;font-size:10pt;margin-top:6px">Signé le ${dateStr}</p>` : ''}
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-8 md:p-12 mb-6 doc-body doc-content-print">
+          ${data.htmlContent || (
+            (data.htmlDevis||'') +
+            (data.htmlContrat||'') +
+            (data.cgvAcceptees ? cgvHtmlCache : '') +
+            (data.droitImageInclus && data.htmlDroitImage ? `<div style="margin-top:30px;border-top:2px solid #a855f7;padding-top:20px"><h2 style="font-size:13pt;font-weight:bold;color:#7c3aed">📸 Droit à l'image</h2>${data.htmlDroitImage}</div>` : '')
+          ) || '<p>Contenu non disponible.</p>'}
+        </div>
+        ${data.cgvAcceptees ? `<div class="no-print bg-teal-50 border border-teal-200 rounded-2xl px-5 py-3 mb-6 text-center text-sm text-teal-700 font-semibold">📄 Les CGV de Moustikprod ont été lues et acceptées.</div>` : ''}
+        ${data.type === 'pack' && data.droitImageInclus ? `<div class="no-print bg-purple-50 border border-purple-200 rounded-2xl px-5 py-3 mb-6 text-center text-sm text-purple-700 font-semibold">📸 Le droit à l'image a également été accepté et signé.</div>` : ''}
+        <div class="no-print bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6">
+          <h3 class="font-bold text-slate-700 mb-5 text-base">Signatures</h3>
+          <div class="grid grid-cols-2 gap-6">
+            <div class="text-center">
+              <p class="text-sm font-semibold text-slate-600 mb-3">Signature Prestataire</p>
+              ${sigPrestataire
+                ? `<img src="${sigPrestataire}" style="max-height:64px;max-width:180px;display:block;margin:0 auto 8px;border-bottom:1px solid #94a3b8;padding-bottom:4px">`
+                : '<div style="height:64px;border-bottom:1px solid #94a3b8;margin-bottom:8px"></div>'}
+              <p class="text-xs text-slate-500">${prestataire}</p>
+            </div>
+            <div class="text-center">
+              <p class="text-sm font-semibold text-slate-600 mb-3">Signature Client</p>
+              ${sigClient
+                ? `<img src="${sigClient}" style="max-height:64px;max-width:180px;display:block;margin:0 auto 8px;border-bottom:1px solid #94a3b8;padding-bottom:4px">`
+                : '<div style="height:64px;border-bottom:1px solid #94a3b8;margin-bottom:8px"></div>'}
+              <p class="text-xs text-slate-500">${nomSignataire}</p>
+            </div>
+          </div>
+        </div>
+        <div class="signatures-block" style="display:none">
+          <div class="sig-box">
+            <span class="sig-label">Le Prestataire</span>
+            ${sigPrestataire ? `<img src="${sigPrestataire}" class="sig-img">` : '<div class="sig-line"></div>'}
+            <p class="sig-name">${prestataire}</p>
+          </div>
+          <div class="sig-box">
+            <span class="sig-label">Le Client</span>
+            ${sigClient ? `<img src="${sigClient}" class="sig-img">` : '<div class="sig-line"></div>'}
+            <p class="sig-name">${nomSignataire}</p>
+          </div>
+        </div>
+        <p class="mention-legale" style="display:none">Signature électronique valable conformément à l'article 1367 du Code civil — Moustikprod — SIRET 89033460000040</p>
+        <div class="no-print text-center mt-6">
+          <button onclick="window.print()" class="inline-block px-6 py-3 rounded-xl font-bold text-white text-sm hover:opacity-90"
+            style="background:linear-gradient(135deg,#3CD6D1,#024059)">
+            ⬇️ Télécharger / Imprimer ma copie
+          </button>
+        </div>
+        <p class="no-print text-xs text-slate-400 text-center mt-4">
+          Signature électronique valable conformément à l'article 1367 du Code civil
+        </p>`;
+    }
+
+    function renderDoc(data) {
+      isPack = data.type === 'pack';
+      packTypeClient = data.typeClient || 'b2b';
+      isDevis = data.type === 'devis' || isPack;
+      isB2C = isDevis && data.typeClient === 'b2c';
+      const isFactureView = data.type === 'facture_view';
+      cgvHtmlCache = document.getElementById('section-cgv').innerHTML;
+
+      const badge = document.getElementById('badge-type');
+      if (isPack) badge.textContent = packTypeClient === 'b2c' ? 'DEVIS + CGV' : 'DEVIS + CONTRAT';
+      else if (isDevis) badge.textContent = 'BON DE COMMANDE';
+      else if (isFactureView) badge.textContent = 'FACTURE';
+      else if (data.type === 'contrat') badge.textContent = (data.contenu?.type || 'Contrat').toUpperCase();
+      else badge.textContent = 'Autorisation';
+
+      if (isPack)
+        document.getElementById('doc-title').textContent = `Signature groupée — ${data.contenu?.devisNumero || data.titre || ''}`;
+      else if (isDevis)
+        document.getElementById('doc-title').textContent = `Bon de commande — ${data.contenu?.devisNumero || data.titre || ''}`;
+      else if (isFactureView)
+        document.getElementById('doc-title').textContent = `Facture — ${data.factureNumero || ''}`;
+      else if (data.type === 'contrat')
+        document.getElementById('doc-title').textContent = `Contrat — ${data.contenu?.projetTitre || ''}`;
+      else
+        document.getElementById('doc-title').textContent = `Autorisation droit à l'image — ${data.contenu?.prenom || ''} ${data.contenu?.nom || ''}`;
+
+      if (isPack) {
+        document.getElementById('doc-subtitle').textContent = 'Parcourez les 3 étapes (devis, ' + (packTypeClient==='b2c'?'CGV':'contrat') + ', droit à l\'image) puis signez une seule fois pour valider l\'ensemble.';
+        document.getElementById('pack-step-label').classList.remove('hidden');
+        document.getElementById('pack-step-label').textContent = 'Étape 1/3 — Devis';
+      } else if (isDevis) {
+        document.getElementById('doc-subtitle').textContent = 'Lisez attentivement ce bon de commande puis acceptez ou refusez ci-dessous.';
+      } else if (isFactureView) {
+        document.getElementById('doc-subtitle').textContent = 'Votre facture — vous pouvez la télécharger ou l\'imprimer depuis cette page.';
+      }
+
+      document.getElementById('doc-content').innerHTML = data.htmlContent || data.htmlDevis || '<p>Document non disponible.</p>';
+
+      const nom = (data.type === 'contrat' || isDevis)
+        ? (data.contenu?.clientNom || data.clientNom || '')
+        : `${data.contenu?.prenom || ''} ${data.contenu?.nom || ''}`.trim();
+      document.getElementById('input-nom').value = nom;
+
+      document.getElementById('input-date').value =
+        new Date().toLocaleDateString('fr-FR', {day:'numeric', month:'long', year:'numeric'});
+
+      const canvas = document.getElementById('sig-canvas');
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width  = (rect.width  || 600) * dpr;
+      canvas.height = 160 * dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      sigPad = new SignaturePad(canvas, { minWidth: 1, maxWidth: 2.5, penColor: '#024059' });
+
+      const sigSection = document.getElementById('sig-prestataire-section');
+      const sigImg = document.getElementById('sig-prestataire-img');
+      const sigNom = document.getElementById('sig-prestataire-nom');
+      if (data.contenu?.signaturePrestataire && sigSection && sigImg) {
+        sigSection.classList.remove('hidden');
+        sigImg.src = data.contenu.signaturePrestataire;
+        const prestataire = data.contenu.prestataire || 'Romain ANDRE / Moustikprod';
+        if (sigNom) sigNom.textContent = `${prestataire} a signé ce document`;
+      }
+
+      // Pour une facture en lecture seule : cacher tout sauf le document
+      if (isFactureView) {
+        document.getElementById('section-signature').classList.add('hidden');
+        document.getElementById('sig-prestataire-section').classList.add('hidden');
+        // Injecter un bouton télécharger sous le document
+        const dlBtn = document.createElement('div');
+        dlBtn.className = 'no-print';
+        dlBtn.style.cssText = 'text-align:center;margin:0 0 32px';
+        dlBtn.innerHTML = `
+          <button onclick="window.print()"
+            style="background:linear-gradient(135deg,#3CD6D1,#024059);color:white;border:none;padding:14px 32px;border-radius:10px;font-weight:bold;font-size:15px;cursor:pointer;margin-right:12px">
+            ⬇️ Télécharger / Imprimer
+          </button>`;
+        document.getElementById('section-cgv').insertAdjacentElement('beforebegin', dlBtn);
+        return;
+      }
+
+      // Pour un devis : afficher les CGV + boutons accepter/refuser, cacher le pad
+      if (isDevis) {
+        if (!isPack) document.getElementById('section-cgv').classList.remove('hidden');
+        document.getElementById('section-decision').classList.remove('hidden');
+        document.getElementById('section-signature').classList.add('hidden');
+      }
+    }
+
+    async function soumettre() {
+      const nom = document.getElementById('input-nom').value.trim();
+      if (!nom) { alert('Veuillez indiquer votre nom complet.'); return; }
+      if (!sigPad || sigPad.isEmpty()) { alert('Veuillez apposer votre signature.'); return; }
+      if (isB2C && !isPack && !document.getElementById('check-cgv').checked) { alert('Veuillez accepter les CGV avant de signer.'); return; }
+
+      const signatureData = sigPad.toDataURL('image/png');
+      const btn = document.getElementById('btn-signer');
+      btn.disabled = true;
+      btn.textContent = 'Envoi en cours…';
+
+      try {
+        const body = { token, signatureData, nomSignataire: nom };
+        if (isDevis) body.decision = 'accepté';
+        if (isB2C) { body.cgvAcceptees = true; body.cgvAccepteesDate = new Date().toISOString(); }
+        if (isPack) { body.droitImageInclus = !!packDroitImageInclus; }
+
+        const res = await fetch('/api/submit-signature', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.error || 'Erreur lors de la soumission.');
+          btn.disabled = false;
+          btn.textContent = isDevis ? '✍️ Je signe et accepte ce devis ✅' : 'Je signe ce document ✅';
+          return;
+        }
+
+        // Construit le document complet (devis + contrat/CGV + droit à l'image) prêt à télécharger/imprimer
+        const merged = {
+          ...docData,
+          statut: 'signé',
+          signatureData,
+          nomSignataire: nom,
+          dateSignature: data.dateSignature,
+          cgvAcceptees: body.cgvAcceptees || false,
+          cgvAccepteesDate: body.cgvAccepteesDate || null,
+          droitImageInclus: isPack ? !!packDroitImageInclus : null,
+        };
+        showSignedDocument(merged);
+      } catch(e) {
+        alert('Erreur réseau. Réessayez.');
+        btn.disabled = false;
+        btn.textContent = isDevis ? '✍️ Je signe et accepte ce devis ✅' : 'Je signe ce document ✅';
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
