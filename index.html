@@ -2014,7 +2014,7 @@ function app() {
 
     // ---------- PAGE NOUVEAU PROJET — quick add + brief créatif optionnel ----------
     goToNewProject(prefillClient) {
-      this.newProject = { title:'', clientSelect: prefillClient||'', clientNew:'', type:'Film de marque', nbEpisodes:null, secteurClient:'', budget:'', deadline:'', briefOpen:false, briefContext:'', formatsLivraison:[] };
+      this.newProject = { title:'', clientSelect:'', clientNew:'', type:'Film de marque', nbEpisodes:null, secteurClient:'', budget:'', deadline:'', briefOpen:false, briefContext:'', formatsLivraison:[] };
       this.newProjectBriefError = '';
       this.view = 'nouveau-projet';
       if (prefillClient) this.$nextTick(() => { this.newProject.clientSelect = prefillClient; });
