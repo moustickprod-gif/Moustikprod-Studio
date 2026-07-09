@@ -942,6 +942,8 @@ tailwind.config = {
                   <button @click="signerAvecAdobe(c)" class="text-xs bg-[#ED2224]/10 text-[#b91c1c] border border-[#ED2224]/30 px-3 py-1.5 rounded-lg">Signer via Adobe</button>
                   <button x-show="c.statut!=='signé'" @click="envoyerContratPourSignature(c)" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Lien de signature</button>
                   <button x-show="c.signatureToken && c.statut!=='signé'" @click="copyText(signLink(c))" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">Copier le lien</button>
+                  <button x-show="c.statut==='signé' && c.montantHT && !c.abbyInvoiceId" @click="facturerAcompteAbby(c)" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded-lg">Facturer l'acompte (Abby)</button>
+                  <span x-show="c.abbyInvoiceId" class="text-xs font-mono text-emerald-600" x-text="'Acompte facturé ✓' + (c.abbyInvoiceNumber ? ' ' + c.abbyInvoiceNumber : '')"></span>
                   <button @click="deleteContrat(c)" class="text-xs text-muted hover:text-red-500 px-1 ml-auto">✕</button>
                 </div>
               </div>
@@ -2855,6 +2857,13 @@ function app() {
             else { obj.signatureData = r.signatureData; patch.signatureData = r.signatureData || null; }
             await ref.set(patch, { merge:true });
             updated++;
+            // Contrat signé → proposer la facture d'acompte dans Abby
+            if (col === 'contrats' && obj.montantHT && !obj.abbyInvoiceId) {
+              const acompteEur = Math.round(Number(obj.montantHT) * (obj.acompte || 30) / 100);
+              if (confirm(`Contrat ${obj.numero} signé ! Créer la facture d'acompte de ${acompteEur.toLocaleString('fr-FR')} € dans Abby ?`)) {
+                await this.facturerAcompteAbby(obj);
+              }
+            }
           } else if (r.statut === 'refusé') {
             obj.statut = 'refusé';
             await ref.set({ statut:'refusé', raisonRefus: r.raisonRefus || '' }, { merge:true });
@@ -3166,6 +3175,53 @@ function app() {
         }
       }
     },
+    // Résout l'identifiant client Abby utilisable pour la facturation
+    // (contact rattaché si organisation), en le créant au besoin.
+    async _abbyCustomer(client) {
+      if (!client.abbyId) await this.syncClientToAbby(client);
+      return client.abbyContactId || client.abbyId;
+    },
+    async _abbyEnsureOrgContact(client) {
+      const ct = await this.abbyCall('createOrganizationContact', { id: client.abbyId, body: { ...this._splitNom(client), ...(client.email ? { emails: [client.email] } : {}) } });
+      client.abbyContactId = ct.data.id;
+      await this.db.collection('users').doc(this.user.uid).collection('clients').doc(client.id).set({ abbyContactId: client.abbyContactId }, { merge:true });
+      return client.abbyContactId;
+    },
+    // Contrat signé → facture d'acompte en brouillon dans Abby.
+    async facturerAcompteAbby(c) {
+      const client = this.allClients.find(x => x.id === c.clientId);
+      if (!client) { this.toast('Client introuvable', 'error'); return; }
+      if (!c.montantHT) { this.toast('Pas de montant sur ce contrat', 'error'); return; }
+      const projet = this.projects.find(p => p.id === c.projetId) || {};
+      const acompteEur = Math.round(Number(c.montantHT) * (c.acompte || 30) / 100);
+      try {
+        const customerId = await this._abbyCustomer(client);
+        let invoice;
+        try {
+          invoice = await this.abbyCall('createInvoice', { customerId });
+        } catch(e) {
+          if (client.abbyKind === 'organization' && !client.abbyContactId) {
+            invoice = await this.abbyCall('createInvoice', { customerId: await this._abbyEnsureOrgContact(client) });
+          } else {
+            throw e;
+          }
+        }
+        await this.abbyCall('setLines', { billingId: invoice.data.id, lines: [{
+          designation: `Acompte ${c.acompte || 30}% — ${projet.title || c.typePrestation || 'Prestation'} (contrat ${c.numero || ''})`.trim(),
+          quantity: 1,
+          unitPrice: acompteEur * 100,
+          vatCode: 'FR_00HT',
+        }]});
+        c.abbyInvoiceId = invoice.data.id;
+        c.abbyInvoiceNumber = invoice.data.number || '';
+        await this.db.collection('users').doc(this.user.uid).collection('contrats').doc(c.id).set({ abbyInvoiceId: c.abbyInvoiceId, abbyInvoiceNumber: c.abbyInvoiceNumber }, { merge:true });
+        this.toast(`Facture d'acompte de ${acompteEur.toLocaleString('fr-FR')} € créée dans Abby ✓`);
+        window.open('https://app.abby.fr', '_blank');
+      } catch(e) {
+        this.toast('Acompte Abby : ' + e.message, 'error');
+      }
+    },
+
     // ---------- SIGNATURE PRESTATAIRE (Réglages) ----------
     initSigPad(canvas) {
       if (!window.SignaturePad) return;
