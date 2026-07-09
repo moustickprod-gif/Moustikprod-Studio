@@ -1710,7 +1710,7 @@ function app() {
         this.expandedIdeaId = entry.id;
         this.toast('Étude générée');
       } catch(e) {
-        this.manualIdeaError = 'Erreur Claude. Réessaie.';
+        this.manualIdeaError = (e && e.code === 'permission-denied') ? 'Accès refusé par Firestore : publie les règles (collection idees).' : ('Erreur : ' + ((e && e.message) || 'réessaie.'));
       } finally {
         this.manualIdeaLoading = false;
       }
@@ -1734,7 +1734,7 @@ function app() {
         this.expandedIdeaId = entry.id;
         this.toast('Analyse concurrentielle générée');
       } catch(e) {
-        this.competitiveError = 'Erreur Claude. Réessaie.';
+        this.competitiveError = (e && e.code === 'permission-denied') ? 'Accès refusé par Firestore : publie les règles (collection idees).' : ('Erreur : ' + ((e && e.message) || 'réessaie.'));
       } finally {
         this.competitiveLoading = false;
       }

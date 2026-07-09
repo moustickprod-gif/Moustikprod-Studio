@@ -11,12 +11,12 @@ service cloud.firestore {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
       match /idees/{ideeId} {
-        // Lecture/suppression réservées au propriétaire connecté.
-        allow read, delete: if request.auth != null && request.auth.uid == userId;
-        // Écriture refusée depuis le client : seule la fonction serverless
-        // /api/ideas-ingest.js (compte de service Google, hors Firestore Auth)
-        // peut créer/modifier ces documents via l'API REST authentifiée OAuth2.
-        allow create, update: if false;
+        // Le propriétaire connecté peut lire, supprimer ET générer à la demande
+        // ses propres études/idées depuis l'app ("Générer maintenant" /
+        // "Analyse concurrentielle"). La tâche hebdomadaire serverless
+        // (/api/ideas-ingest.js, compte de service Google) écrit aussi en
+        // parallèle via l'API REST OAuth2.
+        allow read, write: if request.auth != null && request.auth.uid == userId;
       }
       // Tout le reste (settings, devisListe, factures, transactions, catalogue,
       // contrats, autorisations, musiques, etc.) reste sous la règle générique
