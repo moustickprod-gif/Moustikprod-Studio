@@ -826,7 +826,7 @@ tailwind.config = {
             <template x-for="c in filteredClients" :key="c.id">
               <div @click="openClient(c)" class="bg-surface border border-line rounded-xl p-4 cursor-pointer hover:border-accent/50 transition">
                 <div class="flex items-center justify-between">
-                  <p class="font-display font-bold" x-text="c.name"></p>
+                  <p class="font-display font-bold" x-text="(c.prenom ? c.prenom + ' ' : '') + c.name"></p>
                   <span x-show="c.abbyId" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 shrink-0" title="Synchronisé avec Abby">Abby ✓</span>
                 </div>
                 <p class="text-muted text-xs mt-1" x-text="c.count + ' projet(s)' + (c.entreprise ? ' · ' + c.entreprise : '')"></p>
@@ -836,12 +836,19 @@ tailwind.config = {
 
           <div x-show="currentClient" class="mt-6 bg-surface border border-line rounded-xl p-5 max-w-2xl">
             <div class="flex items-center justify-between mb-4">
-              <h3 class="font-display font-bold text-lg" x-text="currentClient?.name"></h3>
+              <h3 class="font-display font-bold text-lg" x-text="(currentClient?.prenom ? currentClient.prenom + ' ' : '') + (currentClient?.name || '') + (currentClient?.entreprise ? ' · ' + currentClient.entreprise : '')"></h3>
               <div class="flex gap-2">
                 <button @click="openEditClient(currentClient?.id)" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">Modifier la fiche</button>
                 <button @click="goToNewProject(currentClient?.name)" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Nouveau projet pour ce client</button>
                 <button @click="deleteClient(currentClient?.id)" class="text-xs bg-surface border border-red-200 text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-50">Supprimer</button>
               </div>
+            </div>
+            <div class="text-sm space-y-1 mb-4">
+              <p x-show="currentClient?.email"><span class="font-mono text-[11px] uppercase text-muted mr-2">Email</span><span x-text="currentClient?.email"></span></p>
+              <p x-show="currentClient?.telephone"><span class="font-mono text-[11px] uppercase text-muted mr-2">Tél</span><span x-text="currentClient?.telephone"></span></p>
+              <p x-show="currentClient?.adresse || currentClient?.ville"><span class="font-mono text-[11px] uppercase text-muted mr-2">Adresse</span><span x-text="[currentClient?.adresse, [currentClient?.codePostal, currentClient?.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ')"></span></p>
+              <p x-show="currentClient?.siret"><span class="font-mono text-[11px] uppercase text-muted mr-2">SIRET</span><span x-text="currentClient?.siret"></span></p>
+              <p x-show="currentClient?.notes" class="text-muted italic pt-1" x-text="currentClient?.notes"></p>
             </div>
             <div class="space-y-2">
               <template x-for="p in projects.filter(p=>p.client===currentClient?.name)" :key="p.id">
@@ -1646,10 +1653,10 @@ function app() {
       try {
         const ctx = this.projects.map(p => `${p.title} (${p.client}) — ${p.type}, statut: ${p.status}`).join('\n') || 'Aucun projet en cours.';
         const text = await this.callClaude(
-          `Tu es analyste stratégique pour Moustikprod, agence vidéo freelance. Fais une courte étude (tendances du moment, opportunités pour les projets en cours) et propose 3 à 5 idées concrètes de contenu ou de prospection.\nRéponds en JSON avec ces clés exactes : etude (string, 4-6 phrases), idees (array de strings).`,
+          `Tu es analyste stratégique pour Moustikprod, agence vidéo freelance. Fais une courte étude (tendances du moment, opportunités pour les projets en cours) et propose 3 à 5 idées concrètes de contenu ou de prospection.\nRéponds UNIQUEMENT avec un objet JSON valide, sans texte avant ni après, sans balises markdown. Clés exactes : etude (string, 4-6 phrases), idees (array de strings).`,
           `Projets en cours:\n${ctx}`
         );
-        const j = this.extractJson(text);
+        const j = this.parseEtudeIdees(text);
         const { weekStart, weekLabel } = this.weekLabelNow();
         const id = 'idea_' + Date.now();
         const entry = { id, weekStart, weekLabel, etude: j.etude || '', idees: j.idees || [], createdAt: new Date().toISOString() };
@@ -1670,10 +1677,10 @@ function app() {
       try {
         const ctx = this.projects.map(p => `${p.title} (${p.type})`).join('\n') || 'Aucun projet en cours.';
         const text = await this.callClaude(
-          `Tu es consultant en veille concurrentielle pour Moustikprod, agence vidéo freelance (Film de marque, réseaux sociaux, storytelling). Analyse les tendances actuelles du marché de la production vidéo freelance/agence en France : formats qui montent, ce que font les concurrents (agences et freelances similaires), positionnement et tarifs observés, opportunités de différenciation. Propose ensuite 3 à 5 idées d'action concrètes (offre, contenu, prospection) basées sur cette analyse.\nRéponds en JSON avec ces clés exactes : etude (string, 5-8 phrases d'analyse concurrentielle), idees (array de strings, idées d'action concrètes).`,
+          `Tu es consultant en veille concurrentielle pour Moustikprod, agence vidéo freelance (Film de marque, réseaux sociaux, storytelling). Analyse les tendances actuelles du marché de la production vidéo freelance/agence en France : formats qui montent, ce que font les concurrents (agences et freelances similaires), positionnement et tarifs observés, opportunités de différenciation. Propose ensuite 3 à 5 idées d'action concrètes (offre, contenu, prospection) basées sur cette analyse.\nRéponds UNIQUEMENT avec un objet JSON valide, sans texte avant ni après, sans balises markdown. Clés exactes : etude (string, 5-8 phrases d'analyse concurrentielle), idees (array de strings, idées d'action concrètes).`,
           `Types de projets actuels chez Moustikprod:\n${ctx}`
         );
-        const j = this.extractJson(text);
+        const j = this.parseEtudeIdees(text);
         const { weekStart, weekLabel } = this.weekLabelNow();
         const id = 'idea_' + Date.now();
         const entry = { id, weekStart, weekLabel, etude: j.etude || '', idees: j.idees || [], type: 'concurrence', createdAt: new Date().toISOString() };
@@ -1841,9 +1848,33 @@ function app() {
       return data.content[0].text;
     },
     extractJson(text) {
-      const match = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-      if (!match) throw new Error('Réponse non JSON');
-      return JSON.parse(match[0]);
+      if (!text) throw new Error('Réponse vide');
+      let t = String(text).replace(/```json/gi, '').replace(/```/g, '').trim();
+      const match = t.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+      const candidate = match ? match[0] : t;
+      try {
+        return JSON.parse(candidate);
+      } catch (e) {
+        return JSON.parse(candidate.replace(/[\u0000-\u001F]+/g, ' '));
+      }
+    },
+    // Robuste : tente le JSON, sinon reconstruit etude + idees depuis du texte libre.
+    parseEtudeIdees(text) {
+      try {
+        const j = this.extractJson(text);
+        if (j && (j.etude || j.idees)) {
+          return { etude: j.etude || '', idees: Array.isArray(j.idees) ? j.idees : [] };
+        }
+      } catch (e) { /* fallback texte */ }
+      const lines = (text || '').split('\n').map(l => l.trim());
+      const isBullet = l => /^([-•*]|\d+[.)])\s+/.test(l);
+      const idees = lines.filter(isBullet)
+        .map(l => l.replace(/^([-•*]|\d+[.)])\s+/, '').replace(/\*\*/g, '').trim())
+        .filter(Boolean);
+      const etude = lines
+        .filter(l => l && !isBullet(l) && !/^#{1,6}\s/.test(l) && !/^```/.test(l))
+        .join(' ').replace(/\*\*/g, '').trim();
+      return { etude, idees };
     },
 
     // ---------- DASHBOARD AI ----------
@@ -1941,6 +1972,7 @@ function app() {
       this.newProject = { title:'', clientSelect: prefillClient||'', clientNew:'', type:'Film de marque', nbEpisodes:null, secteurClient:'', budget:'', deadline:'', briefOpen:false, briefContext:'', formatsLivraison:[] };
       this.newProjectBriefError = '';
       this.view = 'nouveau-projet';
+      if (prefillClient) this.$nextTick(() => { this.newProject.clientSelect = prefillClient; });
     },
     detectVideoTypeFromText(text) {
       const lower = text.toLowerCase();
@@ -2156,7 +2188,7 @@ function app() {
       this.scenarioLoading = true; this.scenarioError='';
       try {
         this.currentProject.scenario = await this.callClaude(
-          `Tu es scénariste vidéo professionnel. ${this.scenarioPromptFor(this.currentProject.type)}`,
+          `Tu es scénariste vidéo professionnel. ${this.scenarioPromptFor(this.currentProject.type)} Produis un scénario finalisé, prêt à tourner : n'inclus aucun champ à compléter entre crochets (ex : [Nom du scénariste]) ni ligne de signature.`,
           this.projectContext()
         );
         this.saveProjects();
@@ -2425,10 +2457,13 @@ function app() {
     get filteredClients() {
       const q = this.clientSearch.toLowerCase();
       return this.allClients
-        .map(c => ({ name: c.nom, id: c.id, entreprise: c.entreprise || '', abbyId: c.abbyId || '', count: this.projects.filter(p => p.clientId === c.id).length }))
+        .map(c => ({ name: c.nom, prenom: c.prenom || '', id: c.id, entreprise: c.entreprise || '', abbyId: c.abbyId || '', count: this.projects.filter(p => p.clientId === c.id).length }))
         .filter(c => !q || c.name.toLowerCase().includes(q) || c.entreprise.toLowerCase().includes(q));
     },
-    openClient(c) { this.currentClient = c; },
+    openClient(c) {
+      const full = this.allClients.find(x => x.id === c.id) || {};
+      this.currentClient = { ...full, ...c };
+    },
     openNewClient() {
       this.editingClient = { id:null, nom:'', prenom:'', entreprise:'', email:'', telephone:'', adresse:'', codePostal:'', ville:'', siret:'', typeClient:'b2b', notes:'', abbyId:'', abbyKind:'', abbyContactId:'' };
       this.clientModalOpen = true;
@@ -3065,7 +3100,6 @@ function app() {
           ${contrat.typePrestation ? `<tr><td style="padding:2px 12px 2px 0;color:#666">Type</td><td>${esc(contrat.typePrestation)}</td></tr>` : ''}
           ${totalHT ? `<tr><td style="padding:2px 12px 2px 0;color:#666">Montant</td><td style="font-weight:bold">${totalHT.toLocaleString('fr-FR')} € HT</td></tr>` : ''}
         </table>
-        ${projet.pitch ? `<p style="margin:8px 0;padding:10px 12px;background:#f8f8f8;border-left:3px solid #3CD6D1;border-radius:4px;font-size:10pt">${esc(projet.pitch)}</p>` : ''}
 
         ${h1('Article 1 — Objet et description de la mission')}
         ${p('Le Prestataire s\'engage à réaliser la prestation suivante : ' + (contrat.typePrestation || projet.type || 'Production vidéo') + (projet.title ? ' pour le projet « ' + projet.title + ' »' : '') + '.')}
