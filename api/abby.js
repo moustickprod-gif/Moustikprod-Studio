@@ -69,6 +69,10 @@ export default async function handler(req, res) {
         if (!payload.id) return res.status(400).json({ error: 'id requis' });
         r = await abby('POST', `/organization/${encodeURIComponent(payload.id)}/contact`, payload.body);
         break;
+      case 'createInvoice':
+        if (!payload.customerId) return res.status(400).json({ error: 'customerId requis' });
+        r = await abby('POST', `/v2/billing/invoice/${encodeURIComponent(payload.customerId)}`, payload.body || {});
+        break;
       case 'createEstimate':
         if (!payload.customerId) return res.status(400).json({ error: 'customerId requis' });
         r = await abby('POST', `/v2/billing/estimate/${encodeURIComponent(payload.customerId)}`, { estimateType: 'estimate' });
