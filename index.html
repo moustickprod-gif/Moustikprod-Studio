@@ -840,6 +840,7 @@ tailwind.config = {
               <div class="flex gap-2">
                 <button @click="openEditClient(currentClient?.id)" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">Modifier la fiche</button>
                 <button @click="goToNewProject(currentClient?.name)" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Nouveau projet pour ce client</button>
+                <button @click="deleteClient(currentClient?.id)" class="text-xs bg-surface border border-red-200 text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-50">Supprimer</button>
               </div>
             </div>
             <div class="space-y-2">
@@ -1054,7 +1055,13 @@ tailwind.config = {
                 Import JSON
                 <input type="file" @change="importData($event)" accept=".json" class="hidden">
               </label>
-              <button @click="resetData()" class="text-xs bg-accent/15 text-accent border border-accent/30 px-3 py-1.5 rounded-lg">Reset</button>
+              <button @click="resetData()" class="text-xs bg-accent/15 text-accent border border-accent/30 px-3 py-1.5 rounded-lg">Vider le cache local</button>
+            </div>
+            <div class="mt-4 pt-4 border-t border-line">
+              <p class="text-xs text-muted mb-2">Zone dangereuse — supprime définitivement clients, projets, idées, contrats et autorisations (Firestore). Les réglages et ta signature sont conservés. Rien n'est supprimé dans Abby.</p>
+              <button @click="resetAllData()" class="text-xs bg-red-500 text-white px-3 py-1.5 rounded-lg flex items-center gap-2">
+                <span x-show="resettingAll" class="spinner"></span> Tout remettre à zéro
+              </button>
             </div>
           </div>
         </div>
@@ -2446,6 +2453,49 @@ function app() {
         this.syncClientToAbby(c).catch(() => {});
       } catch(e) {
         this.toast('Erreur Firestore', 'error');
+      }
+    },
+
+    async deleteClient(id) {
+      const c = this.allClients.find(x => x.id === id);
+      if (!c) return;
+      const nb = this.projects.filter(p => p.clientId === id).length;
+      const msg = nb
+        ? `Supprimer la fiche de ${c.nom} ? ${nb} projet(s) resteront mais perdront leur lien client.`
+        : `Supprimer la fiche de ${c.nom} ?`;
+      if (!confirm(msg)) return;
+      try {
+        await this.db.collection('users').doc(this.user.uid).collection('clients').doc(id).delete();
+        this.allClients = this.allClients.filter(x => x.id !== id);
+        if (this.currentClient?.id === id) this.currentClient = null;
+        this.toast('Client supprimé' + (c.abbyId ? ' (toujours présent dans Abby)' : ''));
+      } catch(e) {
+        this.toast('Erreur de suppression', 'error');
+      }
+    },
+
+    // ---------- REMISE À ZÉRO ----------
+    resettingAll: false,
+    async resetAllData() {
+      const word = prompt('⚠️ Cette action supprime DÉFINITIVEMENT tous les clients, projets, idées, contrats et autorisations.\n\nTape RESET pour confirmer :');
+      if (word !== 'RESET') { this.toast('Remise à zéro annulée'); return; }
+      this.resettingAll = true;
+      try {
+        const cols = ['clients','projets','idees','autorisations','contrats','data','catalogue','musiques'];
+        let total = 0;
+        for (const col of cols) {
+          const snap = await this.db.collection('users').doc(this.user.uid).collection(col).get();
+          for (const d of snap.docs) { await d.ref.delete(); total++; }
+        }
+        localStorage.removeItem('mp_studio_history');
+        this.projects = []; this.allClients = []; this.ideasList = []; this.autorisations = []; this.contrats = [];
+        this.currentProject = null; this.currentClient = null; this.studioHistory = [];
+        this.view = 'dashboard';
+        this.toast(`App remise à zéro (${total} document(s) supprimé(s))`);
+      } catch(e) {
+        this.toast('Erreur pendant la remise à zéro : ' + e.message, 'error');
+      } finally {
+        this.resettingAll = false;
       }
     },
 
