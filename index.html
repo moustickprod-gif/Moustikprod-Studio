@@ -1045,6 +1045,35 @@ tailwind.config = {
       </template>
 
       <!-- ============ RÉGLAGES ============ -->
+      <template x-if="view==='catalogue'">
+        <div x-transition.opacity.duration.150ms>
+          <div class="flex items-center justify-between mb-5 gap-3">
+            <p class="text-muted text-sm">Tes prestations et tarifs — réutilisés dans les devis. Tout est modifiable.</p>
+            <button @click="openNewCatalogueItem()" class="bg-accent text-white text-sm font-medium px-3 py-1.5 rounded-lg shrink-0">+ Nouvelle prestation</button>
+          </div>
+          <div x-show="!catalogue.length" class="text-center py-20 text-muted">Catalogue vide. Ajoute ta première prestation.</div>
+          <div class="space-y-6">
+            <template x-for="grp in catalogueCategories" :key="grp.cat">
+              <div>
+                <p class="text-xs font-mono text-accent uppercase mb-2" x-text="grp.cat"></p>
+                <div class="space-y-2">
+                  <template x-for="it in grp.items" :key="it.id">
+                    <div class="bg-surface border border-line rounded-lg p-3 flex items-center justify-between gap-3">
+                      <span class="text-sm" x-text="it.designation"></span>
+                      <div class="flex items-center gap-3 shrink-0">
+                        <span class="text-sm font-mono whitespace-nowrap" x-text="Number(it.prix).toLocaleString('fr-FR') + ' ' + (it.unite||'€')"></span>
+                        <button @click="openCatalogueItem(it)" class="text-xs text-muted hover:text-accent">Modifier</button>
+                        <button @click="deleteCatalogueItem(it.id)" class="text-xs text-muted hover:text-red-500">✕</button>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
       <template x-if="view==='reglages'">
         <div class="max-w-2xl space-y-5" x-transition.opacity.duration.150ms>
           <div class="bg-surface border border-line rounded-xl p-5">
@@ -1186,30 +1215,88 @@ tailwind.config = {
 
 <!-- ===================== MODAL DEVIS ABBY ===================== -->
 <div x-show="devisModalOpen" x-cloak class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @keydown.escape.window="devisModalOpen=false">
-  <div class="modal-slide-enter bg-surface border border-line rounded-xl w-full max-w-md p-6" x-show="devisModalOpen">
-    <h3 class="font-display font-bold text-lg mb-1">Créer le devis dans Abby</h3>
-    <p class="text-xs text-muted mb-4" x-text="'Client : ' + (clientName(currentProject?.clientId) || '—') + ' · Projet : ' + (currentProject?.title || '')"></p>
+  <div class="modal-slide-enter bg-surface border border-line rounded-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto" x-show="devisModalOpen">
+    <div class="flex items-center justify-between mb-1 gap-3">
+      <h3 class="font-display font-bold text-lg" x-text="(devisType==='facture'?'Créer la facture':'Créer le devis') + ' dans Abby'"></h3>
+      <div class="flex gap-1 text-xs shrink-0">
+        <button @click="devisType='devis'" :class="devisType==='devis' ? 'bg-accent text-white' : 'bg-surface border border-line'" class="px-3 py-1 rounded-lg">Devis</button>
+        <button @click="devisType='facture'" :class="devisType==='facture' ? 'bg-accent text-white' : 'bg-surface border border-line'" class="px-3 py-1 rounded-lg">Facture</button>
+      </div>
+    </div>
+    <p class="text-xs text-muted mb-3" x-text="'Client : ' + (clientName(currentProject?.clientId) || '—') + ' · Projet : ' + (currentProject?.title || '')"></p>
+
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <button @click="suggererDevis()" :disabled="devisSuggestLoading" class="text-xs bg-accent2/15 text-accent border border-accent2/40 px-3 py-1.5 rounded-lg flex items-center gap-2 disabled:opacity-40">
+        <span x-show="devisSuggestLoading" class="spinner"></span> ✦ Claude suggère le devis
+      </button>
+      <select x-model="catalogueChoice" @change="ajouterDuCatalogue(catalogueChoice)" class="text-xs px-2 py-1.5 rounded-lg border border-line max-w-[220px]">
+        <option value="">+ Ajouter du catalogue…</option>
+        <template x-for="it in catalogue" :key="it.id"><option :value="it.id" x-text="it.designation + ' — ' + it.prix + ' ' + (it.unite||'€')"></option></template>
+      </select>
+      <button @click="ajouterLigneDevis()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg">+ Ligne libre</button>
+    </div>
+
+    <div class="space-y-2">
+      <div class="grid grid-cols-12 gap-2 text-[11px] font-mono text-muted uppercase px-1">
+        <span class="col-span-7">Désignation</span><span class="col-span-2 text-right">PU HT</span><span class="col-span-2 text-center">Qté</span><span class="col-span-1"></span>
+      </div>
+      <template x-for="(l,i) in devisLignes" :key="i">
+        <div class="grid grid-cols-12 gap-2 items-center">
+          <input x-model="l.designation" class="col-span-7 text-sm px-2 py-1.5 rounded-lg border border-line">
+          <input x-model.number="l.montant" type="number" class="col-span-2 text-sm px-2 py-1.5 rounded-lg border border-line text-right">
+          <input x-model.number="l.quantite" type="number" min="1" class="col-span-2 text-sm px-2 py-1.5 rounded-lg border border-line text-center">
+          <button @click="supprimerLigneDevis(i)" class="col-span-1 text-muted hover:text-red-500 text-sm">✕</button>
+        </div>
+      </template>
+      <p x-show="!devisLignes.length" class="text-xs text-muted py-3 text-center">Aucune ligne. Ajoute une prestation du catalogue, une ligne libre, ou demande à Claude.</p>
+    </div>
+
+    <div class="flex items-center justify-between mt-4 pt-3 border-t border-line">
+      <span class="text-sm text-muted">Total HT</span>
+      <span class="font-display font-bold text-lg" x-text="devisTotal.toLocaleString('fr-FR') + ' €'"></span>
+    </div>
+    <p class="text-xs text-muted mt-2">Créé en brouillon dans Abby (TVA non applicable, art. 293 B du CGI). Tu finalises et envoies depuis Abby.</p>
+    <div class="flex gap-2 justify-end pt-3">
+      <button @click="devisModalOpen=false" class="text-sm px-4 py-2 rounded-lg border border-line">Annuler</button>
+      <button @click="creerDevisAbby()" :disabled="devisCreating" class="text-sm bg-accent text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-40">
+        <span x-show="devisCreating" class="spinner"></span> <span x-text="devisType==='facture'?'Créer la facture':'Créer le devis'"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL CATALOGUE ===================== -->
+<div x-show="catalogueModalOpen" x-cloak class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @keydown.escape.window="catalogueModalOpen=false">
+  <div class="modal-slide-enter bg-surface border border-line rounded-xl w-full max-w-md p-6" x-show="catalogueModalOpen">
+    <h3 class="font-display font-bold text-lg mb-4" x-text="catalogueForm.id ? 'Modifier la prestation' : 'Nouvelle prestation'"></h3>
     <div class="space-y-3">
       <div>
-        <label class="text-xs font-mono text-muted uppercase block mb-1">Désignation</label>
-        <input x-model="devisForm.designation" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+        <label class="text-xs font-mono text-muted uppercase block mb-1">Catégorie</label>
+        <input x-model="catalogueForm.categorie" list="cat-cats-list" placeholder="Ex : Forfaits vidéo" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+        <datalist id="cat-cats-list"><template x-for="grp in catalogueCategories" :key="grp.cat"><option :value="grp.cat"></option></template></datalist>
+      </div>
+      <div>
+        <label class="text-xs font-mono text-muted uppercase block mb-1">Désignation *</label>
+        <input x-model="catalogueForm.designation" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="text-xs font-mono text-muted uppercase block mb-1">Montant HT (€)</label>
-          <input x-model.number="devisForm.montant" type="number" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+          <label class="text-xs font-mono text-muted uppercase block mb-1">Prix</label>
+          <input x-model.number="catalogueForm.prix" type="number" step="0.01" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
         </div>
         <div>
-          <label class="text-xs font-mono text-muted uppercase block mb-1">Quantité</label>
-          <input x-model.number="devisForm.quantite" type="number" min="1" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+          <label class="text-xs font-mono text-muted uppercase block mb-1">Unité</label>
+          <select x-model="catalogueForm.unite" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+            <option value="€">€ (forfait)</option>
+            <option value="€/mois">€ / mois</option>
+            <option value="€/h">€ / h</option>
+            <option value="€/km">€ / km</option>
+          </select>
         </div>
       </div>
-      <p class="text-xs text-muted">Le devis est créé en brouillon dans Abby (TVA non applicable). Tu le finalises et l'envoies depuis Abby.</p>
       <div class="flex gap-2 justify-end pt-2">
-        <button @click="devisModalOpen=false" class="text-sm px-4 py-2 rounded-lg border border-line">Annuler</button>
-        <button @click="creerDevisAbby()" :disabled="devisCreating" class="text-sm bg-accent text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-40">
-          <span x-show="devisCreating" class="spinner"></span> Créer le devis
-        </button>
+        <button @click="catalogueModalOpen=false" class="text-sm px-4 py-2 rounded-lg border border-line">Annuler</button>
+        <button @click="saveCatalogueItem()" class="text-sm bg-accent text-white px-4 py-2 rounded-lg">Enregistrer</button>
       </div>
     </div>
   </div>
@@ -1427,6 +1514,7 @@ function app() {
       { id:'calendrier', label:'Calendrier', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>' },
       { id:'contrats', label:'Contrats', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>' },
       { id:'droitimage', label:'Droit à l\'image', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>' },
+      { id:'catalogue', label:'Catalogue', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h12"/><circle cx="19" cy="18" r="2"/></svg>' },
       { id:'reglages', label:'Réglages', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 008.6 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H2a2 2 0 110-4h.09A1.65 1.65 0 003.6 8.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H8a1.65 1.65 0 001-1.51V2a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V8a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>' },
     ],
 
@@ -1502,6 +1590,8 @@ function app() {
     // devis Abby
     devisModalOpen: false, devisCreating: false,
     devisForm: { designation:'', montant:null, quantite:1 },
+    devisLignes: [], devisType: 'devis', devisSuggestLoading: false, catalogueChoice: '',
+    catalogue: [], catalogueModalOpen: false, catalogueForm: { id:null, categorie:'', designation:'', prix:null, unite:'€' },
 
     // droit à l'image
     autorisations: [],
@@ -1652,6 +1742,7 @@ function app() {
         this.loadIdeas();
         this.loadAutorisations();
         this.loadContrats();
+        this.loadCatalogue();
         this.syncStatus = 'ok';
         this.lastSyncAt = new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
       } catch(e) {
@@ -2697,55 +2788,166 @@ function app() {
       }
     },
     // ---------- DEVIS ABBY ----------
+    // ---------- CATALOGUE DE PRESTATIONS ----------
+    defaultCatalogue() {
+      const raw = [
+        ["Forfaits vidéo","Reel / TikTok / Short (≤ 30 s, monté)",300,"€"],
+        ["Forfaits vidéo","Pack 3 Reels (tournés le même jour)",750,"€"],
+        ["Forfaits vidéo","Vidéo réseaux sociaux 60 s",450,"€"],
+        ["Forfaits vidéo","Film de marque court (1 à 2 min)",1200,"€"],
+        ["Forfaits vidéo","Interview / témoignage client (monté)",650,"€"],
+        ["Forfaits vidéo","Captation événement — demi-journée",450,"€"],
+        ["Forfaits vidéo","Captation événement — journée",750,"€"],
+        ["Forfaits vidéo","Aftermovie événement (2–3 min)",900,"€"],
+        ["Tournage seul","Demi-journée de tournage (≤ 4 h)",300,"€"],
+        ["Tournage seul","Journée de tournage (≤ 8 h)",500,"€"],
+        ["Montage seul","Montage court réseaux (Reel/TikTok/Short ≤ 60 s)",130,"€"],
+        ["Montage seul","Montage vidéo standard (1–3 min)",300,"€"],
+        ["Montage seul","Montage format long (YouTube/podcast/interview 10–20 min)",450,"€"],
+        ["Montage seul","Sous-titres animés / motion design simple",120,"€"],
+        ["Montage seul","Étalonnage / color grading",100,"€"],
+        ["Montage seul","Mixage / sound design",80,"€"],
+        ["Montage seul","Montage à l'heure",50,"€/h"],
+        ["Options","Version verticale supplémentaire",120,"€"],
+        ["Options","Sous-titrage incrusté (simple)",40,"€"],
+        ["Options","Révision supplémentaire (au-delà des 2 incluses)",60,"€"],
+        ["Options","Captation drone (avec télépilote)",250,"€"],
+        ["Options","Musique sous licence commerciale",40,"€"],
+        ["Options","Déplacement (au-delà de 30 km)",0.5,"€/km"],
+        ["Forfaits mensuels — Montage seul","Essentiel : 4 vidéos courtes montées / mois",400,"€/mois"],
+        ["Forfaits mensuels — Montage seul","Actif : 8 vidéos courtes montées / mois",720,"€/mois"],
+        ["Forfaits mensuels — Montage seul","Intensif : 12 vidéos courtes + 1 format long / mois",1100,"€/mois"],
+        ["Forfaits mensuels — Tournage + montage","Présence : ½ journée + 4 vidéos / mois",750,"€/mois"],
+        ["Forfaits mensuels — Tournage + montage","Croissance : 1 journée + 8 vidéos / mois",1300,"€/mois"],
+        ["Forfaits mensuels — Tournage + montage","Signature : 2 journées + 12 vidéos multi-formats / mois",2200,"€/mois"],
+      ];
+      return raw.map((r,i) => ({ id:'cat_'+(i+1), categorie:r[0], designation:r[1], prix:r[2], unite:r[3] }));
+    },
+    async loadCatalogue() {
+      try {
+        const col = this.db.collection('users').doc(this.user.uid).collection('catalogue');
+        const snap = await col.get();
+        let list = snap.docs.map(d => d.data()).filter(x => x && x.designation);
+        if (!list.length) {
+          list = this.defaultCatalogue();
+          for (const it of list) { try { await col.doc(it.id).set(it); } catch(e){} }
+        }
+        this.catalogue = list;
+      } catch(e) { console.error('loadCatalogue', e); }
+    },
+    get catalogueCategories() {
+      const cats = [];
+      for (const x of this.catalogue) { const c = x.categorie || 'Autres'; if (!cats.includes(c)) cats.push(c); }
+      return cats.map(cat => ({ cat, items: this.catalogue.filter(x => (x.categorie||'Autres') === cat) }));
+    },
+    openNewCatalogueItem() { this.catalogueForm = { id:null, categorie:'', designation:'', prix:null, unite:'€' }; this.catalogueModalOpen = true; },
+    openCatalogueItem(it) { this.catalogueForm = JSON.parse(JSON.stringify(it)); this.catalogueModalOpen = true; },
+    async saveCatalogueItem() {
+      const c = this.catalogueForm;
+      if (!c.designation || !c.designation.trim()) { this.toast('Désignation requise', 'error'); return; }
+      if (!c.id) c.id = 'cat_' + Date.now();
+      c.prix = Number(c.prix) || 0;
+      if (!c.unite) c.unite = '€';
+      try {
+        await this.db.collection('users').doc(this.user.uid).collection('catalogue').doc(c.id).set(JSON.parse(JSON.stringify(c)));
+        const i = this.catalogue.findIndex(x => x.id === c.id);
+        if (i >= 0) this.catalogue[i] = { ...c }; else this.catalogue.push({ ...c });
+        this.catalogueModalOpen = false;
+        this.toast('Prestation enregistrée');
+      } catch(e) { this.toast('Erreur enregistrement', 'error'); }
+    },
+    async deleteCatalogueItem(id) {
+      if (!confirm('Supprimer cette prestation ?')) return;
+      try {
+        await this.db.collection('users').doc(this.user.uid).collection('catalogue').doc(id).delete();
+        this.catalogue = this.catalogue.filter(x => x.id !== id);
+        this.toast('Prestation supprimée');
+      } catch(e) { this.toast('Erreur suppression', 'error'); }
+    },
+
+    // ---------- DEVIS / FACTURE ABBY (multi-lignes + catalogue + Claude) ----------
     openDevisAbby() {
       const p = this.currentProject;
       if (!p) return;
       if (!p.clientId) { this.toast('Associe d\'abord un client au projet', 'error'); return; }
-      this.devisForm = {
-        designation: (p.type ? p.type + ' — ' : '') + p.title,
-        montant: p.budget ? Number(String(p.budget).replace(/[^\d.]/g,'')) || null : null,
-        quantite: 1,
-      };
+      this.devisType = 'devis';
+      this.catalogueChoice = '';
+      this.devisLignes = [{ designation: (p.type ? p.type + ' — ' : '') + p.title, montant: p.budget ? Number(String(p.budget).replace(/[^\d.]/g,'')) || null : null, quantite: 1 }];
       this.devisModalOpen = true;
+    },
+    ajouterLigneDevis() { this.devisLignes.push({ designation:'', montant:null, quantite:1 }); },
+    ajouterDuCatalogue(id) {
+      const it = this.catalogue.find(x => x.id === id);
+      if (!it) return;
+      this.devisLignes.push({ designation: it.designation, montant: it.prix, quantite: 1 });
+      this.catalogueChoice = '';
+    },
+    supprimerLigneDevis(i) { this.devisLignes.splice(i, 1); },
+    get devisTotal() { return this.devisLignes.reduce((sum, l) => sum + (Number(l.montant)||0) * (Number(l.quantite)||1), 0); },
+    async suggererDevis() {
+      const p = this.currentProject;
+      if (!p) return;
+      this.devisSuggestLoading = true;
+      try {
+        const cat = this.catalogue.map(x => `- ${x.designation} : ${x.prix} ${x.unite||'€'}`).join('\n') || '(catalogue vide)';
+        const ctx = `Projet : ${p.title}\nType : ${p.type||''}\nBudget indicatif : ${p.budget||'non précisé'}\nBrief : ${(p.pitch||'').slice(0,600)}`;
+        const text = await this.callClaude(
+          `Tu es assistant devis pour Moustikprod, vidéaste freelance. À partir du catalogue de prestations et du projet, propose les lignes de devis pertinentes. Choisis en priorité des prestations du catalogue (reprends la désignation et le prix), ajuste les quantités, et n'ajoute une ligne libre que si nécessaire. Réponds UNIQUEMENT avec un tableau JSON valide, sans texte ni balises markdown : [{"designation": string, "montant": number (prix unitaire HT en euros), "quantite": number}].`,
+          `CATALOGUE:\n${cat}\n\nPROJET:\n${ctx}`
+        );
+        let arr = this.extractJson(text);
+        if (!Array.isArray(arr) && arr && Array.isArray(arr.lignes)) arr = arr.lignes;
+        const lignes = (Array.isArray(arr) ? arr : []).map(l => ({ designation: String((l&&l.designation)||'').trim(), montant: Number(l&&l.montant)||0, quantite: Number(l&&l.quantite)||1 })).filter(l => l.designation);
+        if (lignes.length) { this.devisLignes = lignes; this.toast('Devis suggéré par Claude ✓'); }
+        else { this.toast('Pas de suggestion exploitable', 'error'); }
+      } catch(e) {
+        this.toast('Erreur suggestion : ' + ((e&&e.message)||'réessaie'), 'error');
+      } finally {
+        this.devisSuggestLoading = false;
+      }
     },
     async creerDevisAbby() {
       const p = this.currentProject;
       const client = this.allClients.find(c => c.id === p.clientId);
       if (!client) { this.toast('Client introuvable', 'error'); return; }
-      if (!this.devisForm.montant) { this.toast('Indique le montant HT', 'error'); return; }
+      const lignes = this.devisLignes.filter(l => l.designation && Number(l.montant));
+      if (!lignes.length) { this.toast('Ajoute au moins une ligne avec un montant', 'error'); return; }
       this.devisCreating = true;
+      const action = this.devisType === 'facture' ? 'createInvoice' : 'createEstimate';
+      const label = this.devisType === 'facture' ? 'Facture' : 'Devis';
       try {
         if (!client.abbyId) await this.syncClientToAbby(client);
         let customerId = client.abbyContactId || client.abbyId;
-        let estimate;
+        let billing;
         try {
-          estimate = await this.abbyCall('createEstimate', { customerId });
+          billing = await this.abbyCall(action, { customerId });
         } catch(e) {
-          // Une organisation peut nécessiter un contact rattaché comme destinataire
           if (client.abbyKind === 'organization' && !client.abbyContactId) {
             const ct = await this.abbyCall('createOrganizationContact', { id: client.abbyId, body: { ...this._splitNom(client), ...(client.email ? { emails: [client.email] } : {}) } });
             client.abbyContactId = ct.data.id;
             await this.db.collection('users').doc(this.user.uid).collection('clients').doc(client.id).set({ abbyContactId: client.abbyContactId }, { merge:true });
-            estimate = await this.abbyCall('createEstimate', { customerId: client.abbyContactId });
-          } else {
-            throw e;
-          }
+            billing = await this.abbyCall(action, { customerId: client.abbyContactId });
+          } else { throw e; }
         }
-        const billingId = estimate.data.id;
-        await this.abbyCall('setLines', { billingId, lines: [{
-          designation: this.devisForm.designation || p.title,
-          quantity: Number(this.devisForm.quantite) || 1,
-          unitPrice: Math.round(Number(this.devisForm.montant) * 100),
+        const billingId = billing.data.id;
+        await this.abbyCall('setLines', { billingId, lines: lignes.map(l => ({
+          designation: l.designation,
+          quantity: Number(l.quantite) || 1,
+          unitPrice: Math.round(Number(l.montant) * 100),
           vatCode: 'FR_00HT',
-        }]});
-        p.abbyEstimateId = billingId;
-        p.abbyEstimateNumber = estimate.data.number || '';
-        await this.db.collection('users').doc(this.user.uid).collection('projets').doc(p.id).set({ abbyEstimateId: billingId, abbyEstimateNumber: p.abbyEstimateNumber }, { merge:true });
+        })) });
+        if (this.devisType === 'facture') {
+          p.abbyInvoiceId = billingId; p.abbyInvoiceNumber = billing.data.number || '';
+          await this.db.collection('users').doc(this.user.uid).collection('projets').doc(p.id).set({ abbyInvoiceId: billingId, abbyInvoiceNumber: p.abbyInvoiceNumber }, { merge:true });
+        } else {
+          p.abbyEstimateId = billingId; p.abbyEstimateNumber = billing.data.number || '';
+          await this.db.collection('users').doc(this.user.uid).collection('projets').doc(p.id).set({ abbyEstimateId: billingId, abbyEstimateNumber: p.abbyEstimateNumber }, { merge:true });
+        }
         this.devisModalOpen = false;
-        this.toast('Devis créé dans Abby ✓');
+        this.toast(label + ' créé' + (this.devisType==='facture'?'e':'') + ' dans Abby ✓');
         window.open('https://app.abby.fr', '_blank');
       } catch(e) {
-        this.toast('Devis Abby : ' + e.message, 'error');
+        this.toast('Abby : ' + e.message, 'error');
       } finally {
         this.devisCreating = false;
       }
