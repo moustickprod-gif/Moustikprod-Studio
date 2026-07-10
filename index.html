@@ -2629,6 +2629,13 @@ function app() {
             const r = await this.abbyCall('createOrganization', { body });
             c.abbyId = r.data.id; c.abbyKind = 'organization';
           }
+          // Contact rattaché à l'entreprise : rend le client visible ET facturable dans Abby
+          if (c.abbyId && !c.abbyContactId && (c.prenom || c.nom)) {
+            try {
+              const ct = await this.abbyCall('createOrganizationContact', { id: c.abbyId, body: { ...this._splitNom(c), ...(c.telephone ? { phone: c.telephone } : {}), ...(c.email ? { emails: [c.email] } : {}) } });
+              if (ct && ct.data) c.abbyContactId = ct.data.id;
+            } catch(e) { /* contact rattaché optionnel : ne pas faire échouer la synchro */ }
+          }
         } else {
           const body = {
             ...this._splitNom(c),
@@ -2644,7 +2651,7 @@ function app() {
             c.abbyId = r.data.id; c.abbyKind = 'contact';
           }
         }
-        await this.db.collection('users').doc(this.user.uid).collection('clients').doc(c.id).set({ abbyId: c.abbyId, abbyKind: c.abbyKind }, { merge:true });
+        await this.db.collection('users').doc(this.user.uid).collection('clients').doc(c.id).set({ abbyId: c.abbyId, abbyKind: c.abbyKind, abbyContactId: c.abbyContactId || '' }, { merge:true });
         this.toast((c.entreprise || c.nom) + ' synchronisé avec Abby ✓');
         return c.abbyId;
       } catch(e) {
@@ -2667,7 +2674,7 @@ function app() {
             if (org) { c.abbyId = org.id; c.abbyKind = 'organization'; }
             else if (contact) { c.abbyId = contact.id; c.abbyKind = 'contact'; }
             if (c.abbyId) {
-              await this.db.collection('users').doc(this.user.uid).collection('clients').doc(c.id).set({ abbyId: c.abbyId, abbyKind: c.abbyKind }, { merge:true });
+              await this.db.collection('users').doc(this.user.uid).collection('clients').doc(c.id).set({ abbyId: c.abbyId, abbyKind: c.abbyKind, abbyContactId: c.abbyContactId || '' }, { merge:true });
             } else {
               await this.syncClientToAbby(c);
             }
