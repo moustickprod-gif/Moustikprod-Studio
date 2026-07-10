@@ -3308,11 +3308,13 @@ function app() {
       el.innerHTML = this.projetExportHtml();
       document.body.appendChild(el);
       try {
+        await new Promise(r => setTimeout(r, 250));
+        const _h = el.scrollHeight;
         await html2pdf().set({
           margin: [12, 12],
           filename: `${(p.title||'projet').replace(/[^\w\-]+/g,'_')}.pdf`,
           image: { type:'jpeg', quality: 0.95 },
-          html2canvas: { scale: 2, useCORS: true },
+          html2canvas: { scale: 2, useCORS: true, height: _h, windowHeight: _h + 100, windowWidth: 800 },
           jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
           pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
         }).from(el).save();
@@ -3331,11 +3333,13 @@ function app() {
       el.innerHTML = this.texteContratHtml(c);
       document.body.appendChild(el);
       try {
+        await new Promise(r => setTimeout(r, 250)); // laisse le layout + le logo se charger
+        const _h = el.scrollHeight;                  // html2canvas mesure 0 sans hauteur explicite
         await html2pdf().set({
           margin: [12, 12],
           filename: `${c.numero || 'Contrat'} - ${this.clientName(c.clientId) || 'client'}.pdf`,
           image: { type:'jpeg', quality: 0.95 },
-          html2canvas: { scale: 2, useCORS: true },
+          html2canvas: { scale: 2, useCORS: true, height: _h, windowHeight: _h + 100, windowWidth: 800 },
           jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
           pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
         }).from(el).save();
