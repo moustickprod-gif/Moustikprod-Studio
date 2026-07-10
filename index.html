@@ -991,7 +991,7 @@ tailwind.config = {
                   <button @click="previewingContrat=c; contratPreviewOpen=true" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">Aperçu</button>
                   <button @click="openEditContrat(c)" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">Modifier</button>
                   <button @click="telechargerContratPdf(c)" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">📄 PDF</button>
-                  <button @click="signerAvecAdobe(c)" class="text-xs bg-[#ED2224]/10 text-[#b91c1c] border border-[#ED2224]/30 px-3 py-1.5 rounded-lg">Signer via Adobe</button>
+                  <button @click="signerViaYousign('contrat', c)" class="text-xs bg-[#7B3FF2]/10 text-[#5b21b6] border border-[#7B3FF2]/30 px-3 py-1.5 rounded-lg">Signer via Yousign</button>
                   <button x-show="c.statut!=='signé'" @click="envoyerContratPourSignature(c)" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Lien de signature</button>
                   <button x-show="c.signatureToken && c.statut!=='signé'" @click="copyText(signLink(c))" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">Copier le lien</button>
                   <button x-show="c.statut==='signé' && c.montantHT && !c.abbyInvoiceId" @click="facturerAcompteAbby(c)" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded-lg">Facturer l'acompte (Abby)</button>
@@ -1034,6 +1034,7 @@ tailwind.config = {
                   <button @click="previewingAutorisation=a; autorisationPreviewOpen=true" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">Aperçu</button>
                   <button @click="openEditAutorisation(a)" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">Modifier</button>
                   <button x-show="a.statut!=='signé'" @click="envoyerPourSignature(a)" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Envoyer à signer</button>
+                  <button x-show="a.statut!=='signé'" @click="signerViaYousign('autorisation', a)" class="text-xs bg-[#7B3FF2]/10 text-[#5b21b6] border border-[#7B3FF2]/30 px-3 py-1.5 rounded-lg">Signer via Yousign</button>
                   <button x-show="a.signatureToken && a.statut!=='signé'" @click="copySignLink(a)" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">Copier le lien</button>
                   <button @click="deleteAutorisation(a)" class="text-xs text-muted hover:text-red-500 px-1">✕</button>
                 </div>
@@ -1304,7 +1305,7 @@ tailwind.config = {
       <h3 class="font-display font-bold">Aperçu du contrat</h3>
       <div class="flex gap-2">
         <button @click="telechargerContratPdf(previewingContrat)" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">📄 PDF</button>
-        <button @click="signerAvecAdobe(previewingContrat)" class="text-xs bg-[#ED2224]/10 text-[#b91c1c] border border-[#ED2224]/30 px-3 py-1.5 rounded-lg">Signer via Adobe</button>
+        <button @click="signerViaYousign('contrat', previewingContrat)" class="text-xs bg-[#7B3FF2]/10 text-[#5b21b6] border border-[#7B3FF2]/30 px-3 py-1.5 rounded-lg">Signer via Yousign</button>
         <button x-show="previewingContrat && previewingContrat.statut!=='signé'" @click="envoyerContratPourSignature(previewingContrat); contratPreviewOpen=false" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Lien de signature</button>
         <button @click="contratPreviewOpen=false" class="text-muted hover:text-ink px-2">✕</button>
       </div>
@@ -1390,6 +1391,7 @@ tailwind.config = {
       <div class="flex gap-2">
         <button @click="imprimerAutorisation()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">Imprimer / PDF</button>
         <button x-show="previewingAutorisation && previewingAutorisation.statut!=='signé'" @click="envoyerPourSignature(previewingAutorisation); autorisationPreviewOpen=false" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Envoyer à signer</button>
+        <button x-show="previewingAutorisation && previewingAutorisation.statut!=='signé'" @click="signerViaYousign('autorisation', previewingAutorisation); autorisationPreviewOpen=false" class="text-xs bg-[#7B3FF2]/10 text-[#5b21b6] border border-[#7B3FF2]/30 px-3 py-1.5 rounded-lg">Signer via Yousign</button>
         <button @click="autorisationPreviewOpen=false" class="text-muted hover:text-ink px-2">✕</button>
       </div>
     </div>
@@ -3324,14 +3326,15 @@ function app() {
     },
     // Abonnement Creative Cloud : le PDF est téléchargé puis Adobe Acrobat web
     // s'ouvre — utiliser "Demander des signatures électroniques" avec ce PDF.
-    async signerAvecAdobe(c) {
-      await this.telechargerContratPdf(c);
-      window.open('https://acrobat.adobe.com/', '_blank');
-      this.toast('Dans Acrobat : "Demander des signatures", puis glisse le PDF téléchargé');
-      if (c.statut === 'brouillon') {
-        c.statut = 'envoyé';
-        c.envoyeVia = 'adobe';
-        await this.db.collection('users').doc(this.user.uid).collection('contrats').doc(c.id).set({ statut:'envoyé', envoyeVia:'adobe' }, { merge:true });
+    signerViaYousign(kind, doc) {
+      // Signature officielle eIDAS via Yousign. Le PDF s'obtient via le bouton « PDF » (contrat) ou « Aperçu → Imprimer » (autorisation).
+      window.open('https://app.yousign.com/', '_blank');
+      this.toast('Dans Yousign : « Nouvelle demande » → dépose le PDF → ajoute le signataire, puis envoie.');
+      if (doc && doc.statut === 'brouillon') {
+        doc.statut = 'envoyé';
+        doc.envoyeVia = 'yousign';
+        const col = kind === 'autorisation' ? 'autorisations' : 'contrats';
+        this.db.collection('users').doc(this.user.uid).collection(col).doc(doc.id).set({ statut:'envoyé', envoyeVia:'yousign' }, { merge:true });
       }
     },
     async envoyerContratPourSignature(c) {
