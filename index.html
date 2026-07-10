@@ -3299,56 +3299,28 @@ function app() {
       const moodboard = [p.moodboardRefVisuelles && ('<b>Réf. visuelles :</b> '+esc(p.moodboardRefVisuelles)), p.moodboardRefSonores && ('<b>Réf. sonores :</b> '+esc(p.moodboardRefSonores)), p.moodboardTon && ('<b>Ton :</b> '+esc(p.moodboardTon)), p.moodboardNotes && esc(p.moodboardNotes)].filter(Boolean).map(x=>`<p style="font-size:10pt;margin:4px 0">${x}</p>`).join('');
       return `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;max-width:720px"><div style="border-bottom:3px solid #024059;padding-bottom:10px;margin-bottom:12px"><h1 style="font-size:18pt;color:#024059;margin:0">${esc(p.title)}</h1><p style="font-size:10pt;color:#666;margin:4px 0 0">${esc(p.client||'')} · ${esc(p.type||'')}${p.deadline ? ' · Livraison : '+new Date(p.deadline).toLocaleDateString('fr-FR') : ''}</p></div>${sec('Pitch', para(p.pitch))}${sec('Idées', para(p.idees))}${sec('À penser', para(p.aPenser))}${sec('Moodboard & références', moodboard)}${sec('Scénario', para(p.scenario))}${sec('Découpage technique', decoupage)}${sec('Captions / Réseaux', captions)}<p style="font-size:8pt;color:#aaa;text-align:center;margin-top:24px">Généré par Moustikprod Studio</p></div>`;
     },
-    async telechargerProjetPdf() {
+    telechargerProjetPdf() {
       const p = this.currentProject;
       if (!p) return;
-      this.projetPdfLoading = true;
-      const el = document.createElement('div');
-      el.style.cssText = 'position:fixed;left:-10000px;top:0;width:720px;background:#fff;padding:32px';
-      el.innerHTML = this.projetExportHtml();
-      document.body.appendChild(el);
-      try {
-        await new Promise(r => setTimeout(r, 250));
-        const _h = el.scrollHeight;
-        await html2pdf().set({
-          margin: [12, 12],
-          filename: `${(p.title||'projet').replace(/[^\w\-]+/g,'_')}.pdf`,
-          image: { type:'jpeg', quality: 0.95 },
-          html2canvas: { scale: 2, useCORS: true, height: _h, windowHeight: _h + 100, windowWidth: 800 },
-          jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
-          pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-        }).from(el).save();
-        this.toast('PDF du projet téléchargé');
-      } catch(e) {
-        this.toast('Erreur génération PDF', 'error');
-      } finally {
-        el.remove();
-        this.projetPdfLoading = false;
-      }
+      const w = window.open('', '_blank');
+      if (!w) { this.toast('Autorise les pop-ups pour générer le PDF', 'error'); return; }
+      w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${(p.title||'Projet')}</title></head><body style="margin:0;padding:1.5cm">${this.projetExportHtml()}</body></html>`);
+      w.document.close();
+      w.focus();
+      setTimeout(() => { try { w.print(); } catch(e) {} }, 500);
+      this.toast('Fenêtre ouverte : choisis « Enregistrer au format PDF »');
     },
-    async telechargerContratPdf(c) {
+    telechargerContratPdf(c) {
       if (!c) return;
-      const el = document.createElement('div');
-      el.style.cssText = 'position:fixed;left:-10000px;top:0;width:720px;background:#fff;padding:32px';
-      el.innerHTML = this.texteContratHtml(c);
-      document.body.appendChild(el);
-      try {
-        await new Promise(r => setTimeout(r, 250)); // laisse le layout + le logo se charger
-        const _h = el.scrollHeight;                  // html2canvas mesure 0 sans hauteur explicite
-        await html2pdf().set({
-          margin: [12, 12],
-          filename: `${c.numero || 'Contrat'} - ${this.clientName(c.clientId) || 'client'}.pdf`,
-          image: { type:'jpeg', quality: 0.95 },
-          html2canvas: { scale: 2, useCORS: true, height: _h, windowHeight: _h + 100, windowWidth: 800 },
-          jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
-          pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-        }).from(el).save();
-        this.toast('PDF téléchargé');
-      } catch(e) {
-        this.toast('Erreur génération PDF', 'error');
-      } finally {
-        el.remove();
-      }
+      // Impression navigateur (fiable, PDF texte) plutôt que html2canvas qui rendait des pages blanches.
+      const titre = `${c.numero || 'Contrat'} - ${this.clientName(c.clientId) || 'client'}`;
+      const w = window.open('', '_blank');
+      if (!w) { this.toast('Autorise les pop-ups pour générer le PDF', 'error'); return; }
+      w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${titre}</title></head><body style="margin:0;padding:1.5cm">${this.texteContratHtml(c)}</body></html>`);
+      w.document.close();
+      w.focus();
+      setTimeout(() => { try { w.print(); } catch(e) {} }, 500);
+      this.toast('Fenêtre ouverte : choisis « Enregistrer au format PDF »');
     },
     // Abonnement Creative Cloud : le PDF est téléchargé puis Adobe Acrobat web
     // s'ouvre — utiliser "Demander des signatures électroniques" avec ce PDF.
