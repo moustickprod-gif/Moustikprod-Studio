@@ -93,7 +93,6 @@ function render(data) {
       <thead><tr class="text-xs uppercase" style="color:#6b8a93"><th class="text-left p-2">Plan</th><th class="text-left p-2">Focale</th><th class="text-left p-2">Description</th><th class="text-left p-2">Heure</th></tr></thead>
       <tbody>${data.decoupage.map(s => `<tr style="border-top:1px solid #DCE6E9"><td class="p-2 text-xs font-mono">${esc(s.plan)}</td><td class="p-2">${esc(s.focale)}</td><td class="p-2">${esc(s.description)}</td><td class="p-2">${esc(s.heure)}</td></tr>`).join('')}</tbody>
       </table></div>
-      ${validationBlock('script', 'Découpage technique', data.validationScript)}
       </div>`;
   }
 
@@ -101,12 +100,11 @@ function render(data) {
     <div class="mb-6">
       <p class="text-xs accent font-bold uppercase tracking-wide mb-1">Aperçu projet — Moustikprod</p>
       <h1 class="text-2xl font-bold">${esc(data.titre)}</h1>
-      <p class="text-sm mt-1" style="color:#6b8a93">${esc(data.client)}${data.typeVideo ? ' · ' + esc(data.typeVideo) : ''}${data.statutStudio ? ' · ' + esc(data.statutStudio) : ''}</p>
+      <p class="text-sm mt-1" style="color:#6b8a93">${esc(data.client)}${data.typeVideo ? ' · ' + esc(data.typeVideo) : ''}</p>
     </div>
     ${data.pitch ? `<div class="card"><h2 class="font-bold mb-2">Pitch</h2><p class="text-sm">${nl(data.pitch)}</p></div>` : ''}
     ${data.scenario ? `<div class="card"><h2 class="font-bold mb-2">Scénario</h2><p class="text-sm">${nl(data.scenario)}</p>${validationBlock('scenario', 'Scénario', data.validationScenario)}</div>` : ''}
     ${decoupageHtml}
-    ${(data.matos && data.matos.length) ? `<div class="card"><h2 class="font-bold mb-2">Matos à louer</h2><ul class="text-sm list-disc pl-5">${data.matos.map(m => `<li>${esc(m)}</li>`).join('')}</ul></div>` : ''}
     ${data.lieu ? `<div class="card"><h2 class="font-bold mb-2">Lieu de tournage</h2><p class="text-sm">${nl(data.lieu)}</p></div>` : ''}
     ${data.moodboardNotes ? `<div class="card"><h2 class="font-bold mb-2">Moodboard</h2><p class="text-sm">${nl(data.moodboardNotes)}</p></div>` : ''}
     <p class="text-center text-xs mt-8" style="color:#6b8a93">Lien de partage en lecture seule — généré depuis Moustikprod Studio</p>
