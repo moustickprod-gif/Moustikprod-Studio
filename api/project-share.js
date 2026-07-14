@@ -41,8 +41,6 @@ export default async function handler(req, res) {
       typeVideo: fields.typeVideo || '',
       statutStudio: fields.statutStudio || '',
       pitch: fields.pitch || '',
-      idees: fields.idees || '',
-      aPenser: fields.aPenser || '',
       scenario: fields.scenario || '',
       decoupage: fields.decoupage || [],
       matos: fields.matos || [],

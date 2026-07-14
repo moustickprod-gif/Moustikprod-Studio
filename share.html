@@ -104,8 +104,6 @@ function render(data) {
       <p class="text-sm mt-1" style="color:#6b8a93">${esc(data.client)}${data.typeVideo ? ' · ' + esc(data.typeVideo) : ''}${data.statutStudio ? ' · ' + esc(data.statutStudio) : ''}</p>
     </div>
     ${data.pitch ? `<div class="card"><h2 class="font-bold mb-2">Pitch</h2><p class="text-sm">${nl(data.pitch)}</p></div>` : ''}
-    ${data.idees ? `<div class="card"><h2 class="font-bold mb-2">Idées</h2><p class="text-sm">${nl(data.idees)}</p></div>` : ''}
-    ${data.aPenser ? `<div class="card"><h2 class="font-bold mb-2">À penser</h2><p class="text-sm">${nl(data.aPenser)}</p></div>` : ''}
     ${data.scenario ? `<div class="card"><h2 class="font-bold mb-2">Scénario</h2><p class="text-sm">${nl(data.scenario)}</p>${validationBlock('scenario', 'Scénario', data.validationScenario)}</div>` : ''}
     ${decoupageHtml}
     ${(data.matos && data.matos.length) ? `<div class="card"><h2 class="font-bold mb-2">Matos à louer</h2><ul class="text-sm list-disc pl-5">${data.matos.map(m => `<li>${esc(m)}</li>`).join('')}</ul></div>` : ''}
