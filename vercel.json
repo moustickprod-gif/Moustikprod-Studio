@@ -22,6 +22,9 @@
     "api/project-share.js": {
       "memory": 256
     },
+    "api/project-validate.js": {
+      "memory": 256
+    },
     "api/signature.js": {
       "memory": 256
     },

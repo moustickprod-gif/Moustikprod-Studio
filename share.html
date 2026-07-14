@@ -12,49 +12,185 @@
   body { font-family: 'Poppins', sans-serif; background:#F7FAFB; color:#024059; }
   .accent { color:#3CD6D1; }
   .card { background:#fff; border:1px solid #DCE6E9; border-radius:14px; padding:20px; margin-bottom:16px; }
+  .val-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+  .val-btn { font-size:13px; font-weight:600; padding:8px 16px; border-radius:10px; border:1px solid #DCE6E9; background:#fff; color:#024059; cursor:pointer; transition:all .15s; }
+  .val-btn:hover { border-color:#3CD6D1; }
+  .val-btn:disabled { opacity:.5; cursor:not-allowed; }
+  .val-btn.ok { background:#ECFDF5; border-color:#A7F3D0; color:#047857; }
+  .val-btn.warn { background:#FFF7ED; border-color:#FED7AA; color:#C2410C; }
+  .val-btn.ok.active { background:#047857; border-color:#047857; color:#fff; }
+  .val-btn.warn.active { background:#C2410C; border-color:#C2410C; color:#fff; }
+  .val-status { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:4px 10px; border-radius:999px; margin-bottom:6px; }
+  .val-status.pending { background:#F1F5F7; color:#6b8a93; }
+  .val-status.valide { background:#ECFDF5; color:#047857; }
+  .val-status.refuse { background:#FFF7ED; color:#C2410C; }
+  .val-comment { background:#F7FAFB; border-left:3px solid #FED7AA; border-radius:8px; padding:10px 14px; font-size:13px; margin-top:8px; white-space:pre-wrap; }
+  .val-msg { font-size:12px; margin-top:8px; }
+  .val-msg.error { color:#C2410C; }
+  .val-msg.success { color:#047857; }
+  .modal-backdrop { position:fixed; inset:0; background:rgba(2,64,89,.45); display:none; align-items:center; justify-content:center; padding:16px; z-index:50; }
+  .modal-backdrop.open { display:flex; }
+  .modal-box { background:#fff; border-radius:16px; padding:24px; max-width:440px; width:100%; }
+  .modal-box textarea { width:100%; border:1px solid #DCE6E9; border-radius:10px; padding:10px; font-family:inherit; font-size:14px; resize:vertical; margin-top:10px; }
+  .modal-box .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
 </style>
 </head>
 <body>
 <div id="app" class="max-w-3xl mx-auto px-4 py-10"></div>
+<div id="modal-backdrop" class="modal-backdrop">
+  <div class="modal-box">
+    <h3 class="font-bold mb-1" style="color:#024059">Demander une modification</h3>
+    <p class="text-sm" style="color:#6b8a93" id="modal-label"></p>
+    <textarea id="modal-comment" rows="5" placeholder="Explique ce que tu souhaites voir changer..."></textarea>
+    <p id="modal-error" class="val-msg error" style="display:none"></p>
+    <div class="modal-actions">
+      <button class="val-btn" onclick="closeModal()">Annuler</button>
+      <button class="val-btn warn" id="modal-submit" onclick="submitModal()">Envoyer</button>
+    </div>
+  </div>
+</div>
 <script>
+let token = '';
+let currentData = null;
+let modalTarget = null;
+
+const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const nl = s => esc(s).replace(/\n/g, '<br>');
+
+const STATUS_LABEL = { en_attente: '⏳ En attente de retour', valide: '✅ Validé', refuse: '✏️ Modification demandée' };
+const STATUS_CLASS = { en_attente: 'pending', valide: 'valide', refuse: 'refuse' };
+
+function formatDate(iso) {
+  if (!iso) return '';
+  try { return new Date(iso).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
+  catch(e) { return ''; }
+}
+
+function validationBlock(target, label, val) {
+  const status = (val && val.status) || 'en_attente';
+  const comment = val && val.comment;
+  const respondedAt = val && val.respondedAt;
+  return `
+    <div class="mt-4 pt-4" style="border-top:1px solid #DCE6E9">
+      <span class="val-status ${STATUS_CLASS[status]}">${STATUS_LABEL[status]}${respondedAt ? ' — ' + formatDate(respondedAt) : ''}</span>
+      ${status === 'refuse' && comment ? `<div class="val-comment">${nl(comment)}</div>` : ''}
+      <div class="val-actions">
+        <button class="val-btn ok ${status==='valide' ? 'active' : ''}" data-role="valider" onclick="decide('${target}','valide')">✅ Valider</button>
+        <button class="val-btn warn ${status==='refuse' ? 'active' : ''}" data-role="refuser" onclick="openModal('${target}','${esc(label)}')">✏️ Demander une modification</button>
+      </div>
+      <p class="val-msg" id="msg-${target}" style="display:none"></p>
+    </div>`;
+}
+
+function render(data) {
+  currentData = data;
+  const app = document.getElementById('app');
+
+  let decoupageHtml = '';
+  if (data.decoupage && data.decoupage.length) {
+    decoupageHtml = `<div class="card"><h2 class="font-bold mb-3" style="color:#024059">Découpage technique</h2>
+      <div class="overflow-x-auto"><table class="w-full text-sm">
+      <thead><tr class="text-xs uppercase" style="color:#6b8a93"><th class="text-left p-2">Plan</th><th class="text-left p-2">Focale</th><th class="text-left p-2">Description</th><th class="text-left p-2">Heure</th></tr></thead>
+      <tbody>${data.decoupage.map(s => `<tr style="border-top:1px solid #DCE6E9"><td class="p-2 text-xs font-mono">${esc(s.plan)}</td><td class="p-2">${esc(s.focale)}</td><td class="p-2">${esc(s.description)}</td><td class="p-2">${esc(s.heure)}</td></tr>`).join('')}</tbody>
+      </table></div>
+      ${validationBlock('script', 'Découpage technique', data.validationScript)}
+      </div>`;
+  }
+
+  app.innerHTML = `
+    <div class="mb-6">
+      <p class="text-xs accent font-bold uppercase tracking-wide mb-1">Aperçu projet — Moustikprod</p>
+      <h1 class="text-2xl font-bold">${esc(data.titre)}</h1>
+      <p class="text-sm mt-1" style="color:#6b8a93">${esc(data.client)}${data.typeVideo ? ' · ' + esc(data.typeVideo) : ''}${data.statutStudio ? ' · ' + esc(data.statutStudio) : ''}</p>
+    </div>
+    ${data.pitch ? `<div class="card"><h2 class="font-bold mb-2">Pitch</h2><p class="text-sm">${nl(data.pitch)}</p></div>` : ''}
+    ${data.idees ? `<div class="card"><h2 class="font-bold mb-2">Idées</h2><p class="text-sm">${nl(data.idees)}</p></div>` : ''}
+    ${data.aPenser ? `<div class="card"><h2 class="font-bold mb-2">À penser</h2><p class="text-sm">${nl(data.aPenser)}</p></div>` : ''}
+    ${data.scenario ? `<div class="card"><h2 class="font-bold mb-2">Scénario</h2><p class="text-sm">${nl(data.scenario)}</p>${validationBlock('scenario', 'Scénario', data.validationScenario)}</div>` : ''}
+    ${decoupageHtml}
+    ${(data.matos && data.matos.length) ? `<div class="card"><h2 class="font-bold mb-2">Matos à louer</h2><ul class="text-sm list-disc pl-5">${data.matos.map(m => `<li>${esc(m)}</li>`).join('')}</ul></div>` : ''}
+    ${data.lieu ? `<div class="card"><h2 class="font-bold mb-2">Lieu de tournage</h2><p class="text-sm">${nl(data.lieu)}</p></div>` : ''}
+    ${data.moodboardNotes ? `<div class="card"><h2 class="font-bold mb-2">Moodboard</h2><p class="text-sm">${nl(data.moodboardNotes)}</p></div>` : ''}
+    <p class="text-center text-xs mt-8" style="color:#6b8a93">Lien de partage en lecture seule — généré depuis Moustikprod Studio</p>
+  `;
+}
+
+function showMsg(target, text, type) {
+  const el = document.getElementById(`msg-${target}`);
+  if (!el) return;
+  el.textContent = text;
+  el.className = `val-msg ${type}`;
+  el.style.display = 'block';
+  if (type === 'success') setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
+
+function setButtonsDisabled(target, disabled) {
+  document.querySelectorAll(`[onclick*="decide('${target}'"], [onclick*="openModal('${target}'"]`).forEach(b => { b.disabled = disabled; });
+}
+
+async function decide(target, decision, comment) {
+  setButtonsDisabled(target, true);
+  try {
+    const res = await fetch('/api/project-validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, target, decision, comment: comment || '' }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showMsg(target, data.error || 'Une erreur est survenue, réessaie.', 'error');
+      return;
+    }
+    const fieldName = target === 'scenario' ? 'validationScenario' : 'validationScript';
+    currentData[fieldName] = data.value;
+    render(currentData);
+    showMsg(target, decision === 'valide' ? 'Validation envoyée, merci !' : 'Ta demande de modification a bien été envoyée.', 'success');
+  } catch (e) {
+    showMsg(target, 'Erreur réseau — vérifie ta connexion et réessaie.', 'error');
+  } finally {
+    setButtonsDisabled(target, false);
+  }
+}
+
+function openModal(target, label) {
+  modalTarget = target;
+  document.getElementById('modal-label').textContent = label;
+  document.getElementById('modal-comment').value = '';
+  document.getElementById('modal-error').style.display = 'none';
+  document.getElementById('modal-backdrop').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal-backdrop').classList.remove('open');
+  modalTarget = null;
+}
+
+async function submitModal() {
+  const comment = document.getElementById('modal-comment').value.trim();
+  const errorEl = document.getElementById('modal-error');
+  if (!comment) {
+    errorEl.textContent = 'Merci de préciser ce que tu souhaites voir changer.';
+    errorEl.style.display = 'block';
+    return;
+  }
+  const target = modalTarget;
+  closeModal();
+  await decide(target, 'refuse', comment);
+}
+
 async function load() {
   const params = new URLSearchParams(location.search);
-  const token = params.get('token') || '';
+  token = params.get('token') || '';
   const app = document.getElementById('app');
   app.innerHTML = '<p class="text-center text-sm" style="color:#6b8a93">Chargement...</p>';
   try {
     const res = await fetch('/api/project-share?token=' + encodeURIComponent(token));
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      app.innerHTML = `<div class="card text-center"><p class="font-semibold">${data.error || 'Lien invalide ou expiré.'}</p></div>`;
+      app.innerHTML = `<div class="card text-center"><p class="font-semibold">${esc(data.error || 'Lien invalide ou expiré.')}</p></div>`;
       return;
     }
-    const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    const nl = s => esc(s).replace(/\n/g, '<br>');
-    let decoupageHtml = '';
-    if (data.decoupage && data.decoupage.length) {
-      decoupageHtml = `<div class="card"><h2 class="font-bold mb-3" style="color:#024059">Découpage technique</h2>
-        <div class="overflow-x-auto"><table class="w-full text-sm">
-        <thead><tr class="text-xs uppercase" style="color:#6b8a93"><th class="text-left p-2">Plan</th><th class="text-left p-2">Focale</th><th class="text-left p-2">Description</th><th class="text-left p-2">Heure</th></tr></thead>
-        <tbody>${data.decoupage.map(s => `<tr style="border-top:1px solid #DCE6E9"><td class="p-2 text-xs font-mono">${esc(s.plan)}</td><td class="p-2">${esc(s.focale)}</td><td class="p-2">${esc(s.description)}</td><td class="p-2">${esc(s.heure)}</td></tr>`).join('')}</tbody>
-        </table></div></div>`;
-    }
-    app.innerHTML = `
-      <div class="mb-6">
-        <p class="text-xs accent font-bold uppercase tracking-wide mb-1">Aperçu projet — Moustikprod</p>
-        <h1 class="text-2xl font-bold">${esc(data.titre)}</h1>
-        <p class="text-sm mt-1" style="color:#6b8a93">${esc(data.client)}${data.typeVideo ? ' · ' + esc(data.typeVideo) : ''}${data.statutStudio ? ' · ' + esc(data.statutStudio) : ''}</p>
-      </div>
-      ${data.pitch ? `<div class="card"><h2 class="font-bold mb-2">Pitch</h2><p class="text-sm">${nl(data.pitch)}</p></div>` : ''}
-      ${data.idees ? `<div class="card"><h2 class="font-bold mb-2">Idées</h2><p class="text-sm">${nl(data.idees)}</p></div>` : ''}
-      ${data.aPenser ? `<div class="card"><h2 class="font-bold mb-2">À penser</h2><p class="text-sm">${nl(data.aPenser)}</p></div>` : ''}
-      ${data.scenario ? `<div class="card"><h2 class="font-bold mb-2">Scénario</h2><p class="text-sm">${nl(data.scenario)}</p></div>` : ''}
-      ${decoupageHtml}
-      ${(data.matos && data.matos.length) ? `<div class="card"><h2 class="font-bold mb-2">Matos à louer</h2><ul class="text-sm list-disc pl-5">${data.matos.map(m => `<li>${esc(m)}</li>`).join('')}</ul></div>` : ''}
-      ${data.lieu ? `<div class="card"><h2 class="font-bold mb-2">Lieu de tournage</h2><p class="text-sm">${nl(data.lieu)}</p></div>` : ''}
-      ${data.moodboardNotes ? `<div class="card"><h2 class="font-bold mb-2">Moodboard</h2><p class="text-sm">${nl(data.moodboardNotes)}</p></div>` : ''}
-      <p class="text-center text-xs mt-8" style="color:#6b8a93">Lien de partage en lecture seule — généré depuis Moustikprod Studio</p>
-    `;
+    render(data);
   } catch (e) {
     app.innerHTML = '<div class="card text-center"><p class="font-semibold">Erreur de chargement.</p></div>';
   }
