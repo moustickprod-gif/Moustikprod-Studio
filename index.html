@@ -1296,6 +1296,16 @@ tailwind.config = {
         <label class="text-xs font-mono text-muted uppercase block mb-1">Désignation *</label>
         <input x-model="catalogueForm.designation" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
       </div>
+      <div>
+        <label class="text-xs font-mono text-muted uppercase block mb-1">Type d'article (Abby)</label>
+        <select x-model="catalogueForm.type" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
+          <option value="service_delivery">Prestation de service</option>
+          <option value="sale_of_goods">Vente de marchandises</option>
+          <option value="commercial_or_craft_services">Services commerciaux/artisanaux</option>
+          <option value="sale_of_manufactured_goods">Vente de biens manufacturés</option>
+          <option value="disbursement">Débours</option>
+        </select>
+      </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="text-xs font-mono text-muted uppercase block mb-1">Prix</label>
@@ -2855,7 +2865,7 @@ function app() {
         ["Forfaits mensuels — Tournage + montage","Croissance : 1 journée + 8 vidéos / mois",1300,"€/mois"],
         ["Forfaits mensuels — Tournage + montage","Signature : 2 journées + 12 vidéos multi-formats / mois",2200,"€/mois"],
       ];
-      return raw.map((r,i) => ({ id:'cat_'+(i+1), categorie:r[0], designation:r[1], prix:r[2], unite:r[3] }));
+      return raw.map((r,i) => ({ id:'cat_'+(i+1), categorie:r[0], designation:r[1], prix:r[2], unite:r[3], type:'service_delivery' }));
     },
     async loadCatalogue() {
       try {
@@ -2866,7 +2876,10 @@ function app() {
           list = this.defaultCatalogue();
           for (const it of list) { try { await col.doc(it.id).set(it); } catch(e){} }
         }
-        this.catalogue = list;
+        // Fallback en mémoire uniquement pour les fiches créées avant l'ajout
+        // du champ type — on ne réécrit PAS Firestore ici, seule une édition
+        // manuelle de l'utilisateur doit persister le type.
+        this.catalogue = list.map(x => x.type ? x : { ...x, type: 'service_delivery' });
       } catch(e) { console.error('loadCatalogue', e); }
     },
     get catalogueCategories() {
@@ -2874,8 +2887,14 @@ function app() {
       for (const x of this.catalogue) { const c = x.categorie || 'Autres'; if (!cats.includes(c)) cats.push(c); }
       return cats.map(cat => ({ cat, items: this.catalogue.filter(x => (x.categorie||'Autres') === cat) }));
     },
-    openNewCatalogueItem() { this.catalogueForm = { id:null, categorie:'', designation:'', prix:null, unite:'€' }; this.catalogueModalOpen = true; },
-    openCatalogueItem(it) { this.catalogueForm = JSON.parse(JSON.stringify(it)); this.catalogueModalOpen = true; },
+    openNewCatalogueItem() { this.catalogueForm = { id:null, categorie:'', designation:'', prix:null, unite:'€', type:'service_delivery' }; this.catalogueModalOpen = true; },
+    openCatalogueItem(it) {
+      this.catalogueForm = JSON.parse(JSON.stringify(it));
+      // Fiches créées avant l'ajout du champ type : complète pour que le
+      // select affiche "Prestation de service" au lieu d'être vide.
+      if (!this.catalogueForm.type) this.catalogueForm.type = 'service_delivery';
+      this.catalogueModalOpen = true;
+    },
     async saveCatalogueItem() {
       const c = this.catalogueForm;
       if (!c.designation || !c.designation.trim()) { this.toast('Désignation requise', 'error'); return; }
@@ -2913,7 +2932,7 @@ function app() {
     ajouterDuCatalogue(id) {
       const it = this.catalogue.find(x => x.id === id);
       if (!it) return;
-      this.devisLignes.push({ designation: it.designation, montant: it.prix, quantite: 1 });
+      this.devisLignes.push({ designation: it.designation, montant: it.prix, quantite: 1, type: it.type || 'service_delivery' });
       this.catalogueChoice = '';
     },
     supprimerLigneDevis(i) { this.devisLignes.splice(i, 1); },
@@ -2969,6 +2988,7 @@ function app() {
           quantity: Number(l.quantite) || 1,
           unitPrice: Math.round(Number(l.montant) * 100),
           vatCode: 'FR_00HT',
+          type: l.type || 'service_delivery',
         })) });
         if (this.devisType === 'facture') {
           p.abbyInvoiceId = billingId; p.abbyInvoiceNumber = billing.data.number || '';
@@ -3657,6 +3677,7 @@ function app() {
           quantity: 1,
           unitPrice: acompteEur * 100,
           vatCode: 'FR_00HT',
+          type: 'service_delivery',
         }]});
         c.abbyInvoiceId = invoice.data.id;
         c.abbyInvoiceNumber = invoice.data.number || '';
