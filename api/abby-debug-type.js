@@ -1,123 +1,122 @@
-// ⚠️ ROUTE TEMPORAIRE — à supprimer juste après usage.
-// Sert uniquement à identifier le format réel du champ `type` renvoyé par
-// l'API Abby (texte type "service_delivery" vs numérique) sur les lignes
-// d'un devis/facture existant, avant d'implémenter le champ "type d'article"
-// côté catalogue/devis. Lecture seule (GET), aucune écriture sur le compte
-// Abby. La doc publique ne documente pas d'endpoint GET pour lister/lire les
-// devis/factures existants (seulement création + PATCH lignes) — cette route
-// sonde plusieurs chemins candidats et rapporte ce qui répond.
+// ⚠️ ROUTE TEMPORAIRE — ÉCRIT RÉELLEMENT DANS LE COMPTE ABBY. À supprimer
+// juste après usage.
+// La lecture des devis/factures existants s'est révélée impossible (tous les
+// endpoints GET candidats renvoient 404/400 — pas de GET documenté ni trouvé
+// pour /v2/billing). On teste donc en écriture : crée un contact fictif +
+// un devis minimal à une ligne, en tentant `type: "service_delivery"`
+// (texte), puis si rejeté `type: 1` (numérique), pour voir lequel Abby
+// accepte et sous quelle forme il le restitue.
 //
-// Protégée par un paramètre `secret` en dur (route temporaire, courte durée
-// de vie — pas d'ajout de variable d'env pour un usage aussi éphémère).
-const DEBUG_SECRET = '0beadc54f9cc6aff162f28815b160ed0';
+// Protégée par secret + confirm en dur (route temporaire à usage unique/rare
+// — pas d'ajout de variable d'env). Nouveau secret, distinct de l'ancienne
+// route en lecture seule.
+const DEBUG_SECRET = '31060eb2cde290f21b0a767c89e5a6a1';
 
 const BASE = 'https://api.app-abby.com';
 const ABBY_KEY = process.env.ABBY_API_KEY || process.env.Moustikprod_Studio;
 
-async function abbyGet(path) {
+async function abby(method, path, body) {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Authorization': `Bearer ${ABBY_KEY}` },
+    method,
+    headers: { 'Authorization': `Bearer ${ABBY_KEY}`, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
   });
   let data = null;
   try { data = await res.json(); } catch (e) { /* pas de body JSON */ }
   return { status: res.status, ok: res.ok, data };
 }
 
-function extractDocs(data) {
-  if (!data) return [];
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data.docs)) return data.docs;
-  if (Array.isArray(data.data)) return data.data;
-  if (Array.isArray(data.items)) return data.items;
-  return [];
-}
-
-// Jamais de montant/coordonnées client — juste ce qu'il faut pour identifier
-// le document et trancher texte vs numérique sur le champ type des lignes.
-function summarizeLines(lines) {
-  return (Array.isArray(lines) ? lines : []).map(l => ({
-    designation: String(l.designation || '').slice(0, 40),
-    type: l.type,
-    typeOf: typeof l.type,
-  }));
-}
-
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).end();
-  if (req.query.secret !== DEBUG_SECRET) return res.status(404).json({ error: 'Not found' });
+  if (req.query.secret !== DEBUG_SECRET || req.query.confirm !== 'yes') {
+    return res.status(404).json({ error: 'Not found' });
+  }
   if (!ABBY_KEY) return res.status(500).json({ error: 'Clé Abby non configurée' });
 
+  const report = { steps: [] };
+  // Tout ID créé pendant l'exécution est tracé ici au fur et à mesure, pour
+  // que la section "aSupprimer" reste exacte même si l'exécution s'arrête en
+  // cours de route (échec d'une étape).
+  const created = { contacts: [], estimates: [] };
+  const finish = (extra) => {
+    report.aSupprimer = {
+      ...created,
+      commentSupprimer: {
+        contacts: "DELETE /contact/{id} probable (non confirmé) — un outil MCP \"delete-contact\" existe côté Abby, mais échoue si le contact a des documents de facturation liés (ce sera le cas ici À CAUSE du devis de test) : il faudra donc supprimer le devis d'abord, ou utiliser l'archivage.",
+        estimates: "Pas de suppression via l'API trouvée pour les devis — seulement un archivage (\"archive-billing\", masque sans supprimer). Suppression réelle probablement seulement possible à la main dans app.abby.fr.",
+      },
+    };
+    return res.status(200).json({ ...report, ...extra });
+  };
+
   try {
-    // 1) On sonde plusieurs chemins de LISTE candidats en parallèle pour
-    // trouver celui qui répond avec de vrais documents.
-    const listCandidates = [
-      '/v2/billing?page=1&limit=50',
-      '/v2/billings?page=1&limit=50',
-      '/v2/billing/estimate?page=1&limit=50',
-      '/v2/billing/estimates?page=1&limit=50',
-      '/v2/quote?page=1&limit=50',
-      '/v2/quotes?page=1&limit=50',
-      '/v2/invoicing?page=1&limit=50',
-    ];
-    const listResults = await Promise.all(listCandidates.map(async (path) => {
-      const r = await abbyGet(path);
-      return { path, status: r.status, itemsFound: extractDocs(r.data).length, docs: extractDocs(r.data) };
-    }));
-    const listProbe = listResults.map(({ path, status, itemsFound }) => ({ path, status, itemsFound }));
-    const working = listResults.find(r => r.status === 200 && r.itemsFound > 0);
-    const foundDocs = working ? working.docs : [];
+    // 1) Contact fictif, clairement identifiable pour suppression manuelle.
+    const contact = await abby('POST', '/contact', {
+      firstname: 'TEST DEBUG',
+      lastname: 'A SUPPRIMER — type article',
+    });
+    report.steps.push({ step: 'createContact', status: contact.status, ok: contact.ok, body: contact.data });
+    if (!contact.ok || !contact.data?.id) {
+      return finish({ error: 'Échec création du contact de test — arrêt.' });
+    }
+    const customerId = contact.data.id;
+    report.testContactId = customerId;
+    created.contacts.push(customerId);
 
-    const docsSummary = foundDocs.slice(0, 10).map(d => ({
-      id: d.id,
-      number: d.number,
-      state: d.state || d.status,
-      docType: d.estimateType || d.type,
-    }));
+    // 2) Devis minimal pour ce contact.
+    const estimate = await abby('POST', `/v2/billing/estimate/${encodeURIComponent(customerId)}`, { estimateType: 'estimate' });
+    report.steps.push({ step: 'createEstimate', status: estimate.status, ok: estimate.ok, body: estimate.data });
+    if (!estimate.ok || !estimate.data?.id) {
+      return finish({ error: 'Échec création du devis de test — arrêt.' });
+    }
+    const billingId = estimate.data.id;
+    report.testEstimateId = billingId;
+    created.estimates.push(billingId);
 
-    // 2) Pour les 3 premiers documents trouvés, on sonde plusieurs chemins de
-    // DÉTAIL candidats jusqu'à en trouver un qui renvoie les lignes.
-    const detailCandidatesFor = (id) => [
-      `/v2/billing/${id}`,
-      `/v2/billing/estimate/${id}`,
-      `/v2/billing/invoice/${id}`,
-      `/v2/quote/${id}`,
-    ];
-    const detailResults = [];
-    for (const d of foundDocs.slice(0, 3)) {
-      if (!d.id) continue;
-      for (const path of detailCandidatesFor(d.id)) {
-        const r = await abbyGet(path);
-        if (r.ok && r.data) {
-          detailResults.push({
-            billingId: d.id,
-            workingDetailPath: path,
-            status: r.status,
-            state: r.data.state || r.data.status,
-            lines: summarizeLines(r.data.lines),
-          });
-          break;
-        }
-      }
+    // 3) Ligne avec type texte "service_delivery".
+    const lineTextBody = {
+      lines: [{
+        designation: 'TEST DEBUG — à supprimer (ligne format type article)',
+        quantity: 1,
+        unitPrice: 100,
+        vatCode: 'FR_00HT',
+        type: 'service_delivery',
+      }],
+    };
+    const attemptText = await abby('PATCH', `/v2/billing/${encodeURIComponent(billingId)}/lines`, lineTextBody);
+    report.steps.push({ step: 'setLines type="service_delivery" (texte)', status: attemptText.status, ok: attemptText.ok, body: attemptText.data });
+
+    if (attemptText.ok) {
+      report.result = 'FORMAT TEXTE ACCEPTÉ';
+      report.lineTypeAsStoredByAbby = attemptText.data?.lines?.[0]?.type;
+      report.lineTypeOf = typeof attemptText.data?.lines?.[0]?.type;
+      return finish();
     }
 
-    // 3) Catalogue produits, en complément (déjà testé précédemment).
-    const catalog = await abbyGet('/v2/catalog?page=1&limit=20');
-    const catalogTypes = extractDocs(catalog.data).map(p => ({
-      designation: String(p.designation || '').slice(0, 40),
-      type: p.type,
-      typeOf: typeof p.type,
-    }));
+    // 4) Sinon, tentative avec type numérique 1.
+    const lineNumBody = {
+      lines: [{
+        designation: 'TEST DEBUG — à supprimer (ligne format type article, essai numérique)',
+        quantity: 1,
+        unitPrice: 100,
+        vatCode: 'FR_00HT',
+        type: 1,
+      }],
+    };
+    const attemptNum = await abby('PATCH', `/v2/billing/${encodeURIComponent(billingId)}/lines`, lineNumBody);
+    report.steps.push({ step: 'setLines type=1 (numérique)', status: attemptNum.status, ok: attemptNum.ok, body: attemptNum.data });
 
-    res.status(200).json({
-      ok: true,
-      listProbe,
-      workingListPath: working ? working.path : null,
-      docsSummary,
-      detailResults,
-      catalogHttpStatus: catalog.status,
-      catalogTypes,
-    });
+    if (attemptNum.ok) {
+      report.result = 'FORMAT NUMÉRIQUE ACCEPTÉ';
+      report.lineTypeAsStoredByAbby = attemptNum.data?.lines?.[0]?.type;
+      report.lineTypeOf = typeof attemptNum.data?.lines?.[0]?.type;
+    } else {
+      report.result = 'AUCUN DES DEUX FORMATS ACCEPTÉ — voir messages d\'erreur exacts dans steps[].body';
+    }
+
+    return finish();
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    report.error = err.message;
+    return finish();
   }
 }
