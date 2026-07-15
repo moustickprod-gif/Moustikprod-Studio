@@ -551,20 +551,61 @@ tailwind.config = {
 
           <!-- CAPTIONS TAB -->
           <div x-show="detailTab==='captions'" class="space-y-4">
-            <button @click="generateCaptions()" class="bg-accent text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2">
-              <span x-show="captionsLoading" class="spinner"></span> Générer les captions
-            </button>
-            <p x-show="captionsError" class="text-xs text-accent" x-text="captionsError"></p>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <template x-for="net in ['instagram','tiktok','linkedin','twitter']" :key="net">
-                <div x-show="currentProject.captions && currentProject.captions[net]" class="bg-surface border border-line rounded-xl p-4">
-                  <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs font-mono text-accent uppercase" x-text="net"></span>
-                    <button @click="copyText(currentProject.captions[net])" class="text-xs text-muted hover:text-ink">Copier</button>
+            <div class="bg-surface border border-line rounded-xl p-4 space-y-3">
+              <div>
+                <p class="text-xs font-mono text-muted uppercase mb-1.5">Angle</p>
+                <div class="flex gap-2">
+                  <button type="button" @click="captionsAngle='client'" :class="captionsAngle==='client' ? 'bg-accent text-white border-accent' : 'bg-surface text-ink border-line hover:border-accent/50'" class="text-sm px-3 py-1.5 rounded-lg border transition">Client</button>
+                  <button type="button" @click="captionsAngle='moustikprod'" :class="captionsAngle==='moustikprod' ? 'bg-accent text-white border-accent' : 'bg-surface text-ink border-line hover:border-accent/50'" class="text-sm px-3 py-1.5 rounded-lg border transition">Moustikprod</button>
+                </div>
+              </div>
+              <div>
+                <p class="text-xs font-mono text-muted uppercase mb-1.5">Réseaux</p>
+                <div class="flex flex-wrap gap-3">
+                  <template x-for="net in ['reels','shorts','tiktok','instagram','linkedin','twitter','facebook']" :key="net">
+                    <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+                      <input type="checkbox" :checked="captionsReseaux.includes(net)" @change="toggleCaptionReseau(net)" class="accent-accent">
+                      <span x-text="{reels:'Reels',shorts:'Shorts',tiktok:'TikTok',instagram:'Instagram',linkedin:'LinkedIn',twitter:'Twitter',facebook:'Facebook'}[net]"></span>
+                    </label>
+                  </template>
+                </div>
+              </div>
+              <button @click="generateCaptions()" :disabled="captionsLoading || !captionsReseaux.length" class="bg-accent text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+                <span x-show="captionsLoading" class="spinner"></span> Générer les captions
+              </button>
+              <p x-show="captionsError" class="text-xs text-accent" x-text="captionsError"></p>
+            </div>
+
+            <div class="space-y-3">
+              <template x-for="entry in captionsHistorySorted" :key="entry.id">
+                <div class="bg-surface border border-line rounded-xl p-4 space-y-3">
+                  <div class="flex items-center justify-between flex-wrap gap-2">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="text-xs font-mono text-muted" x-text="new Date(entry.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})"></span>
+                      <span class="text-xs px-2 py-0.5 rounded-full font-mono uppercase" :class="entry.angle==='moustikprod' ? 'bg-accent2/20 text-ink' : entry.angle==='client' ? 'bg-accent/15 text-accent' : 'bg-line text-muted'" x-text="entry.angle==='moustikprod' ? 'Moustikprod' : entry.angle==='client' ? 'Client' : 'Format ancien'"></span>
+                      <template x-for="net in entry.reseaux" :key="net">
+                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-bg border border-line text-muted uppercase font-mono" x-text="net"></span>
+                      </template>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                      <button @click="toggleCaptionFavori(entry.id)" class="text-sm" :class="entry.favori ? 'text-amber-500' : 'text-muted hover:text-amber-500'" :title="entry.favori ? 'Retirer des favoris' : 'Mettre en favori'" x-text="entry.favori ? '★' : '☆'"></button>
+                      <button @click="deleteCaptionEntry(entry.id)" class="text-xs text-muted hover:text-red-500">✕</button>
+                    </div>
                   </div>
-                  <p class="text-sm whitespace-pre-wrap" x-text="currentProject.captions && currentProject.captions[net]"></p>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <template x-for="net in entry.reseaux" :key="net">
+                      <div x-show="entry.contenu && entry.contenu[net]" class="bg-bg border border-line rounded-lg p-3">
+                        <div class="flex items-center justify-between mb-1.5">
+                          <span class="text-xs font-mono text-accent uppercase" x-text="net"></span>
+                          <button @click="copyText(entry.contenu[net])" class="text-xs text-muted hover:text-ink">Copier</button>
+                        </div>
+                        <p class="text-sm whitespace-pre-wrap" x-text="entry.contenu[net]"></p>
+                      </div>
+                    </template>
+                  </div>
                 </div>
               </template>
+              <p x-show="!captionsHistorySorted.length" class="text-xs text-muted py-3 text-center">Aucune génération pour l'instant.</p>
             </div>
           </div>
 
@@ -1576,6 +1617,7 @@ function app() {
     scenarioLoading: false, scenarioError: '',
     logistiqueLoading: false, logistiqueError: '',
     captionsLoading: false, captionsError: '',
+    captionsAngle: 'client', captionsReseaux: ['reels','shorts','tiktok'],
     newChecklistItem: '', newMatosItem: '',
     notionExportLoading: false, notionExportError: '',
     moodboardImageInput: '', projetPdfLoading: false,
@@ -1899,7 +1941,15 @@ function app() {
         moodboardTon: data.moodboardTon || '',
         moodboardImages: data.moodboardImages || [],
         paiementStatut: data.paiementStatut || '',
-        captions: data.captions || {},
+        // Migration en mémoire uniquement : l'ancien format captions (objet
+        // plat {reseau: texte}) devient une entrée d'historique synthétique,
+        // sans jamais réécrire Firestore tant que l'utilisateur n'interagit
+        // pas (génération, favori, suppression).
+        captionsHistory: Array.isArray(data.captionsHistory) && data.captionsHistory.length
+          ? data.captionsHistory
+          : (data.captions && typeof data.captions === 'object' && Object.values(data.captions).some(Boolean)
+              ? [{ id:'legacy', createdAt: data.dateCreation || new Date().toISOString(), angle: null, reseaux: Object.keys(data.captions).filter(k => data.captions[k]), contenu: data.captions, favori:false }]
+              : []),
         checklist: data.checklist || [],
         notes: data.notes || '',
         notionPageId: data.notionPageId || '',
@@ -1964,7 +2014,7 @@ function app() {
           moodboardTon: project.moodboardTon || '',
           moodboardImages: project.moodboardImages || [],
           paiementStatut: project.paiementStatut || '',
-          captions: project.captions || {},
+          captionsHistory: project.captionsHistory || [],
           checklist: project.checklist || [],
           notes: project.notes || '',
           notionPageId: project.notionPageId || null,
@@ -2232,7 +2282,7 @@ function app() {
         moodboardTon: '',
         moodboardNotes: '',
         formatsLivraison: this.newProject.formatsLivraison || [],
-        captions: {},
+        captionsHistory: [],
         checklist: [],
         notes: '',
         statutCrm: 'prospection',
@@ -2452,14 +2502,47 @@ function app() {
       this.newMatosItem = '';
       this.saveProjects();
     },
+    toggleCaptionReseau(net) {
+      this.captionsReseaux = this.captionsReseaux.includes(net)
+        ? this.captionsReseaux.filter(n => n !== net)
+        : [...this.captionsReseaux, net];
+    },
+    get captionsHistorySorted() {
+      const list = (this.currentProject && this.currentProject.captionsHistory) || [];
+      return [...list].sort((a,b) => (b.favori?1:0) - (a.favori?1:0) || new Date(b.createdAt) - new Date(a.createdAt));
+    },
     async generateCaptions() {
+      if (!this.captionsReseaux.length) { this.captionsError = 'Sélectionne au moins un réseau.'; return; }
       this.captionsLoading = true; this.captionsError='';
       try {
+        const angleInstructions = this.captionsAngle === 'moustikprod'
+          ? "Angle MOUSTIKPROD : tu écris pour le compte de Moustikprod (portfolio/prospection), pas pour le client. Ton documentaire-immersion, orienté vers la mise en valeur du savoir-faire de production, pensé pour attirer de nouveaux clients."
+          : "Angle CLIENT : tu écris au nom de la marque du client, dans SON ton et pour SA clientèle — reste sur la ligne éditoriale et le positionnement du client, pas celui de Moustikprod.";
+        const styleParReseau = {
+          reels: 'reels: accroche forte dans les 3 premières secondes, script voix-off court, hashtags pertinents.',
+          shorts: 'shorts: accroche immédiate, format YouTube Shorts, CTA abonnement.',
+          tiktok: 'tiktok: accroche + corps + hashtags.',
+          instagram: 'instagram: avec emojis, hashtags, CTA.',
+          linkedin: 'linkedin: ton pro.',
+          twitter: 'twitter: 280 caractères max.',
+          facebook: 'facebook: ton convivial/communautaire, peut être plus long, emojis modérés.',
+        };
+        const consignes = this.captionsReseaux.map(n => styleParReseau[n]).join('\n');
+        const cles = this.captionsReseaux.join(', ');
         const text = await this.callClaude(
-          `Tu es expert réseaux sociaux. Génère 4 captions adaptées à ce projet vidéo.\nRéponds en JSON avec les clés exactes : instagram, tiktok, linkedin, twitter.\ninstagram: avec emojis, hashtags, CTA. tiktok: accroche + corps + hashtags. linkedin: ton pro. twitter: 280 caractères max.`,
+          `Tu es expert réseaux sociaux. ${angleInstructions}\nGénère une caption adaptée à ce projet vidéo pour chacun de ces réseaux : ${cles}.\nRéponds en JSON avec UNIQUEMENT ces clés exactes : ${cles}.\n${consignes}`,
           this.projectContext()
         );
-        this.currentProject.captions = this.extractJson(text);
+        const contenu = this.extractJson(text);
+        if (!this.currentProject.captionsHistory) this.currentProject.captionsHistory = [];
+        this.currentProject.captionsHistory.unshift({
+          id: 'cap_' + Date.now(),
+          createdAt: new Date().toISOString(),
+          angle: this.captionsAngle,
+          reseaux: [...this.captionsReseaux],
+          contenu,
+          favori: false,
+        });
         this.saveProjects();
         this.toast('Captions générées');
       } catch(e) {
@@ -2467,6 +2550,17 @@ function app() {
       } finally {
         this.captionsLoading = false;
       }
+    },
+    toggleCaptionFavori(id) {
+      const entry = (this.currentProject.captionsHistory||[]).find(e => e.id === id);
+      if (!entry) return;
+      entry.favori = !entry.favori;
+      this.saveProjects();
+    },
+    deleteCaptionEntry(id) {
+      if (!confirm('Supprimer cette génération ?')) return;
+      this.currentProject.captionsHistory = (this.currentProject.captionsHistory||[]).filter(e => e.id !== id);
+      this.saveProjects();
     },
     addChecklistItem() {
       if (!this.newChecklistItem.trim()) return;
@@ -2519,9 +2613,13 @@ function app() {
         blocks.push({ object:'block', type:'table', table:{ table_width:5, has_column_header:true, has_row_header:false, children:rows } });
       }
 
-      if (p.captions && Object.keys(p.captions).length) {
+      // Favori s'il y en a un, sinon la génération la plus récente.
+      const capHistN = p.captionsHistory || [];
+      const capEntryN = capHistN.find(e => e.favori) || [...capHistN].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+      if (capEntryN && capEntryN.contenu) {
         blocks.push(this.notionHeading('Captions / Réseaux'));
-        for (const [net, text] of Object.entries(p.captions)) {
+        for (const net of (capEntryN.reseaux || Object.keys(capEntryN.contenu))) {
+          const text = capEntryN.contenu[net];
           if (text) blocks.push(this.notionParagraph(net.toUpperCase() + ' — ' + text));
         }
       }
@@ -3552,8 +3650,11 @@ function app() {
         const rows = p.decoupage.map(sh => `<tr><td style="border:1px solid #ddd;padding:4px;font-family:monospace;font-size:8pt">${esc(sh.plan)}</td><td style="border:1px solid #ddd;padding:4px;font-size:9pt">${esc(sh.focale)}</td><td style="border:1px solid #ddd;padding:4px;font-size:9pt">${esc(sh.description)}</td><td style="border:1px solid #ddd;padding:4px;font-size:9pt">${esc(sh.heure)}</td><td style="border:1px solid #ddd;padding:4px;font-size:9pt">${esc(sh.intention)}</td><td style="border:1px solid #ddd;padding:4px;font-size:9pt">${esc(sh.son)}</td></tr>`).join('');
         decoupage = `<table style="width:100%;border-collapse:collapse;margin-top:6px"><tr style="background:#f0f7f8"><th style="border:1px solid #ddd;padding:4px;font-size:8pt;text-align:left">Plan</th><th style="border:1px solid #ddd;padding:4px;font-size:8pt;text-align:left">Focale</th><th style="border:1px solid #ddd;padding:4px;font-size:8pt;text-align:left">Description</th><th style="border:1px solid #ddd;padding:4px;font-size:8pt;text-align:left">Heure</th><th style="border:1px solid #ddd;padding:4px;font-size:8pt;text-align:left">Intention</th><th style="border:1px solid #ddd;padding:4px;font-size:8pt;text-align:left">Son</th></tr>${rows}</table>`;
       }
+      // Favori s'il y en a un, sinon la génération la plus récente.
       let captions = '';
-      if (p.captions) captions = ['instagram','tiktok','linkedin','twitter'].filter(n=>p.captions[n]).map(n=>`<p style="font-size:9pt;margin:6px 0"><b style="text-transform:uppercase;color:#3CD6D1">${n}</b><br>${nl2(p.captions[n])}</p>`).join('');
+      const capHist = p.captionsHistory || [];
+      const capEntry = capHist.find(e => e.favori) || [...capHist].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+      if (capEntry && capEntry.contenu) captions = (capEntry.reseaux || Object.keys(capEntry.contenu)).filter(n=>capEntry.contenu[n]).map(n=>`<p style="font-size:9pt;margin:6px 0"><b style="text-transform:uppercase;color:#3CD6D1">${n}</b><br>${nl2(capEntry.contenu[n])}</p>`).join('');
       const moodboard = [p.moodboardRefVisuelles && ('<b>Réf. visuelles :</b> '+esc(p.moodboardRefVisuelles)), p.moodboardRefSonores && ('<b>Réf. sonores :</b> '+esc(p.moodboardRefSonores)), p.moodboardTon && ('<b>Ton :</b> '+esc(p.moodboardTon)), p.moodboardNotes && esc(p.moodboardNotes)].filter(Boolean).map(x=>`<p style="font-size:10pt;margin:4px 0">${x}</p>`).join('');
       return `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;max-width:720px"><div style="border-bottom:3px solid #024059;padding-bottom:10px;margin-bottom:12px"><h1 style="font-size:18pt;color:#024059;margin:0">${esc(p.title)}</h1><p style="font-size:10pt;color:#666;margin:4px 0 0">${esc(p.client||'')} · ${esc(p.type||'')}${p.deadline ? ' · Livraison : '+new Date(p.deadline).toLocaleDateString('fr-FR') : ''}</p></div>${sec('Pitch', para(p.pitch))}${sec('Idées', para(p.idees))}${sec('À penser', para(p.aPenser))}${sec('Moodboard & références', moodboard)}${sec('Scénario', para(p.scenario))}${sec('Découpage technique', decoupage)}${sec('Captions / Réseaux', captions)}<p style="font-size:8pt;color:#aaa;text-align:center;margin-top:24px">Généré par Moustikprod Studio</p></div>`;
     },
