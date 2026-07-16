@@ -551,14 +551,13 @@ tailwind.config = {
 
           <!-- CAPTIONS TAB -->
           <div x-show="detailTab==='captions'" class="space-y-4">
-            <div class="bg-surface border border-line rounded-xl p-4 space-y-3">
-              <div>
-                <p class="text-xs font-mono text-muted uppercase mb-1.5">Angle</p>
-                <div class="flex gap-2">
-                  <button type="button" @click="captionsAngle='client'" :class="captionsAngle==='client' ? 'bg-accent text-white border-accent' : 'bg-surface text-ink border-line hover:border-accent/50'" class="text-sm px-3 py-1.5 rounded-lg border transition">Client</button>
-                  <button type="button" @click="captionsAngle='moustikprod'" :class="captionsAngle==='moustikprod' ? 'bg-accent text-white border-accent' : 'bg-surface text-ink border-line hover:border-accent/50'" class="text-sm px-3 py-1.5 rounded-lg border transition">Moustikprod</button>
-                </div>
-              </div>
+            <div class="flex gap-2 border-b border-line">
+              <button type="button" @click="captionsAngle='client'; captionsSelectedIds=[]" :class="captionsAngle==='client' ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-ink'" class="text-sm px-3 py-2 border-b-2 font-medium transition">Client</button>
+              <button type="button" @click="captionsAngle='moustikprod'; captionsSelectedIds=[]" :class="captionsAngle==='moustikprod' ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-ink'" class="text-sm px-3 py-2 border-b-2 font-medium transition">Moustikprod</button>
+              <button type="button" x-show="captionsHasLegacy" @click="captionsAngle='anciennes'; captionsSelectedIds=[]" :class="captionsAngle==='anciennes' ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-ink'" class="text-sm px-3 py-2 border-b-2 font-medium transition">Anciennes</button>
+            </div>
+
+            <div x-show="captionsAngle !== 'anciennes'" class="bg-surface border border-line rounded-xl p-4 space-y-3">
               <div>
                 <p class="text-xs font-mono text-muted uppercase mb-1.5">Réseaux</p>
                 <div class="flex flex-wrap gap-3">
@@ -576,13 +575,21 @@ tailwind.config = {
               <p x-show="captionsError" class="text-xs text-accent" x-text="captionsError"></p>
             </div>
 
+            <div x-show="captionsAngle !== 'anciennes'" class="flex flex-wrap gap-2">
+              <button @click="telechargerCaptionsPdf()" :disabled="!captionsSelectedIds.length" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition disabled:opacity-40 disabled:cursor-not-allowed">🖨️ Impression PDF</button>
+              <button @click="exportCaptionsToNotion()" :disabled="!captionsSelectedIds.length || captionsExportLoading" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
+                <span x-show="captionsExportLoading" class="spinner"></span> Export Notion
+              </button>
+            </div>
+
             <div class="space-y-3">
               <template x-for="entry in captionsHistorySorted" :key="entry.id">
                 <div class="bg-surface border border-line rounded-xl p-4 space-y-3">
                   <div class="flex items-center justify-between flex-wrap gap-2">
                     <div class="flex items-center gap-2 flex-wrap">
+                      <input x-show="captionsAngle !== 'anciennes'" type="checkbox" :checked="captionsSelectedIds.includes(entry.id)" @change="toggleCaptionSelected(entry.id)" class="accent-accent">
                       <span class="text-xs font-mono text-muted" x-text="new Date(entry.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})"></span>
-                      <span class="text-xs px-2 py-0.5 rounded-full font-mono uppercase" :class="entry.angle==='moustikprod' ? 'bg-accent2/20 text-ink' : entry.angle==='client' ? 'bg-accent/15 text-accent' : 'bg-line text-muted'" x-text="entry.angle==='moustikprod' ? 'Moustikprod' : entry.angle==='client' ? 'Client' : 'Format ancien'"></span>
+                      <span x-show="!entry.angle" class="text-xs px-2 py-0.5 rounded-full font-mono uppercase bg-line text-muted">Format ancien</span>
                       <template x-for="net in entry.reseaux" :key="net">
                         <span class="text-[10px] px-1.5 py-0.5 rounded bg-bg border border-line text-muted uppercase font-mono" x-text="net"></span>
                       </template>
@@ -1618,6 +1625,7 @@ function app() {
     logistiqueLoading: false, logistiqueError: '',
     captionsLoading: false, captionsError: '',
     captionsAngle: 'client', captionsReseaux: ['reels','shorts','tiktok'],
+    captionsSelectedIds: [], captionsExportLoading: false,
     newChecklistItem: '', newMatosItem: '',
     notionExportLoading: false, notionExportError: '',
     moodboardImageInput: '', projetPdfLoading: false,
@@ -2507,11 +2515,18 @@ function app() {
         ? this.captionsReseaux.filter(n => n !== net)
         : [...this.captionsReseaux, net];
     },
+    get captionsHasLegacy() {
+      return ((this.currentProject && this.currentProject.captionsHistory) || []).some(e => !e.angle);
+    },
     get captionsHistorySorted() {
       const list = (this.currentProject && this.currentProject.captionsHistory) || [];
-      return [...list].sort((a,b) => (b.favori?1:0) - (a.favori?1:0) || new Date(b.createdAt) - new Date(a.createdAt));
+      const filtered = this.captionsAngle === 'anciennes'
+        ? list.filter(e => !e.angle)
+        : list.filter(e => e.angle === this.captionsAngle);
+      return [...filtered].sort((a,b) => (b.favori?1:0) - (a.favori?1:0) || new Date(b.createdAt) - new Date(a.createdAt));
     },
     async generateCaptions() {
+      if (this.captionsAngle !== 'client' && this.captionsAngle !== 'moustikprod') { this.captionsError = 'Sélectionne un angle Client ou Moustikprod.'; return; }
       if (!this.captionsReseaux.length) { this.captionsError = 'Sélectionne au moins un réseau.'; return; }
       this.captionsLoading = true; this.captionsError='';
       try {
@@ -2561,6 +2576,75 @@ function app() {
       if (!confirm('Supprimer cette génération ?')) return;
       this.currentProject.captionsHistory = (this.currentProject.captionsHistory||[]).filter(e => e.id !== id);
       this.saveProjects();
+    },
+    toggleCaptionSelected(id) {
+      this.captionsSelectedIds = this.captionsSelectedIds.includes(id)
+        ? this.captionsSelectedIds.filter(x => x !== id)
+        : [...this.captionsSelectedIds, id];
+    },
+    // HTML des seules entrées cochées de l'onglet actif — distinct de
+    // projetExportHtml() qui exporte le projet entier.
+    captionsSelectionExportHtml() {
+      const p = this.currentProject;
+      const esc = t => String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const nl2 = t => esc(t).replace(/\n/g,'<br>');
+      const angleLabel = this.captionsAngle === 'moustikprod' ? 'Moustikprod' : 'Client';
+      const selected = this.captionsHistorySorted.filter(e => this.captionsSelectedIds.includes(e.id));
+      const entriesHtml = selected.map(entry => {
+        const dateLabel = new Date(entry.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
+        const netsHtml = (entry.reseaux || Object.keys(entry.contenu||{})).filter(n => entry.contenu && entry.contenu[n]).map(n => `<p style="font-size:9pt;margin:6px 0"><b style="text-transform:uppercase;color:#3CD6D1">${n}</b><br>${nl2(entry.contenu[n])}</p>`).join('');
+        return `<div style="margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid #ddd"><p style="font-size:9pt;color:#666;margin:0 0 6px">${esc(dateLabel)}</p>${netsHtml}</div>`;
+      }).join('');
+      return `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;max-width:720px"><div style="border-bottom:3px solid #024059;padding-bottom:10px;margin-bottom:12px"><h1 style="font-size:16pt;color:#024059;margin:0">${esc(p.title)} — Captions ${angleLabel}</h1></div>${entriesHtml}<p style="font-size:8pt;color:#aaa;text-align:center;margin-top:24px">Généré par Moustikprod Studio</p></div>`;
+    },
+    // Même mécanisme que telechargerProjetPdf() : impression navigateur, pas
+    // de lib PDF (html2pdf.js chargé en CDN mais jamais utilisé dans ce fichier).
+    telechargerCaptionsPdf() {
+      if (!this.captionsSelectedIds.length) return;
+      const w = window.open('', '_blank');
+      if (!w) { this.toast('Autorise les pop-ups pour générer le PDF', 'error'); return; }
+      w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Captions</title></head><body style="margin:0;padding:1.5cm">${this.captionsSelectionExportHtml()}</body></html>`);
+      w.document.close();
+      w.focus();
+      setTimeout(() => { try { w.print(); } catch(e) {} }, 500);
+      this.toast('Fenêtre ouverte : choisis « Enregistrer au format PDF »');
+    },
+    // Crée une page Notion indépendante (pas liée à notionPageId du projet) —
+    // uniquement la propriété Nom pour éviter les select à options fermées
+    // (Type/Statut) qui n'ont pas de sens pour un export captions seules.
+    async exportCaptionsToNotion() {
+      if (!this.captionsSelectedIds.length) return;
+      this.captionsExportLoading = true;
+      try {
+        const p = this.currentProject;
+        const angleLabel = this.captionsAngle === 'moustikprod' ? 'Moustikprod' : 'Client';
+        const selected = this.captionsHistorySorted.filter(e => this.captionsSelectedIds.includes(e.id));
+        const blocks = [];
+        for (const entry of selected) {
+          const dateLabel = new Date(entry.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
+          blocks.push(this.notionHeading(dateLabel));
+          for (const net of (entry.reseaux || Object.keys(entry.contenu||{}))) {
+            const text = entry.contenu && entry.contenu[net];
+            if (text) blocks.push(this.notionParagraph(net.toUpperCase() + ' — ' + text));
+          }
+        }
+        const res = await this.apiFetch(`/api/notion.js?endpoint=pages`, {
+          method: 'POST',
+          body: JSON.stringify({
+            parent: { database_id: '387ad81d-a4bc-812a-9650-e8b28b058e76' },
+            properties: { Nom: { title: [{ text: { content: `${p.title} — Captions ${angleLabel}` } }] } },
+            children: blocks.slice(0, 100),
+          }),
+        });
+        const page = await res.json();
+        if (!page.id) throw new Error(page.message || 'Erreur Notion');
+        this.toast('Captions exportées vers Notion');
+        if (page.url) window.open(page.url, '_blank');
+      } catch(e) {
+        this.toast('Erreur export Notion : ' + e.message, 'error');
+      } finally {
+        this.captionsExportLoading = false;
+      }
     },
     addChecklistItem() {
       if (!this.newChecklistItem.trim()) return;
