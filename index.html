@@ -3352,10 +3352,7 @@ function app() {
           <div style="display:grid;grid-template-columns:${mineur&&a.tuteurLegal?'1fr 1fr 1fr':'1fr 1fr'};gap:24px">
             <div>${sigImg(a.signatureData, mineur?'Signature du/de la mineur(e)':'Signature du/de la signataire')}</div>
             ${mineur&&a.tuteurLegal?`<div>${sigImg(a.signatureTuteurData,'Signature du tuteur légal<br>'+esc(a.tuteurLegal))}</div>`:''}
-            <div>
-              <div style="height:70px;border:1px solid #ccc;border-radius:4px;margin-bottom:4px"></div>
-              <div style="font-size:9pt;color:#555">Pour ${esc(s.nomCommercial||'Moustikprod')}<br>${esc(prestataire)}</div>
-            </div>
+            <div>${sigImg(s.signaturePrestataire, 'Pour '+esc(s.nomCommercial||'Moustikprod')+'<br>'+esc(prestataire))}</div>
           </div>
         </div>
         <div style="margin-top:32px;padding-top:12px;border-top:1px solid #eee;text-align:center;font-size:8pt;color:#aaa">
@@ -3382,6 +3379,7 @@ function app() {
     async envoyerPourSignature(a) {
       const token = (crypto.randomUUID ? crypto.randomUUID() + crypto.randomUUID() : (Date.now() + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2))).replace(/-/g,'');
       const projet = this.projects.find(p => p.id === a.projetId) || {};
+      a.signaturePrestataire = a.signaturePrestataire || this.settings.signaturePrestataire || '';
       const payload = {
         token,
         type: 'autorisation',
