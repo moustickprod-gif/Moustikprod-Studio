@@ -573,7 +573,6 @@ tailwind.config = {
                 <span x-show="captionsLoading" class="spinner"></span> Générer les captions
               </button>
               <p x-show="captionsError" class="text-xs text-accent" x-text="captionsError"></p>
-              <pre x-show="captionsLoading && captionsStreamingPreview" x-text="captionsStreamingPreview" class="text-xs text-muted whitespace-pre-wrap bg-bg border border-line rounded-lg p-3 max-h-48 overflow-y-auto"></pre>
             </div>
 
             <div x-show="captionsAngle !== 'anciennes'" class="flex flex-wrap gap-2">
@@ -882,7 +881,6 @@ tailwind.config = {
             </div>
             <p x-show="manualIdeaError" class="text-xs text-accent mb-3" x-text="manualIdeaError"></p>
             <p x-show="competitiveError" class="text-xs text-accent mb-3" x-text="competitiveError"></p>
-            <pre x-show="(manualIdeaLoading || competitiveLoading) && ideaStreamingPreview" x-text="ideaStreamingPreview" class="text-xs text-muted whitespace-pre-wrap bg-surface border border-line rounded-xl p-4 mb-4 max-h-64 overflow-y-auto"></pre>
             <div x-show="ideasLoading" class="text-muted text-sm mb-4">Chargement…</div>
             <div x-show="!ideasLoading && ideasList.length===0" class="text-center py-20 text-muted">
               Aucune étude pour l'instant. La tâche hebdomadaire alimentera cet onglet automatiquement, ou clique "Générer maintenant".
@@ -1186,7 +1184,7 @@ tailwind.config = {
           <div class="bg-surface border border-line rounded-xl p-5">
             <h3 class="font-display font-bold mb-3">Claude API</h3>
             <p class="text-sm">Clé API : <span class="font-mono text-muted">••••••••••••</span></p>
-            <p class="text-sm mt-1">Modèle : <span class="font-mono text-accent">claude-sonnet-5</span></p>
+            <p class="text-sm mt-1">Modèle : <span class="font-mono text-accent">claude-sonnet-4-6</span></p>
           </div>
 
           <div class="bg-surface border border-line rounded-xl p-5">
@@ -1601,7 +1599,6 @@ function app() {
     ideasList: [], ideasLoading: false, expandedIdeaId: null,
     manualIdeaLoading: false, manualIdeaError: '',
     competitiveLoading: false, competitiveError: '',
-    ideaStreamingPreview: '',
     db: null,
     statusFilter: 'Tous',
     searchQuery: '',
@@ -1626,7 +1623,7 @@ function app() {
     decoupageLoading: false, decoupageError: '',
     scenarioLoading: false, scenarioError: '',
     logistiqueLoading: false, logistiqueError: '',
-    captionsLoading: false, captionsError: '', captionsStreamingPreview: '',
+    captionsLoading: false, captionsError: '',
     captionsAngle: 'client', captionsReseaux: ['reels','shorts','tiktok'],
     captionsSelectedIds: [], captionsExportLoading: false,
     newChecklistItem: '', newMatosItem: '',
@@ -1882,13 +1879,12 @@ function app() {
     // Génère à la demande la même étude + idées que la tâche Cowork hebdomadaire,
     // en se basant sur les projets et clients actuels, écrit directement dans Firestore.
     async generateManualIdea() {
-      this.manualIdeaLoading = true; this.manualIdeaError = ''; this.ideaStreamingPreview = '';
+      this.manualIdeaLoading = true; this.manualIdeaError = '';
       try {
         const ctx = this.projects.map(p => `${p.title} (${p.client}) — ${p.type}, statut: ${p.status}`).join('\n') || 'Aucun projet en cours.';
-        const text = await this.callClaudeStream(
+        const text = await this.callClaude(
           `Tu es analyste stratégique pour Moustikprod, agence vidéo freelance. Fais une courte étude (tendances du moment, opportunités pour les projets en cours) et propose 3 à 5 idées concrètes de contenu ou de prospection.\nRéponds UNIQUEMENT avec un objet JSON valide, sans texte avant ni après, sans balises markdown. Clés exactes : etude (string, 4-6 phrases), idees (array de strings).`,
-          `Projets en cours:\n${ctx}`,
-          (t) => { this.ideaStreamingPreview = t; }
+          `Projets en cours:\n${ctx}`
         );
         const j = this.parseEtudeIdees(text);
         const { weekStart, weekLabel } = this.weekLabelNow();
@@ -1901,19 +1897,18 @@ function app() {
       } catch(e) {
         this.manualIdeaError = (e && e.code === 'permission-denied') ? 'Accès refusé par Firestore : publie les règles (collection idees).' : ('Erreur : ' + ((e && e.message) || 'réessaie.'));
       } finally {
-        this.manualIdeaLoading = false; this.ideaStreamingPreview = '';
+        this.manualIdeaLoading = false;
       }
     },
     // Analyse de veille concurrentielle ciblée vidéo/réseaux sociaux pour
     // freelances en production vidéo — distincte de l'étude hebdo généraliste.
     async generateCompetitiveAnalysis() {
-      this.competitiveLoading = true; this.competitiveError = ''; this.ideaStreamingPreview = '';
+      this.competitiveLoading = true; this.competitiveError = '';
       try {
         const ctx = this.projects.map(p => `${p.title} (${p.type})`).join('\n') || 'Aucun projet en cours.';
-        const text = await this.callClaudeStream(
+        const text = await this.callClaude(
           `Tu es consultant en veille concurrentielle pour Moustikprod, agence vidéo freelance (Film de marque, réseaux sociaux, storytelling). Analyse les tendances actuelles du marché de la production vidéo freelance/agence en France : formats qui montent, ce que font les concurrents (agences et freelances similaires), positionnement et tarifs observés, opportunités de différenciation. Propose ensuite 3 à 5 idées d'action concrètes (offre, contenu, prospection) basées sur cette analyse.\nRéponds UNIQUEMENT avec un objet JSON valide, sans texte avant ni après, sans balises markdown. Clés exactes : etude (string, 5-8 phrases d'analyse concurrentielle), idees (array de strings, idées d'action concrètes).`,
-          `Types de projets actuels chez Moustikprod:\n${ctx}`,
-          (t) => { this.ideaStreamingPreview = t; }
+          `Types de projets actuels chez Moustikprod:\n${ctx}`
         );
         const j = this.parseEtudeIdees(text);
         const { weekStart, weekLabel } = this.weekLabelNow();
@@ -1926,7 +1921,7 @@ function app() {
       } catch(e) {
         this.competitiveError = (e && e.code === 'permission-denied') ? 'Accès refusé par Firestore : publie les règles (collection idees).' : ('Erreur : ' + ((e && e.message) || 'réessaie.'));
       } finally {
-        this.competitiveLoading = false; this.ideaStreamingPreview = '';
+        this.competitiveLoading = false;
       }
     },
     projetDocToStudio(data) {
@@ -2101,47 +2096,6 @@ function app() {
       const data = await res.json();
       if (data.error || !data.content) throw new Error(data.error?.message || data.error || 'Erreur Claude API');
       return data.content[0].text;
-    },
-    // Variante streaming de callClaude() — même contrat de retour (le texte
-    // complet), mais appelle onDelta(texteAccumulé) à chaque fragment reçu
-    // pour un affichage progressif. callClaude() reste inchangé pour tous
-    // les autres appelants.
-    async callClaudeStream(systemPrompt, userMessage, onDelta) {
-      const res = await this.apiFetch('/api/claude.js', {
-        method: 'POST',
-        body: JSON.stringify({
-          system: systemPrompt,
-          messages: [{ role:'user', content: userMessage }],
-          stream: true
-        })
-      });
-      if (!res.ok || !res.body) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error?.message || data.error || 'Erreur Claude API');
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '', full = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop();
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const payload = line.slice(6);
-          if (payload === '[DONE]') continue;
-          let evt;
-          try { evt = JSON.parse(payload); } catch { continue; }
-          if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
-            full += evt.delta.text;
-            if (onDelta) onDelta(full);
-          }
-          if (evt.type === 'error') throw new Error(evt.error?.message || 'Erreur streaming Claude');
-        }
-      }
-      return full;
     },
     extractJson(text) {
       if (!text) throw new Error('Réponse vide');
@@ -2485,10 +2439,9 @@ function app() {
     async generateScenario() {
       this.scenarioLoading = true; this.scenarioError='';
       try {
-        await this.callClaudeStream(
+        this.currentProject.scenario = await this.callClaude(
           `Tu es scénariste vidéo professionnel. ${this.scenarioPromptFor(this.currentProject.type)} Produis un scénario finalisé, prêt à tourner : n'inclus aucun champ à compléter entre crochets (ex : [Nom du scénariste]) ni ligne de signature.`,
-          this.projectContext(),
-          (text) => { this.currentProject.scenario = text; }
+          this.projectContext()
         );
         this.saveProjects();
         this.toast('Scénario généré');
@@ -2575,7 +2528,7 @@ function app() {
     async generateCaptions() {
       if (this.captionsAngle !== 'client' && this.captionsAngle !== 'moustikprod') { this.captionsError = 'Sélectionne un angle Client ou Moustikprod.'; return; }
       if (!this.captionsReseaux.length) { this.captionsError = 'Sélectionne au moins un réseau.'; return; }
-      this.captionsLoading = true; this.captionsError=''; this.captionsStreamingPreview = '';
+      this.captionsLoading = true; this.captionsError='';
       try {
         const angleInstructions = this.captionsAngle === 'moustikprod'
           ? "Angle MOUSTIKPROD : tu écris pour le compte de Moustikprod (portfolio/prospection), pas pour le client. Ton documentaire-immersion, orienté vers la mise en valeur du savoir-faire de production, pensé pour attirer de nouveaux clients."
@@ -2591,10 +2544,9 @@ function app() {
         };
         const consignes = this.captionsReseaux.map(n => styleParReseau[n]).join('\n');
         const cles = this.captionsReseaux.join(', ');
-        const text = await this.callClaudeStream(
+        const text = await this.callClaude(
           `Tu es expert réseaux sociaux. ${angleInstructions}\nGénère une caption adaptée à ce projet vidéo pour chacun de ces réseaux : ${cles}.\nRéponds en JSON avec UNIQUEMENT ces clés exactes : ${cles}.\n${consignes}`,
-          this.projectContext(),
-          (t) => { this.captionsStreamingPreview = t; }
+          this.projectContext()
         );
         const contenu = this.extractJson(text);
         if (!this.currentProject.captionsHistory) this.currentProject.captionsHistory = [];
@@ -2611,7 +2563,7 @@ function app() {
       } catch(e) {
         this.captionsError = 'Erreur Claude. Réessaie.';
       } finally {
-        this.captionsLoading = false; this.captionsStreamingPreview = '';
+        this.captionsLoading = false;
       }
     },
     toggleCaptionFavori(id) {
