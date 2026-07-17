@@ -604,9 +604,9 @@ tailwind.config = {
                       <div x-show="entry.contenu && entry.contenu[net]" class="bg-bg border border-line rounded-lg p-3">
                         <div class="flex items-center justify-between mb-1.5">
                           <span class="text-xs font-mono text-accent uppercase" x-text="net"></span>
-                          <button @click="copyText(entry.contenu[net])" class="text-xs text-muted hover:text-ink">Copier</button>
+                          <button @click="copyText(captionText(entry, net))" class="text-xs text-muted hover:text-ink">Copier</button>
                         </div>
-                        <p class="text-sm whitespace-pre-wrap" x-text="entry.contenu[net]"></p>
+                        <p class="text-sm whitespace-pre-wrap" x-text="captionText(entry, net)"></p>
                       </div>
                     </template>
                   </div>
@@ -2525,6 +2525,20 @@ function app() {
         : list.filter(e => e.angle === this.captionsAngle);
       return [...filtered].sort((a,b) => (b.favori?1:0) - (a.favori?1:0) || new Date(b.createdAt) - new Date(a.createdAt));
     },
+    // Réduit n'importe quelle valeur (string, objet imbriqué, tableau) en une
+    // seule chaîne de texte lisible — filet de sécurité pour l'affichage/copie
+    // des captions si une génération (même ancienne, déjà en base) n'a pas
+    // respecté le format string plat attendu.
+    flattenCaptionValue(v) {
+      if (typeof v === 'string') return v;
+      if (v == null) return '';
+      if (Array.isArray(v)) return v.map(x => this.flattenCaptionValue(x)).filter(Boolean).join('\n');
+      if (typeof v === 'object') return Object.values(v).map(x => this.flattenCaptionValue(x)).filter(Boolean).join('\n');
+      return String(v);
+    },
+    captionText(entry, net) {
+      return this.flattenCaptionValue(entry.contenu && entry.contenu[net]);
+    },
     async generateCaptions() {
       if (this.captionsAngle !== 'client' && this.captionsAngle !== 'moustikprod') { this.captionsError = 'Sélectionne un angle Client ou Moustikprod.'; return; }
       if (!this.captionsReseaux.length) { this.captionsError = 'Sélectionne au moins un réseau.'; return; }
@@ -2545,10 +2559,15 @@ function app() {
         const consignes = this.captionsReseaux.map(n => styleParReseau[n]).join('\n');
         const cles = this.captionsReseaux.join(', ');
         const text = await this.callClaude(
-          `Tu es expert réseaux sociaux. ${angleInstructions}\nGénère une caption adaptée à ce projet vidéo pour chacun de ces réseaux : ${cles}.\nRéponds en JSON avec UNIQUEMENT ces clés exactes : ${cles}.\n${consignes}`,
+          `Tu es expert réseaux sociaux. ${angleInstructions}\nGénère une caption adaptée à ce projet vidéo pour chacun de ces réseaux : ${cles}.\nRéponds en JSON avec UNIQUEMENT ces clés exactes : ${cles}. IMPORTANT : la valeur de chaque clé doit être une simple chaîne de texte brute (string) — jamais un objet ni un tableau imbriqué (pas de sous-clés du type {hook, legende, hashtags}). Fonds tout le contenu (accroche, corps, hashtags compris) dans une seule chaîne de texte par réseau.\n${consignes}`,
           this.projectContext()
         );
-        const contenu = this.extractJson(text);
+        const contenuRaw = this.extractJson(text);
+        // Filet de sécurité : si Claude renvoie quand même un objet/tableau
+        // imbriqué pour un réseau malgré la consigne ci-dessus, on aplatit
+        // en texte lisible plutôt que de stocker (et afficher) [object Object].
+        const contenu = {};
+        for (const net of this.captionsReseaux) contenu[net] = this.flattenCaptionValue(contenuRaw[net]);
         if (!this.currentProject.captionsHistory) this.currentProject.captionsHistory = [];
         this.currentProject.captionsHistory.unshift({
           id: 'cap_' + Date.now(),
@@ -2592,7 +2611,7 @@ function app() {
       const selected = this.captionsHistorySorted.filter(e => this.captionsSelectedIds.includes(e.id));
       const entriesHtml = selected.map(entry => {
         const dateLabel = new Date(entry.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
-        const netsHtml = (entry.reseaux || Object.keys(entry.contenu||{})).filter(n => entry.contenu && entry.contenu[n]).map(n => `<p style="font-size:9pt;margin:6px 0"><b style="text-transform:uppercase;color:#3CD6D1">${n}</b><br>${nl2(entry.contenu[n])}</p>`).join('');
+        const netsHtml = (entry.reseaux || Object.keys(entry.contenu||{})).filter(n => entry.contenu && entry.contenu[n]).map(n => `<p style="font-size:9pt;margin:6px 0"><b style="text-transform:uppercase;color:#3CD6D1">${n}</b><br>${nl2(this.captionText(entry, n))}</p>`).join('');
         return `<div style="margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid #ddd"><p style="font-size:9pt;color:#666;margin:0 0 6px">${esc(dateLabel)}</p>${netsHtml}</div>`;
       }).join('');
       return `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;max-width:720px"><div style="border-bottom:3px solid #024059;padding-bottom:10px;margin-bottom:12px"><h1 style="font-size:16pt;color:#024059;margin:0">${esc(p.title)} — Captions ${angleLabel}</h1></div>${entriesHtml}<p style="font-size:8pt;color:#aaa;text-align:center;margin-top:24px">Généré par Moustikprod Studio</p></div>`;
@@ -2624,7 +2643,7 @@ function app() {
           const dateLabel = new Date(entry.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
           blocks.push(this.notionHeading(dateLabel));
           for (const net of (entry.reseaux || Object.keys(entry.contenu||{}))) {
-            const text = entry.contenu && entry.contenu[net];
+            const text = this.captionText(entry, net);
             if (text) blocks.push(this.notionParagraph(net.toUpperCase() + ' — ' + text));
           }
         }
@@ -2703,7 +2722,7 @@ function app() {
       if (capEntryN && capEntryN.contenu) {
         blocks.push(this.notionHeading('Captions / Réseaux'));
         for (const net of (capEntryN.reseaux || Object.keys(capEntryN.contenu))) {
-          const text = capEntryN.contenu[net];
+          const text = this.captionText(capEntryN, net);
           if (text) blocks.push(this.notionParagraph(net.toUpperCase() + ' — ' + text));
         }
       }
@@ -3736,7 +3755,7 @@ function app() {
       let captions = '';
       const capHist = p.captionsHistory || [];
       const capEntry = capHist.find(e => e.favori) || [...capHist].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
-      if (capEntry && capEntry.contenu) captions = (capEntry.reseaux || Object.keys(capEntry.contenu)).filter(n=>capEntry.contenu[n]).map(n=>`<p style="font-size:9pt;margin:6px 0"><b style="text-transform:uppercase;color:#3CD6D1">${n}</b><br>${nl2(capEntry.contenu[n])}</p>`).join('');
+      if (capEntry && capEntry.contenu) captions = (capEntry.reseaux || Object.keys(capEntry.contenu)).filter(n=>capEntry.contenu[n]).map(n=>`<p style="font-size:9pt;margin:6px 0"><b style="text-transform:uppercase;color:#3CD6D1">${n}</b><br>${nl2(this.captionText(capEntry, n))}</p>`).join('');
       const moodboard = [p.moodboardRefVisuelles && ('<b>Réf. visuelles :</b> '+esc(p.moodboardRefVisuelles)), p.moodboardRefSonores && ('<b>Réf. sonores :</b> '+esc(p.moodboardRefSonores)), p.moodboardTon && ('<b>Ton :</b> '+esc(p.moodboardTon)), p.moodboardNotes && esc(p.moodboardNotes)].filter(Boolean).map(x=>`<p style="font-size:10pt;margin:4px 0">${x}</p>`).join('');
       return `<div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;max-width:720px"><div style="border-bottom:3px solid #024059;padding-bottom:10px;margin-bottom:12px"><h1 style="font-size:18pt;color:#024059;margin:0">${esc(p.title)}</h1><p style="font-size:10pt;color:#666;margin:4px 0 0">${esc(p.client||'')} · ${esc(p.type||'')}${p.deadline ? ' · Livraison : '+new Date(p.deadline).toLocaleDateString('fr-FR') : ''}</p></div>${sec('Pitch', para(p.pitch))}${sec('Idées', para(p.idees))}${sec('À penser', para(p.aPenser))}${sec('Moodboard & références', moodboard)}${sec('Scénario', para(p.scenario))}${sec('Découpage technique', decoupage)}${sec('Captions / Réseaux', captions)}<p style="font-size:8pt;color:#aaa;text-align:center;margin-top:24px">Généré par Moustikprod Studio</p></div>`;
     },
