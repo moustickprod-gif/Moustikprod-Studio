@@ -31,8 +31,12 @@ export default async function handler(req, res) {
       })
     });
     const data = await response.json();
+    if (data.error) {
+      console.error('[api/claude] Erreur Anthropic:', response.status, JSON.stringify(data.error));
+    }
     res.status(200).json(data);
   } catch (err) {
+    console.error('[api/claude] Exception:', err);
     res.status(500).json({ error: err.message });
   }
 }

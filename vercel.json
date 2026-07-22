@@ -12,7 +12,7 @@
   "functions": {
     "api/claude.js": {
       "memory": 256,
-      "maxDuration": 60
+      "maxDuration": 300
     },
     "api/notion.js": {
       "memory": 256

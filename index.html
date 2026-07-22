@@ -2268,7 +2268,8 @@ function app() {
         );
         this.newProject.briefContext = userNote ? (userNote + '\n\n— Brief généré —\n' + generated) : generated;
       } catch(e) {
-        this.newProjectBriefError = 'Erreur Claude. Réessaie.';
+        console.error('[Brief] Erreur Claude API:', e);
+        this.newProjectBriefError = `Erreur Claude : ${e.message || 'Réessaie.'}`;
       } finally {
         this.newProjectBriefLoading = false;
       }
@@ -2348,7 +2349,8 @@ function app() {
         this.saveProjects();
         this.toast('Pitch régénéré');
       } catch(e) {
-        this.pitchError = 'Erreur Claude. Réessaie.';
+        console.error('[Pitch] Erreur Claude API:', e);
+        this.pitchError = `Erreur Claude : ${e.message || 'Réessaie.'}`;
       } finally {
         this.pitchLoading = false;
       }
@@ -2363,7 +2365,8 @@ function app() {
         );
         this.creativeAngles = this.parseAngles(text);
       } catch(e) {
-        this.exploreAnglesError = 'Erreur Claude. Réessaie.';
+        console.error('[Angles] Erreur Claude API:', e);
+        this.exploreAnglesError = `Erreur Claude : ${e.message || 'Réessaie.'}`;
       } finally {
         this.exploreAnglesLoading = false;
       }
@@ -2396,7 +2399,8 @@ function app() {
         this.saveProjects();
         this.toast('Références suggérées');
       } catch(e) {
-        this.moodboardError = 'Erreur Claude. Réessaie.';
+        console.error('[Moodboard] Erreur Claude API:', e);
+        this.moodboardError = `Erreur Claude : ${e.message || 'Réessaie.'}`;
       } finally {
         this.moodboardLoading = false;
       }
@@ -2428,7 +2432,7 @@ function app() {
         this.toast('Découpage technique généré');
       } catch(e) {
         console.error('[Découpage] Erreur Claude API:', e);
-        this.decoupageError = 'Erreur Claude. Réessaie.';
+        this.decoupageError = `Erreur Claude : ${e.message || 'Réessaie.'}`;
       } finally {
         this.decoupageLoading = false;
       }
@@ -2456,7 +2460,8 @@ function app() {
         this.saveProjects();
         this.toast('Scénario généré');
       } catch(e) {
-        this.scenarioError = 'Erreur Claude. Réessaie.';
+        console.error('[Scénario] Erreur Claude API:', e);
+        this.scenarioError = `Erreur Claude : ${e.message || 'Réessaie.'}`;
       } finally {
         this.scenarioLoading = false;
       }
@@ -2477,7 +2482,8 @@ function app() {
         const [strengths, weaknesses, improved] = text.split('===SECTION===').map(stripHeading);
         this.scenarioCritique = { strengths: strengths || '', weaknesses: weaknesses || '', improved: improved || '' };
       } catch(e) {
-        this.scenarioCritiqueError = 'Erreur Claude. Réessaie.';
+        console.error('[Critique scénario] Erreur Claude API:', e);
+        this.scenarioCritiqueError = `Erreur Claude : ${e.message || 'Réessaie.'}`;
       } finally {
         this.scenarioCritiqueLoading = false;
       }
@@ -2502,7 +2508,8 @@ function app() {
         this.saveProjects();
         this.toast('Logistique suggérée');
       } catch(e) {
-        this.logistiqueError = 'Erreur Claude. Réessaie.';
+        console.error('[Logistique] Erreur Claude API:', e);
+        this.logistiqueError = `Erreur Claude : ${e.message || 'Réessaie.'}`;
       } finally {
         this.logistiqueLoading = false;
       }
@@ -2590,7 +2597,8 @@ function app() {
         this.saveProjects();
         this.toast('Captions générées');
       } catch(e) {
-        this.captionsError = 'Erreur Claude. Réessaie.';
+        console.error('[Captions] Erreur Claude API:', e);
+        this.captionsError = `Erreur Claude : ${e.message || 'Réessaie.'}`;
       } finally {
         this.captionsLoading = false;
       }
@@ -2846,7 +2854,8 @@ function app() {
         this.studioHistory = this.studioHistory.slice(0,5);
         localStorage.setItem('mp_studio_history', JSON.stringify(this.studioHistory));
       } catch(e) {
-        this.studioError = 'Erreur Claude. Réessaie.';
+        console.error('[Studio] Erreur Claude API:', e);
+        this.studioError = `Erreur Claude : ${e.message || 'Réessaie.'}`;
       } finally {
         this.studioLoading = false;
       }
