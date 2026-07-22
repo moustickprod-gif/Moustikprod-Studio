@@ -23,8 +23,9 @@ export default async function handler(req, res) {
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: Math.min(Number(max_tokens) || 4096, 8192),
+        model: 'claude-sonnet-5',
+        max_tokens: Math.min(Number(max_tokens) || 16000, 32000),
+        thinking: { type: 'adaptive' },
         system,
         messages
       })
