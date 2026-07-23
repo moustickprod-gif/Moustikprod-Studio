@@ -515,6 +515,11 @@ tailwind.config = {
 
           <!-- SCÉNARIO TAB -->
           <div x-show="detailTab==='scenario'" class="space-y-3">
+            <div class="bg-surface border border-line rounded-xl p-4">
+              <label class="text-muted font-mono text-xs uppercase block mb-1.5">Orientation pour cette génération</label>
+              <textarea x-model="currentProject.scenarioOrientation" @blur="saveProjects()" rows="2" placeholder="Ex : insister sur le rapport au grand-père · angle sensoriel, peu de dialogue" class="w-full bg-transparent border-0 text-sm p-0"></textarea>
+              <p class="text-xs text-muted mt-1.5">S'ajoute aux instructions globales (Réglages) pour ce projet uniquement.</p>
+            </div>
             <div class="flex gap-2">
               <button @click="generateScenario()" class="bg-accent text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2">
                 <span x-show="scenarioLoading" class="spinner"></span> Générer avec Claude
@@ -1188,6 +1193,15 @@ tailwind.config = {
           </div>
 
           <div class="bg-surface border border-line rounded-xl p-5">
+            <div class="flex items-start justify-between gap-3 mb-1">
+              <h3 class="font-display font-bold">Instructions de génération de scénario</h3>
+              <button @click="resetScenarioInstructions()" class="text-xs text-muted hover:text-accent underline shrink-0 mt-0.5">Réinitialiser</button>
+            </div>
+            <p class="text-xs text-muted mb-3">Style, approche et contraintes de tournage appliqués à chaque scénario. Le format de sortie, lui, s'adapte au type de vidéo du projet. Laisser vide pour utiliser le texte par défaut.</p>
+            <textarea x-model="settings.scenarioInstructions" @blur="saveSettings()" rows="14" :placeholder="scenarioInstructionsPlaceholder" class="w-full text-sm px-3 py-2 rounded-lg border border-line font-mono leading-relaxed"></textarea>
+          </div>
+
+          <div class="bg-surface border border-line rounded-xl p-5">
             <h3 class="font-display font-bold mb-3">Profil</h3>
             <input x-model="settings.profileName" @blur="saveSettings()" placeholder="Nom" class="w-full text-sm px-3 py-2 rounded-lg border border-line mb-2">
             <input x-model="settings.billingInfo" @blur="saveSettings()" placeholder="Infos de facturation" class="w-full text-sm px-3 py-2 rounded-lg border border-line">
@@ -1569,6 +1583,20 @@ tailwind.config = {
 </div>
 
 <script>
+// Style et contraintes de production appliqués à toute génération de scénario.
+// Éditable dans Réglages (settings.scenarioInstructions) ; ce texte est le repli
+// si le champ est vide. Le FORMAT de sortie n'est volontairement PAS ici : il
+// dépend du type de vidéo et vit dans scenarioPromptFor().
+const SCENARIO_INSTRUCTIONS_DEFAUT = `Tu écris des scénarios vidéo pour Moustikprod, vidéaste indépendant à Lille.
+
+APPROCHE : documentaire-immersion. « Je raconte votre histoire en images. » Le récit prime sur la démonstration : on montre, on ne proclame pas. Partir du geste, du lieu, de la matière. Laisser respirer les silences. Faire émerger la personne derrière le métier. Chercher le détail vrai plutôt que le plan spectaculaire.
+
+CLIENTS : artisans, restaurateurs, acteurs culturels, startups tech. Des gens concrets. Parler leur langue, jamais celle d'une agence.
+
+À PROSCRIRE : ton publicitaire, superlatifs vides (« savoir-faire d'exception », « passion unique »), voix-off pompeuse, ouvertures en « depuis trois générations… », clichés corporate.
+
+CONTRAINTES DE PRODUCTION : tournage en solo, matériel léger (caméra de poche stabilisée + smartphone, micros sans fil), quelques heures sur place. Ne jamais proposer de plans nécessitant plusieurs opérateurs, du matériel lourd, des figurants, ou des conditions impossibles à réunir seul. Les scénarios doivent être tournables tels quels.`;
+
 function app() {
   return {
     // auth
@@ -1692,7 +1720,10 @@ function app() {
     calYear: new Date().getFullYear(),
 
     // settings
-    settings: { profileName:'Moustikprod', billingInfo:'', prenom:'Romain', nom:'ANDRE', nomCommercial:'Moustikprod', siret:'89033460000040', ville:'Montpellier', emailPro:'contact@moustikprod.fr' },
+    settings: { profileName:'Moustikprod', billingInfo:'', prenom:'Romain', nom:'ANDRE', nomCommercial:'Moustikprod', siret:'89033460000040', ville:'Montpellier', emailPro:'contact@moustikprod.fr', scenarioInstructions:'' },
+
+    // Aperçu du texte par défaut dans le champ Réglages tant qu'il est vide.
+    scenarioInstructionsPlaceholder: SCENARIO_INSTRUCTIONS_DEFAUT,
 
     // toasts
     toasts: [],
@@ -1752,6 +1783,7 @@ function app() {
             if (u) {
               this.db = firebase.firestore();
               await this.loadData();
+              this.loadScenarioInstructionsDoc();
               this.loadSuggestions();
             }
           });
@@ -1810,7 +1842,38 @@ function app() {
     },
     saveSettings() {
       localStorage.setItem('mp_studio_settings', JSON.stringify(this.settings));
+      // Seules les instructions de scénario sont aussi persistées dans Firestore
+      // (users/{uid}/data/settings) : c'est un texte long qu'on peaufine dans le
+      // temps et qui ne doit pas disparaître avec le cache navigateur. Le reste
+      // des réglages garde volontairement son stockage local historique.
+      this.saveScenarioInstructionsDoc();
       this.toast('Réglages enregistrés');
+    },
+    // Écriture non bloquante : un échec Firestore laisse le localStorage à jour,
+    // donc l'utilisateur ne perd jamais sa saisie en cours.
+    async saveScenarioInstructionsDoc() {
+      if (!this.db || !this.user) return;
+      try {
+        await this.db.collection('users').doc(this.user.uid).collection('data').doc('settings')
+          .set({ scenarioInstructions: this.settings.scenarioInstructions || '' }, { merge:true });
+      } catch(e) {
+        console.error('Firestore saveScenarioInstructions error', e);
+      }
+    },
+    // Lecture au démarrage (après connexion) : Firestore fait autorité s'il a une
+    // valeur, sinon on conserve ce que localStorage avait déjà chargé.
+    async loadScenarioInstructionsDoc() {
+      if (!this.db || !this.user) return;
+      try {
+        const snap = await this.db.collection('users').doc(this.user.uid).collection('data').doc('settings').get();
+        const remote = snap.exists ? (snap.data() || {}).scenarioInstructions : '';
+        if (typeof remote === 'string' && remote.trim()) {
+          this.settings.scenarioInstructions = remote;
+          localStorage.setItem('mp_studio_settings', JSON.stringify(this.settings));
+        }
+      } catch(e) {
+        console.error('Firestore loadScenarioInstructions error', e);
+      }
     },
     saveProjects() {
       if (this.currentProject) this.saveProjectDoc(this.currentProject);
@@ -1940,6 +2003,7 @@ function app() {
         idees: data.idees || '',
         aPenser: data.aPenser || '',
         scenario: data.scenario || '',
+        scenarioOrientation: data.scenarioOrientation || '',
         decoupage: data.decoupage || [],
         matos: data.matos || [],
         lieu: data.lieu || '',
@@ -2013,6 +2077,7 @@ function app() {
           idees: project.idees || '',
           aPenser: project.aPenser || '',
           scenario: project.scenario || '',
+          scenarioOrientation: project.scenarioOrientation || '',
           decoupage: project.decoupage || [],
           matos: project.matos || [],
           lieu: project.lieu || '',
@@ -2293,6 +2358,7 @@ function app() {
         idees: '',
         aPenser: '',
         scenario: '',
+        scenarioOrientation: '',
         decoupage: [],
         matos: [],
         lieu: '',
@@ -2441,20 +2507,70 @@ function app() {
       const rows = (this.currentProject.decoupage||[]).map(s => `${s.plan} — ${s.focale} — ${s.description} (${s.heure})${s.intention ? ' — intention: '+s.intention : ''}${s.son ? ' — son: '+s.son : ''}`);
       this.copyText(rows.join('\n'));
     },
+    // Format de sortie détaillé, partagé par tous les formats longs (film de
+    // marque, documentaire, interview/témoignage) : le style et les contraintes
+    // viennent des instructions globales, ce bloc ne porte QUE la structure.
+    scenarioFormatLong(intro) {
+      return `${intro}
+
+FORMAT DE SORTIE :
+- Pitch en une phrase
+- Durée cible
+- Fil narratif (3-4 lignes)
+- Puis des séquences numérotées, chacune avec :
+  Intention (pourquoi cette séquence existe)
+  Images (plans concrets, tournables seul)
+  Son (voix-off proposée, question d'interview à poser, ou son direct)`;
+    },
     scenarioPromptFor(type) {
       const map = {
-        'Film de marque': 'Génère un scénario / script voix-off professionnel pour une vidéo Film de marque.',
-        'TikTok/Reels': 'Génère un scénario format 5C (Contexte, Cap, Conflit, Changement, Conclusion) pour TikTok/Reels.',
-        'Interview': 'Génère un guide de questions structuré pour une interview.',
-        'Vlog': 'Génère une trame narrative avec temps forts pour un vlog.',
+        // Clés alignées sur les types réellement proposés à la création d'un
+        // projet (voir le sélecteur : Film de marque, Vlog, TikTok, Interview,
+        // Podcast, Docu, Série / Épisodes). Une clé qui ne correspond à aucun
+        // type tomberait silencieusement dans le format par défaut.
+        'Film de marque': this.scenarioFormatLong('Génère un scénario de film de marque.'),
+        'Docu': this.scenarioFormatLong('Génère un scénario documentaire.'),
+        'Interview': this.scenarioFormatLong("Génère un scénario d'interview / témoignage. Les questions à poser figurent dans la partie Son de chaque séquence."),
+        'Podcast': this.scenarioFormatLong("Génère un scénario d'épisode de podcast vidéo : fil conducteur et questions. Les questions à poser figurent dans la partie Son de chaque séquence."),
+        'Vlog': this.scenarioFormatLong('Génère une trame narrative de vlog, avec ses temps forts.'),
+        'Série / Épisodes': this.scenarioFormatLong("Génère un scénario d'épisode, en indiquant ce qui le relie au reste de la série."),
+        'TikTok': `Génère un scénario court pour TikTok/Reels/Shorts.
+
+FORMAT DE SORTIE :
+- Accroche (les 2 premières secondes, ce qu'on voit et ce qu'on entend)
+- Durée cible
+- Puis 3 à 5 beats numérotés, chacun en une ou deux lignes : ce qu'on voit / ce qu'on entend
+- Chute finale`,
       };
-      return map[type] || 'Génère un scénario vidéo professionnel adapté au type de vidéo.';
+      return map[type] || this.scenarioFormatLong('Génère un scénario vidéo adapté au type de vidéo.');
+    },
+    // Instructions globales (style + contraintes de production). Éditables dans
+    // Réglages ; ce texte sert de repli si le champ est vide.
+    scenarioInstructionsEffectives() {
+      const custom = (this.settings.scenarioInstructions || '').trim();
+      return custom || SCENARIO_INSTRUCTIONS_DEFAUT;
+    },
+    // Recopie le texte par défaut dans le champ pour pouvoir le retoucher, au
+    // lieu de simplement vider (vide = même résultat, mais rien à éditer).
+    resetScenarioInstructions() {
+      this.settings.scenarioInstructions = SCENARIO_INSTRUCTIONS_DEFAUT;
+      this.saveSettings();
     },
     async generateScenario() {
       this.scenarioLoading = true; this.scenarioError='';
       try {
+        // Composition : style global -> format selon le type -> orientation du
+        // projet. L'orientation arrive en dernier pour affiner sans contredire
+        // le cadre ; absente (projet existant), le prompt est inchangé.
+        const orientation = (this.currentProject.scenarioOrientation || '').trim();
+        const systemPrompt = [
+          this.scenarioInstructionsEffectives(),
+          this.scenarioPromptFor(this.currentProject.type),
+          orientation ? `ORIENTATION SPÉCIFIQUE POUR CETTE GÉNÉRATION :\n${orientation}` : '',
+          "Produis un scénario finalisé, prêt à tourner : n'inclus aucun champ à compléter entre crochets (ex : [Nom du scénariste]) ni ligne de signature.",
+        ].filter(Boolean).join('\n\n');
         this.currentProject.scenario = await this.callClaude(
-          `Tu es scénariste vidéo professionnel. ${this.scenarioPromptFor(this.currentProject.type)} Produis un scénario finalisé, prêt à tourner : n'inclus aucun champ à compléter entre crochets (ex : [Nom du scénariste]) ni ligne de signature.`,
+          systemPrompt,
           this.projectContext()
         );
         this.saveProjects();
