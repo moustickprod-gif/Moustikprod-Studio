@@ -341,9 +341,50 @@ tailwind.config = {
           </div>
 
           <div class="flex gap-1 border-b border-line mb-5 overflow-x-auto">
-            <template x-for="t in ['pitch','moodboard','scenario','decoupage','logistique','captions','suivi']" :key="t">
-              <button @click="detailTab=t" :class="detailTab===t ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-ink'" class="px-4 py-2 text-sm font-medium border-b-2 transition whitespace-nowrap" x-text="{pitch:'Pitch',moodboard:'Moodboard & Références',scenario:'Scénario',decoupage:'Découpage technique',logistique:'Logistique',captions:'Captions / Réseaux',suivi:'Suivi'}[t]"></button>
+            <template x-for="t in ['entretien','pitch','moodboard','scenario','decoupage','logistique','captions','suivi']" :key="t">
+              <button @click="detailTab=t" :class="detailTab===t ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-ink'" class="px-4 py-2 text-sm font-medium border-b-2 transition whitespace-nowrap" x-text="{entretien:'Entretien',pitch:'Pitch',moodboard:'Moodboard & Références',scenario:'Scénario',decoupage:'Découpage technique',logistique:'Logistique',captions:'Captions / Réseaux',suivi:'Suivi'}[t]"></button>
             </template>
+          </div>
+
+          <!-- ENTRETIEN TAB -->
+          <div x-show="detailTab==='entretien'" class="space-y-4">
+            <p class="text-sm text-muted">Prépare l'entretien avec le client avant d'écrire. Ce que tu remplis ici nourrit ensuite les générations (pitch, scénario, découpage, captions).</p>
+
+            <div class="bg-surface border-l-4 border-accent2 rounded-xl p-5">
+              <p class="text-accent2 font-mono text-xs mb-2 uppercase">Contexte d'entretien</p>
+              <textarea x-model="currentProject.entretienContexte" @blur="saveProjects()" rows="4" placeholder="Ce que tu sais déjà du projet et du client : activité, objectif de la vidéo, personnes à filmer, contraintes, ton souhaité…" class="w-full bg-transparent border-0 text-sm p-0"></textarea>
+            </div>
+
+            <div class="bg-surface border border-line rounded-xl p-5">
+              <div class="flex items-center justify-between gap-2 mb-3">
+                <p class="text-muted font-mono text-xs uppercase">Trame de questions</p>
+                <div class="flex gap-2 shrink-0">
+                  <button @click="generateEntretienQuestions()" :disabled="entretienLoading" class="bg-accent text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+                    <span x-show="entretienLoading" class="spinner"></span> ✦ Générer les questions
+                  </button>
+                  <button @click="addEntretienQuestion()" class="bg-surface border border-line text-xs px-3 py-1.5 rounded-lg hover:border-accent/50 transition">+ Question</button>
+                </div>
+              </div>
+              <p x-show="entretienError" class="text-xs text-accent mb-2" x-text="entretienError"></p>
+              <p x-show="!(currentProject.entretien||[]).length" class="text-xs text-muted">Aucune question pour l'instant. Génère une trame ou ajoute la tienne.</p>
+              <div class="space-y-3">
+                <template x-for="q in (currentProject.entretien||[])" :key="q.id">
+                  <div class="border border-line rounded-lg p-3">
+                    <div class="flex items-start gap-2 mb-2">
+                      <span class="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded shrink-0 mt-1" :class="q.origine==='manuel' ? 'bg-accent2/20 text-accent2' : 'bg-line text-muted'" x-text="q.origine==='manuel' ? 'Moi' : 'IA'"></span>
+                      <textarea x-model="q.question" @blur="saveProjects()" rows="2" placeholder="Question à poser au client…" class="flex-1 bg-transparent border-0 text-sm p-0 font-medium"></textarea>
+                      <button @click="currentProject.entretien.splice(currentProject.entretien.indexOf(q),1); saveProjects()" class="text-muted hover:text-accent text-xs shrink-0 mt-1">✕</button>
+                    </div>
+                    <textarea x-model="q.reponse" @blur="saveProjects()" rows="2" placeholder="Réponse / notes…" class="w-full bg-bg border border-line rounded-lg p-2 text-sm"></textarea>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <div class="bg-surface border border-line rounded-xl p-5">
+              <p class="text-muted font-mono text-xs mb-2 uppercase">Compte-rendu / transcription</p>
+              <textarea x-model="currentProject.entretienNotes" @blur="saveProjects()" rows="15" placeholder="Colle ici la transcription de l'entretien enregistré, ou tes notes détaillées. C'est la matière la plus riche pour les générations." class="w-full bg-transparent border-0 text-sm p-0 leading-relaxed"></textarea>
+            </div>
           </div>
 
           <!-- PITCH TAB -->
@@ -1632,6 +1673,7 @@ function app() {
     searchQuery: '',
     currentProject: null,
     detailTab: 'pitch',
+    entretienLoading: false, entretienError: '',
 
     // dashboard ai
     aiSuggestLoading: false, aiSuggestions: [], aiSuggestError: '',
@@ -2004,6 +2046,9 @@ function app() {
         aPenser: data.aPenser || '',
         scenario: data.scenario || '',
         scenarioOrientation: data.scenarioOrientation || '',
+        entretienContexte: data.entretienContexte || '',
+        entretien: data.entretien || [],
+        entretienNotes: data.entretienNotes || '',
         decoupage: data.decoupage || [],
         matos: data.matos || [],
         lieu: data.lieu || '',
@@ -2078,6 +2123,9 @@ function app() {
           aPenser: project.aPenser || '',
           scenario: project.scenario || '',
           scenarioOrientation: project.scenarioOrientation || '',
+          entretienContexte: project.entretienContexte || '',
+          entretien: project.entretien || [],
+          entretienNotes: project.entretienNotes || '',
           decoupage: project.decoupage || [],
           matos: project.matos || [],
           lieu: project.lieu || '',
@@ -2359,6 +2407,9 @@ function app() {
         aPenser: '',
         scenario: '',
         scenarioOrientation: '',
+        entretienContexte: '',
+        entretien: [],
+        entretienNotes: '',
         decoupage: [],
         matos: [],
         lieu: '',
@@ -2399,9 +2450,27 @@ function app() {
     },
 
     // ---------- DETAIL GENERATIONS — mêmes sections que le template Notion ----------
+    // Contexte issu de l'entretien préparatoire, dans l'ordre : contexte libre,
+    // puis questions RÉELLEMENT répondues (une question sans réponse n'apporte
+    // rien et n'est pas envoyée), puis la transcription (matière la plus riche,
+    // placée en dernier pour arriver complète). Vide si rien n'est rempli, donc
+    // un projet sans entretien produit exactement le contexte d'avant.
+    entretienContext() {
+      const p = this.currentProject;
+      const parts = [];
+      if ((p.entretienContexte || '').trim()) parts.push(`Contexte d'entretien:\n${p.entretienContexte.trim()}`);
+      const qr = (p.entretien || [])
+        .filter(q => (q.question || '').trim() && (q.reponse || '').trim())
+        .map(q => `- ${q.question.trim()}\n  → ${q.reponse.trim()}`);
+      if (qr.length) parts.push(`Questions posées au client et réponses:\n${qr.join('\n')}`);
+      if ((p.entretienNotes || '').trim()) parts.push(`Transcription / compte-rendu de l'entretien:\n${p.entretienNotes.trim()}`);
+      return parts.join('\n\n');
+    },
     projectContext() {
       const p = this.currentProject;
-      return `Projet: ${p.title}, client ${p.client}, type ${p.type}${p.pitch ? '\nPitch: ' + p.pitch : ''}${p.scenario ? '\nScénario: ' + p.scenario : ''}`;
+      const base = `Projet: ${p.title}, client ${p.client}, type ${p.type}${p.pitch ? '\nPitch: ' + p.pitch : ''}${p.scenario ? '\nScénario: ' + p.scenario : ''}`;
+      const entretien = this.entretienContext();
+      return entretien ? `${base}\n\n${entretien}` : base;
     },
     async regeneratePitch() {
       this.pitchLoading = true; this.pitchError='';
@@ -2611,6 +2680,47 @@ FORMAT DE SORTIE :
       this.saveProjects();
       this.scenarioCritique = null;
       this.toast('Scénario remplacé');
+    },
+    addEntretienQuestion() {
+      if (!this.currentProject.entretien) this.currentProject.entretien = [];
+      this.currentProject.entretien.push({
+        id: 'q_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+        question: '', reponse: '', reponseClient: '', origine: 'manuel',
+      });
+      this.saveProjects();
+    },
+    async generateEntretienQuestions() {
+      this.entretienLoading = true; this.entretienError = '';
+      try {
+        const text = await this.callClaude(
+          "Tu prépares l'entretien préparatoire d'un vidéaste documentaire avec son client, AVANT le tournage. Génère des questions ouvertes qui font émerger l'histoire, les personnes, les gestes concrets, les lieux et les émotions — pas des questions marketing. Évite les questions fermées (oui/non).\nRéponds UNIQUEMENT avec un tableau JSON de chaînes (les questions), sans autre texte. Ex : [\"Question 1 ?\", \"Question 2 ?\"]",
+          `${this.projectContext()}\n\nGénère 6 à 10 questions à poser à ce client.`
+        );
+        const arr = this.extractJson(text);
+        const questions = (Array.isArray(arr) ? arr : []).map(q => String(q || '').trim()).filter(Boolean);
+        if (!questions.length) throw new Error('Aucune question générée');
+
+        // Régénération NON destructive : on conserve tout ce qui porte de la
+        // valeur — questions manuelles, et questions (IA comprises) déjà
+        // répondues côté moi ou côté client. On ne remplace que les questions
+        // IA restées sans réponse. Rien de saisi n'est jamais perdu.
+        const anciennes = this.currentProject.entretien || [];
+        const aGarder = anciennes.filter(q =>
+          q.origine === 'manuel' || (q.reponse || '').trim() || (q.reponseClient || '').trim()
+        );
+        const nouvelles = questions.map((question, i) => ({
+          id: 'q_' + Date.now() + '_' + i + '_' + Math.random().toString(36).slice(2, 7),
+          question, reponse: '', reponseClient: '', origine: 'ia',
+        }));
+        this.currentProject.entretien = [...aGarder, ...nouvelles];
+        this.saveProjects();
+        this.toast('Questions générées');
+      } catch(e) {
+        console.error('[Entretien] Erreur Claude API:', e);
+        this.entretienError = `Erreur Claude : ${e.message || 'Réessaie.'}`;
+      } finally {
+        this.entretienLoading = false;
+      }
     },
     logistiquePrompt() {
       return `Tu es chef de production vidéo. Suggère le matériel à louer et un lieu de tournage adapté à ce projet.\nRéponds en JSON avec ces clés exactes : matos (array de strings, ex: "Steadicam", "Drone DJI"), lieu (string, description du lieu suggéré).`;
