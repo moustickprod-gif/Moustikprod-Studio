@@ -307,17 +307,11 @@ tailwind.config = {
                   <span x-text="currentProject.shareEnabled ? 'Copier le lien client' : 'Partager avec le client'"></span>
                 </button>
                 <button @click="toggleShare()" x-show="currentProject.shareEnabled" class="text-xs text-muted hover:text-red-500">Désactiver</button>
-                <a x-show="currentProject.notionUrl" :href="currentProject.notionUrl" target="_blank" class="text-xs text-accent hover:underline">Voir dans Notion ↗</a>
-                <button @click="exportToNotion()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg flex items-center gap-2 hover:border-accent/50 transition">
-                  <span x-show="notionExportLoading" class="spinner"></span>
-                  <span x-text="currentProject.notionUrl ? 'Mettre à jour Notion' : 'Exporter vers Notion'"></span>
-                </button>
                 <button @click="telechargerProjetPdf()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition flex items-center gap-2"><span x-show="projetPdfLoading" class="spinner"></span> 📄 Exporter en PDF</button>
                 <button @click="relancerClient()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition">✉️ Relancer le client</button>
                 <button @click="confirmDeleteProject()" class="text-xs bg-surface border border-red-200 text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-50 transition">Supprimer</button>
               </div>
             </div>
-            <p x-show="notionExportError" class="text-xs text-accent mt-1" x-text="notionExportError"></p>
           </div>
 
           <div x-show="!projectSuggestionDismissed && (projectSuggestionLoading || projectSuggestion)" class="bg-accent2/10 border border-accent2/30 rounded-xl p-4 mb-5 flex items-center justify-between gap-4">
@@ -623,9 +617,6 @@ tailwind.config = {
 
             <div x-show="captionsAngle !== 'anciennes'" class="flex flex-wrap gap-2">
               <button @click="telechargerCaptionsPdf()" :disabled="!captionsSelectedIds.length" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition disabled:opacity-40 disabled:cursor-not-allowed">🖨️ Impression PDF</button>
-              <button @click="exportCaptionsToNotion()" :disabled="!captionsSelectedIds.length || captionsExportLoading" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
-                <span x-show="captionsExportLoading" class="spinner"></span> Export Notion
-              </button>
             </div>
 
             <div class="space-y-3">
@@ -1695,9 +1686,8 @@ function app() {
     logistiqueLoading: false, logistiqueError: '',
     captionsLoading: false, captionsError: '',
     captionsAngle: 'client', captionsReseaux: ['reels','shorts','tiktok'],
-    captionsSelectedIds: [], captionsExportLoading: false,
+    captionsSelectedIds: [],
     newChecklistItem: '', newMatosItem: '',
-    notionExportLoading: false, notionExportError: '',
     moodboardImageInput: '', projetPdfLoading: false,
 
     // statuts projet — pipeline unifié, partagé avec le CRM (mêmes slugs stockés en Firestore)
@@ -2069,8 +2059,6 @@ function app() {
               : []),
         checklist: data.checklist || [],
         notes: data.notes || '',
-        notionPageId: data.notionPageId || '',
-        notionUrl: data.notionUrl || '',
         shareToken: data.shareToken || '',
         shareEnabled: !!data.shareEnabled,
         validationScenario: data.validationScenario || null,
@@ -2138,8 +2126,6 @@ function app() {
           captionsHistory: project.captionsHistory || [],
           checklist: project.checklist || [],
           notes: project.notes || '',
-          notionPageId: project.notionPageId || null,
-          notionUrl: project.notionUrl || null,
           shareToken: project.shareToken || null,
           shareEnabled: !!project.shareEnabled,
           abbyEstimateId: project.abbyEstimateId || null,
@@ -2449,7 +2435,7 @@ function app() {
       }
     },
 
-    // ---------- DETAIL GENERATIONS — mêmes sections que le template Notion ----------
+    // ---------- DETAIL GENERATIONS ----------
     // Contexte issu de l'entretien préparatoire, dans l'ordre : contexte libre,
     // puis questions RÉELLEMENT répondues (une question sans réponse n'apporte
     // rien et n'est pas envoyée), puis la transcription (matière la plus riche,
@@ -2872,153 +2858,12 @@ FORMAT DE SORTIE :
       setTimeout(() => { try { w.print(); } catch(e) {} }, 500);
       this.toast('Fenêtre ouverte : choisis « Enregistrer au format PDF »');
     },
-    // Crée une page Notion indépendante (pas liée à notionPageId du projet) —
-    // uniquement la propriété Nom pour éviter les select à options fermées
-    // (Type/Statut) qui n'ont pas de sens pour un export captions seules.
-    async exportCaptionsToNotion() {
-      if (!this.captionsSelectedIds.length) return;
-      this.captionsExportLoading = true;
-      try {
-        const p = this.currentProject;
-        const angleLabel = this.captionsAngle === 'moustikprod' ? 'Moustikprod' : 'Client';
-        const selected = this.captionsHistorySorted.filter(e => this.captionsSelectedIds.includes(e.id));
-        const blocks = [];
-        for (const entry of selected) {
-          const dateLabel = new Date(entry.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
-          blocks.push(this.notionHeading(dateLabel));
-          for (const net of (entry.reseaux || Object.keys(entry.contenu||{}))) {
-            const text = this.captionText(entry, net);
-            if (text) blocks.push(this.notionParagraph(net.toUpperCase() + ' — ' + text));
-          }
-        }
-        const res = await this.apiFetch(`/api/notion.js?endpoint=pages`, {
-          method: 'POST',
-          body: JSON.stringify({
-            parent: { database_id: '387ad81d-a4bc-812a-9650-e8b28b058e76' },
-            properties: { Nom: { title: [{ text: { content: `${p.title} — Captions ${angleLabel}` } }] } },
-            children: blocks.slice(0, 100),
-          }),
-        });
-        const page = await res.json();
-        if (!page.id) throw new Error(page.message || 'Erreur Notion');
-        this.toast('Captions exportées vers Notion');
-        if (page.url) window.open(page.url, '_blank');
-      } catch(e) {
-        this.toast('Erreur export Notion : ' + e.message, 'error');
-      } finally {
-        this.captionsExportLoading = false;
-      }
-    },
     addChecklistItem() {
       if (!this.newChecklistItem.trim()) return;
       if (!this.currentProject.checklist) this.currentProject.checklist = [];
       this.currentProject.checklist.push({ label: this.newChecklistItem, done:false });
       this.newChecklistItem = '';
       this.saveProjects();
-    },
-
-    // ---------- NOTION EXPORT ----------
-    // Export manuel, à la demande — contenu créatif uniquement (pas de coordonnées
-    // client) pour rester compatible avec le choix RGPD du CRM.
-    notionRichText(text) {
-      const chunks = [];
-      const s = String(text || '');
-      for (let i = 0; i < s.length; i += 1900) chunks.push(s.slice(i, i + 1900));
-      return (chunks.length ? chunks : ['']).map(c => ({ type:'text', text:{ content:c } }));
-    },
-    notionParagraph(text) { return { object:'block', type:'paragraph', paragraph:{ rich_text: this.notionRichText(text) } }; },
-    notionHeading(text) { return { object:'block', type:'heading_2', heading_2:{ rich_text: this.notionRichText(text) } }; },
-    notionBullet(text) { return { object:'block', type:'bulleted_list_item', bulleted_list_item:{ rich_text: this.notionRichText(text) } }; },
-    notionToggle(title, color, children) {
-      return { object:'block', type:'toggle', toggle:{ rich_text: this.notionRichText(title), color, children: children.length ? children : [this.notionParagraph('')] } };
-    },
-    notionCallout(emoji, text, color) {
-      return { object:'block', type:'callout', callout:{ rich_text: this.notionRichText(text), icon:{ type:'emoji', emoji }, color } };
-    },
-    notionTableRow(cells) {
-      return { object:'block', type:'table_row', table_row:{ cells: cells.map(c => this.notionRichText(c)) } };
-    },
-    // Reproduit la structure exacte du template de préproduction : toggles
-    // PITCH/SCÉNARIO/MATOS À LOUER/LIEU DE TOURNAGE, callouts Idées/À penser,
-    // tableau Découpage Technique, section Moodboard.
-    buildNotionBlocks(p) {
-      const blocks = [];
-      blocks.push(this.notionToggle('PITCH', 'yellow_background', p.pitch ? [this.notionParagraph(p.pitch)] : []));
-      blocks.push(this.notionToggle('SCÉNARIO', 'green_background', p.scenario ? p.scenario.split('\n').map(l => this.notionParagraph(l)) : []));
-      blocks.push(this.notionToggle('MATOS À LOUER', 'gray_background', (p.matos||[]).map(m => this.notionBullet(m))));
-      blocks.push(this.notionToggle('LIEU DE TOURNAGE', 'blue_background', p.lieu ? [this.notionParagraph(p.lieu)] : []));
-
-      if (p.idees) blocks.push(this.notionCallout('💡', p.idees, 'yellow_background'));
-      if (p.aPenser) blocks.push(this.notionCallout('❗', p.aPenser, 'red_background'));
-
-      if (p.decoupage && p.decoupage.length) {
-        blocks.push(this.notionHeading('Découpage Technique'));
-        const rows = [this.notionTableRow(['Plan','Focale / Angle','Description','heure','Fait'])];
-        for (const s of p.decoupage) {
-          rows.push(this.notionTableRow([s.plan || '', s.transition ? 'TRANSITION' : (s.focale||''), s.description||'', s.heure||'', s.fait ? '✓' : '']));
-        }
-        blocks.push({ object:'block', type:'table', table:{ table_width:5, has_column_header:true, has_row_header:false, children:rows } });
-      }
-
-      // Favori s'il y en a un, sinon la génération la plus récente.
-      const capHistN = p.captionsHistory || [];
-      const capEntryN = capHistN.find(e => e.favori) || [...capHistN].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
-      if (capEntryN && capEntryN.contenu) {
-        blocks.push(this.notionHeading('Captions / Réseaux'));
-        for (const net of (capEntryN.reseaux || Object.keys(capEntryN.contenu))) {
-          const text = this.captionText(capEntryN, net);
-          if (text) blocks.push(this.notionParagraph(net.toUpperCase() + ' — ' + text));
-        }
-      }
-
-      blocks.push(this.notionHeading('Moodboard'));
-      blocks.push(this.notionParagraph(p.moodboardNotes || 'Palette, références visuelles, ambiance — à compléter dans Notion.'));
-
-      return blocks.slice(0, 100);
-    },
-    async exportToNotion() {
-      const p = this.currentProject;
-      this.notionExportLoading = true; this.notionExportError = '';
-      try {
-        const properties = {
-          Nom: { title: [{ text: { content: p.title || 'Sans titre' } }] },
-          Client: { rich_text: [{ text: { content: p.client || '' } }] },
-          Type: { select: { name: p.type || 'Autre' } },
-          Statut: { select: { name: this.statusLabel(p.status) || 'Brief' } },
-          Budget: { number: p.budget ? Number(p.budget) : null },
-          Avancement: { number: (p.progress || 0) / 100 },
-        };
-        if (p.deadline) properties.Deadline = { date: { start: p.deadline } };
-
-        if (p.notionPageId) {
-          await this.apiFetch(`/api/notion.js?endpoint=pages/${p.notionPageId}`, {
-            method: 'PATCH',
-            body: JSON.stringify({ properties }),
-          });
-        } else {
-          const res = await this.apiFetch(`/api/notion.js?endpoint=pages`, {
-            method: 'POST',
-            body: JSON.stringify({
-              parent: { database_id: '387ad81d-a4bc-812a-9650-e8b28b058e76' },
-              properties,
-              children: this.buildNotionBlocks(p),
-            }),
-          });
-          const page = await res.json();
-          if (page.id) {
-            p.notionPageId = page.id;
-            p.notionUrl = page.url || ('https://notion.so/' + page.id.replace(/-/g,''));
-          } else {
-            throw new Error(page.message || 'Erreur Notion');
-          }
-        }
-        this.saveProjects();
-        this.toast('Exporté vers Notion');
-      } catch(e) {
-        this.notionExportError = 'Erreur Notion. Réessaie.';
-      } finally {
-        this.notionExportLoading = false;
-      }
     },
 
     // ---------- STUDIO ----------

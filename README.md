@@ -17,7 +17,6 @@ Fusion du CRM et de Studio en une seule application, centrée sur la **création
 ## Sécurité (corrigée lors de la fusion)
 
 - **Tous** les endpoints API exigent un token Firebase (`api/_verifyAuth.js`) + filtre `ALLOWED_EMAILS`.
-- Proxy Notion : endpoints en **liste blanche** (plus d'accès workspace complet).
 - `send-email` authentifié (plus de relais spam Brevo).
 - `signatureRequests` verrouillée côté règles Firestore — créée/lue uniquement via `/api/signature` (compte de service).
 - CORS `*` supprimé partout (same-origin).
@@ -25,7 +24,7 @@ Fusion du CRM et de Studio en une seule application, centrée sur la **création
 ## Variables d'environnement (Vercel)
 
 Voir `.env.local.example`. **Obligatoires** : `ALLOWED_EMAILS`, `ANTHROPIC_API_KEY`, `FIREBASE_SERVICE_ACCOUNT_KEY`.
-Optionnelles : `NOTION_TOKEN` (export Notion), `BREVO_API_KEY` (emails de signature), `IDEAS_INGEST_SECRET` + `STUDIO_OWNER_EMAIL` (tâche hebdo idées).
+Optionnelles : `BREVO_API_KEY` (emails de signature), `IDEAS_INGEST_SECRET` + `STUDIO_OWNER_EMAIL` (tâche hebdo idées).
 
 ## Déploiement
 
