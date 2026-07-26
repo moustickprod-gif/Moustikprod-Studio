@@ -33,6 +33,7 @@
   .modal-box { background:#fff; border-radius:16px; padding:24px; max-width:440px; width:100%; }
   .modal-box textarea { width:100%; border:1px solid #DCE6E9; border-radius:10px; padding:10px; font-family:inherit; font-size:14px; resize:vertical; margin-top:10px; }
   .modal-box .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+  .modal-hint { font-size:12px; color:#6b8a93; margin-top:8px; line-height:1.4; }
 </style>
 </head>
 <body>
@@ -41,7 +42,8 @@
   <div class="modal-box">
     <h3 class="font-bold mb-1" style="color:#024059">Demander une modification</h3>
     <p class="text-sm" style="color:#6b8a93" id="modal-label"></p>
-    <textarea id="modal-comment" rows="5" placeholder="Explique ce que tu souhaites voir changer..."></textarea>
+    <textarea id="modal-comment" rows="5" placeholder="Précisez la séquence concernée, ex : « Séquence 3 : je préfère une ambiance plus calme, sans musique »"></textarea>
+    <p class="modal-hint">💡 Astuce : mentionnez la séquence concernée pour un retour plus précis et plus rapide à traiter.</p>
     <p id="modal-error" class="val-msg error" style="display:none"></p>
     <div class="modal-actions">
       <button class="val-btn" onclick="closeModal()">Annuler</button>

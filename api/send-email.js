@@ -8,21 +8,24 @@ export default async function handler(req, res) {
   const user = await requireUser(req, res);
   if (!user) return;
 
-  const { to, subject, html } = req.body || {};
+  const { to, subject, html, replyTo } = req.body || {};
   const apiKey = process.env.BREVO_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'Clé API Brevo manquante' });
   if (!to || !subject || !html) return res.status(400).json({ error: 'Paramètres manquants (to, subject, html)' });
 
   try {
+    const payload = {
+      sender: { name: 'Moustikprod', email: 'contact@moustikprod.fr' },
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+    };
+    // reply-to optionnel : rétrocompatible (les appels sans replyTo restent inchangés).
+    if (replyTo) payload.replyTo = { email: replyTo };
     const r = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: { 'accept': 'application/json', 'api-key': apiKey, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        sender: { name: 'Moustikprod', email: 'contact@moustikprod.fr' },
-        to: [{ email: to }],
-        subject,
-        htmlContent: html,
-      }),
+      body: JSON.stringify(payload),
     });
     const data = await r.json();
     if (!r.ok) return res.status(r.status).json({ error: data.message || 'Erreur Brevo', details: data });

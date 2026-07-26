@@ -306,6 +306,7 @@ tailwind.config = {
                 <button @click="currentProject.shareEnabled ? copyShareLink() : toggleShare()" class="text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition" :class="currentProject.shareEnabled ? 'bg-accent/15 text-accent border border-accent/30' : 'bg-surface border border-line hover:border-accent/50'">
                   <span x-text="currentProject.shareEnabled ? 'Copier le lien client' : 'Partager avec le client'"></span>
                 </button>
+                <button @click="openEmailShare()" x-show="currentProject.shareEnabled" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition">✉️ Envoyer le lien par email</button>
                 <button @click="toggleShare()" x-show="currentProject.shareEnabled" class="text-xs text-muted hover:text-red-500">Désactiver</button>
                 <button @click="telechargerProjetPdf()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition flex items-center gap-2"><span x-show="projetPdfLoading" class="spinner"></span> 📄 Exporter en PDF</button>
                 <button @click="relancerClient()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition">✉️ Relancer le client</button>
@@ -1287,6 +1288,27 @@ tailwind.config = {
   </div>
 </div>
 
+<!-- ===================== MODAL ENVOI LIEN PAR EMAIL ===================== -->
+<div x-show="emailShareOpen" x-cloak class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @keydown.escape.window="emailShareOpen=false">
+  <div class="modal-slide-enter bg-surface border border-line rounded-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto" x-show="emailShareOpen">
+    <h3 class="font-display font-bold text-lg mb-1">Envoyer le lien au client</h3>
+    <p class="text-xs text-muted mb-4">Le client pourra lire le projet, valider le scénario ou demander des modifications. Le lien inclus est le même que « Copier le lien client ».</p>
+    <label class="text-xs font-mono text-muted uppercase block mb-1">Destinataire</label>
+    <input x-model="emailShareTo" type="email" placeholder="email@client.fr" class="w-full text-sm px-3 py-2 rounded-lg border border-line mb-3">
+    <label class="text-xs font-mono text-muted uppercase block mb-1">Objet</label>
+    <input x-model="emailShareSubject" type="text" class="w-full text-sm px-3 py-2 rounded-lg border border-line mb-3">
+    <label class="text-xs font-mono text-muted uppercase block mb-1">Message</label>
+    <textarea x-model="emailShareBody" rows="9" class="w-full text-sm px-3 py-2 rounded-lg border border-line leading-relaxed"></textarea>
+    <p class="text-xs text-muted mt-2">Le lien de partage est ajouté automatiquement au bas de l'email.</p>
+    <div class="flex gap-3 mt-5">
+      <button @click="emailShareOpen=false" class="flex-1 text-sm border border-line rounded-lg px-4 py-2 hover:bg-bg transition">Annuler</button>
+      <button @click="sendEmailShare()" :disabled="emailShareLoading || !emailShareTo.trim()" class="flex-1 text-sm bg-accent text-white rounded-lg px-4 py-2 hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+        <span x-show="emailShareLoading" class="spinner"></span> Envoyer
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- ===================== MODAL FICHE CLIENT ===================== -->
 <div x-show="clientModalOpen" x-cloak class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @keydown.escape.window="clientModalOpen=false">
   <div class="modal-slide-enter bg-surface border border-line rounded-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto" x-show="clientModalOpen">
@@ -1718,6 +1740,7 @@ function app() {
     saveToProjectOpen: false,
     deleteProjectConfirmOpen: false,
     projectPendingDelete: null,
+    emailShareOpen: false, emailShareTo: '', emailShareSubject: '', emailShareBody: '', emailShareLoading: false,
 
     // clients
     clientSearch: '', currentClient: null,
@@ -2316,6 +2339,63 @@ function app() {
       if (!this.currentProject || !this.currentProject.shareToken) return;
       const url = `${location.origin}/share.html?token=${this.currentProject.shareToken}`;
       navigator.clipboard.writeText(url).then(() => this.toast('Lien copié !', 'success')).catch(() => this.toast('Copie automatique impossible — copie le lien manuellement : ' + url, 'error'));
+    },
+    shareUrl() {
+      return `${location.origin}/share.html?token=${this.currentProject.shareToken}`;
+    },
+    // Pré-remplit et ouvre la fenêtre d'envoi. Le partage doit être activé (même
+    // token que « Copier le lien ») : ce bouton n'apparaît que si shareEnabled,
+    // donc shareToken existe déjà — on ne régénère jamais de token ici.
+    async openEmailShare() {
+      const p = this.currentProject;
+      if (!p || !p.shareToken) { this.toast('Active d\'abord le partage.', 'error'); return; }
+      const client = this.allClients.find(c => c.id === p.clientId);
+      const prenom = (client && (client.prenom || client.nom)) || '';
+      // Destinataire pré-rempli avec l'email de la fiche client, éditable
+      // (corriger, autre interlocuteur, ou s'auto-tester).
+      this.emailShareTo = (client && client.email) || '';
+      this.emailShareSubject = `Votre projet vidéo « ${p.title} » — à consulter`;
+      this.emailShareBody =
+`Bonjour ${prenom},
+
+Voici le lien pour consulter l'avancement de votre projet vidéo « ${p.title} ».
+
+Vous pourrez y lire le pitch, le scénario et le découpage, puis valider le scénario ou demander des modifications directement depuis la page — vos retours me parviennent automatiquement.
+
+N'hésitez pas à répondre à cet email pour toute question.
+
+Bien à vous,
+Moustikprod`;
+      if (!this.emailShareTo) this.toast('Aucun email sur la fiche client — renseigne le destinataire.', 'error');
+      this.emailShareOpen = true;
+    },
+    async sendEmailShare() {
+      const to = (this.emailShareTo || '').trim();
+      if (!to) { this.toast('Renseigne un destinataire.', 'error'); return; }
+      this.emailShareLoading = true;
+      try {
+        const url = this.shareUrl();
+        const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        // Corps texte -> HTML simple, avec le lien en bouton cliquable ajouté au bas.
+        const html =
+          `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#1a1a1a">` +
+          esc(this.emailShareBody).replace(/\n/g, '<br>') +
+          `<div style="margin:24px 0"><a href="${esc(url)}" style="display:inline-block;background:#3CD6D1;color:#024059;font-weight:700;padding:12px 24px;border-radius:8px;text-decoration:none">Consulter le projet →</a></div>` +
+          `<p style="font-size:12px;color:#888">Ou copiez ce lien : ${esc(url)}</p></div>`;
+        const res = await this.apiFetch('/api/send-email.js', {
+          method: 'POST',
+          body: JSON.stringify({ to, subject: this.emailShareSubject, html, replyTo: 'contact@moustikprod.fr' }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) throw new Error(data.error || `Erreur ${res.status}`);
+        this.toast(`✅ Email envoyé à ${to}`, 'success');
+        this.emailShareOpen = false;
+      } catch(e) {
+        console.error('[Partage email] Erreur envoi:', e);
+        this.toast('Échec de l\'envoi : ' + (e.message || 'réessaie'), 'error');
+      } finally {
+        this.emailShareLoading = false;
+      }
     },
     // Devis, factures, contrats et compta sont gérés dans Abby.
     openAbby() {
