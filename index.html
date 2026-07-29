@@ -154,6 +154,14 @@ tailwind.config = {
       <!-- ============ DASHBOARD ============ -->
       <template x-if="view==='dashboard'">
         <div class="space-y-6" x-transition.opacity.duration.150ms>
+          <div x-show="pendingAttentionProjects.length" @click="goToPendingProjects()" class="cursor-pointer bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3 hover:border-amber-300 transition">
+            <span class="text-2xl">🔔</span>
+            <div class="flex-1">
+              <p class="font-display font-bold text-amber-800" x-text="pendingAttentionProjects.length + (pendingAttentionProjects.length > 1 ? ' projets attendent votre attention' : ' projet attend votre attention')"></p>
+              <p class="text-xs text-amber-700 mt-0.5">Validations, modifications ou signatures reçues côté client. Cliquez pour voir les projets concernés.</p>
+            </div>
+            <span class="text-amber-400 text-xl shrink-0">→</span>
+          </div>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div class="bg-surface border border-line rounded-xl p-5">
               <p class="text-muted text-xs font-mono mb-1">EN COURS</p>
@@ -254,6 +262,11 @@ tailwind.config = {
                     <span x-show="p.secteurClient" class="text-xs font-mono text-accent" x-text="p.secteurClient"></span>
                   </div>
                   <span class="text-xs font-mono px-2 py-0.5 rounded shrink-0" :style="statusStyle(p.status)" x-text="statusLabel(p.status)"></span>
+                </div>
+                <div x-show="projectAlerts(p).length" class="flex flex-wrap gap-1.5 mt-3">
+                  <template x-for="(al,ai) in projectAlerts(p)" :key="ai">
+                    <span class="text-[11px] font-medium px-2 py-0.5 rounded-full" :class="al.color==='green' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'" x-text="al.label"></span>
+                  </template>
                 </div>
                 <div class="flex items-center justify-between mt-4 text-xs text-muted font-mono">
                   <span x-text="'Deadline: ' + (p.deadline || '—')"></span>
@@ -2086,6 +2099,7 @@ function app() {
         shareEnabled: !!data.shareEnabled,
         validationScenario: data.validationScenario || null,
         validationScript: data.validationScript || null,
+        alertsSeenAt: data.alertsSeenAt || null,
         abbyEstimateId: data.abbyEstimateId || '',
         abbyEstimateNumber: data.abbyEstimateNumber || '',
         statutCrm: data.statut || 'prospection',
@@ -2293,10 +2307,64 @@ function app() {
       this.projectSuggestion = '';
       this.projectSuggestionDismissed = localStorage.getItem('mp_suggestion_dismissed_' + p.id) === '1';
       this.loadProjectSuggestion(p);
+      // Consulter un projet marque ses alertes clients comme vues : tout
+      // événement postérieur (validation/modif/signature) réapparaîtra.
+      this.markProjectAlertsSeen(p);
+    },
+    // Set ciblé (merge) — ne réécrit pas le doc entier. Non bloquant : un échec
+    // Firestore laisse quand même l'état local à jour pour la session courante.
+    async markProjectAlertsSeen(p) {
+      if (!p) return;
+      const now = new Date().toISOString();
+      p.alertsSeenAt = now;
+      if (!this.db || !this.user) return;
+      try {
+        await this.db.collection('users').doc(this.user.uid).collection('projets').doc(p.id).set({ alertsSeenAt: now }, { merge: true });
+      } catch(e) {
+        console.error('Firestore markProjectAlertsSeen error', e);
+      }
     },
     dismissProjectSuggestion() {
       this.projectSuggestionDismissed = true;
       if (this.currentProject) localStorage.setItem('mp_suggestion_dismissed_' + this.currentProject.id, '1');
+    },
+    // ---------- ALERTES ACTIONS CLIENTS ----------
+    // Renvoie les alertes EN ATTENTE d'un projet : validations (scénario /
+    // découpage) et signatures (contrats + autorisations liés par projetId),
+    // dont le timestamp serveur est postérieur à alertsSeenAt (ou tout si
+    // jamais consulté — rollout option a). Vert = validé/signé, orange =
+    // modif demandée / signature refusée (action à traiter).
+    projectAlerts(p) {
+      if (!p) return [];
+      const seen = p.alertsSeenAt ? new Date(p.alertsSeenAt).getTime() : 0;
+      const isNew = ts => ts && new Date(ts).getTime() > seen;
+      const alerts = [];
+      // Validations sur le projet
+      for (const { field, quoi } of [{ field:'validationScenario', quoi:'scénario' }, { field:'validationScript', quoi:'découpage' }]) {
+        const v = p[field];
+        if (!v || !v.status || !isNew(v.respondedAt)) continue;
+        if (v.status === 'valide') alerts.push({ type:'valide', color:'green', label:`✅ ${quoi} validé` });
+        else if (v.status === 'refuse') alerts.push({ type:'refuse', color:'orange', label:`✏️ modif demandée (${quoi})` });
+      }
+      // Signatures : contrats + autorisations reliés à ce projet
+      const signables = [
+        ...(this.contrats || []).filter(c => c.projetId === p.id),
+        ...(this.autorisations || []).filter(a => a.projetId === p.id),
+      ];
+      for (const s of signables) {
+        if (s.statut === 'signé' && isNew(s.dateSignature)) alerts.push({ type:'signe', color:'green', label:'✍️ signature reçue' });
+        else if (s.statut === 'refusé' && isNew(s.dateRefus)) alerts.push({ type:'signe_refuse', color:'orange', label:'⚠️ signature refusée' });
+      }
+      return alerts;
+    },
+    // Projets ayant au moins une alerte en attente (pour le compteur global).
+    get pendingAttentionProjects() {
+      return (this.projects || []).filter(p => this.projectAlerts(p).length > 0);
+    },
+    // Va aux projets et, si des alertes existent, applique un filtre visuel léger
+    // en faisant défiler vers la liste (le badge sur chaque carte suffit à repérer).
+    goToPendingProjects() {
+      this.view = 'projets';
     },
     async loadProjectSuggestion(project, attempt) {
       if (this.projectSuggestionDismissed) return;
