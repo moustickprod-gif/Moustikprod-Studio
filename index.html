@@ -271,7 +271,6 @@ tailwind.config = {
                 <div class="flex items-center justify-between mt-4 text-xs text-muted font-mono">
                   <span x-text="'Deadline: ' + (p.deadline || '—')"></span>
                   <div class="flex items-center gap-2">
-                    <span x-show="p.paiementStatut" class="px-2 py-0.5 rounded" :class="paiementBadge(p.paiementStatut).cls" x-text="paiementBadge(p.paiementStatut).label"></span>
                     <span x-text="p.progress + '%'"></span>
                   </div>
                 </div>
@@ -4311,15 +4310,6 @@ FORMAT DE SORTIE :
         </div>
         </div>
       `;
-    },
-    paiementBadge(st) {
-      const map = {
-        devis:   { label:'Devis envoyé',  cls:'bg-sky-100 text-sky-700' },
-        acompte: { label:'Acompte reçu',  cls:'bg-amber-100 text-amber-700' },
-        paye:    { label:'Payé ✓',        cls:'bg-emerald-100 text-emerald-700' },
-        impaye:  { label:'En attente',    cls:'bg-red-100 text-red-600' },
-      };
-      return map[st] || { label:'', cls:'' };
     },
     openProjectById(id) {
       const p = this.projects.find(x => x.id === id);
