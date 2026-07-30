@@ -165,15 +165,15 @@ tailwind.config = {
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div class="bg-surface border border-line rounded-xl p-5">
               <p class="text-muted text-xs font-mono mb-1">EN COURS</p>
-              <p class="font-display font-bold text-3xl" x-text="projects.filter(p=>!['livraison','facture'].includes(p.status)).length"></p>
+              <p class="font-display font-bold text-3xl" x-text="projects.filter(p=>!['livre','archive'].includes(p.status)).length"></p>
             </div>
             <div class="bg-surface border border-line rounded-xl p-5">
               <p class="text-muted text-xs font-mono mb-1">LIVRÉS CE MOIS</p>
-              <p class="font-display font-bold text-3xl" x-text="projects.filter(p=>p.status==='livraison' && isThisMonth(p.deadline)).length"></p>
+              <p class="font-display font-bold text-3xl" x-text="projects.filter(p=>p.status==='livre' && isThisMonth(p.deadline)).length"></p>
             </div>
             <div class="bg-surface border border-line rounded-xl p-5">
               <p class="text-muted text-xs font-mono mb-1">EN ATTENTE VALIDATION</p>
-              <p class="font-display font-bold text-3xl" x-text="projects.filter(p=>p.status==='brief').length"></p>
+              <p class="font-display font-bold text-3xl" x-text="projects.filter(p=>p.status==='validation-client').length"></p>
             </div>
           </div>
 
@@ -297,14 +297,27 @@ tailwind.config = {
             <div class="flex items-start justify-between gap-4">
               <input x-model="currentProject.title" @blur="saveProjects()" class="font-display font-bold text-xl bg-transparent border-0 focus:ring-0 w-full px-0">
               <div class="flex items-center gap-2 shrink-0">
-                <select x-model="currentProject.status" @change="saveProjects()" class="text-xs font-mono px-2 py-1.5 rounded-lg border border-line">
+                <select :value="currentProject.status" @change="changeStatus($event.target.value)" class="text-xs font-mono px-2 py-1.5 rounded-lg border border-line">
                   <template x-for="s in statusPipeline" :key="s.slug">
                     <option :value="s.slug" x-text="s.label"></option>
                   </template>
                 </select>
-                <button @click="currentProject.status='livraison'; currentProject.progress=100; saveProjects()" class="text-xs bg-accent2 text-ink font-medium px-3 py-1.5 rounded-lg">Marquer livré</button>
+                <button @click="currentProject.progress=100; changeStatus('livre')" class="text-xs bg-accent2 text-ink font-medium px-3 py-1.5 rounded-lg">Marquer livré</button>
               </div>
             </div>
+            <template x-if="Array.isArray(currentProject.statusHistory) && currentProject.statusHistory.length">
+              <details class="mt-2 text-xs text-muted">
+                <summary class="cursor-pointer select-none hover:text-ink">Historique des statuts (<span x-text="currentProject.statusHistory.length"></span>)</summary>
+                <ul class="mt-1.5 space-y-1 pl-1">
+                  <template x-for="(h,i) in [...currentProject.statusHistory].reverse()" :key="i">
+                    <li class="flex items-center gap-2">
+                      <span class="font-mono px-1.5 py-0.5 rounded" :style="statusStyle(h.slug)" x-text="statusLabel(h.slug)"></span>
+                      <span x-text="new Date(h.at).toLocaleString('fr-FR', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})"></span>
+                    </li>
+                  </template>
+                </ul>
+              </details>
+            </template>
             <div class="flex items-center justify-between mt-2">
               <p class="text-muted text-sm" x-text="currentProject.client + ' · ' + currentProject.type + ' · Deadline: ' + (currentProject.deadline || '—')"></p>
               <div class="flex items-center gap-2">
@@ -1871,13 +1884,18 @@ function app() {
 
     // statuts projet — pipeline unifié, partagé avec le CRM (mêmes slugs stockés en Firestore)
     statusPipeline: [
-      { slug:'prospection',     label:'Prospection' },
-      { slug:'brief',           label:'Brief' },
-      { slug:'pre-production',  label:'Pré-production' },
-      { slug:'tournage',        label:'Tournage' },
-      { slug:'montage',         label:'Montage' },
-      { slug:'livraison',       label:'Livraison' },
-      { slug:'facture',         label:'Facturé' },
+      { slug:'devis-a-faire',     label:'Devis à faire',            color:'#BA7517', type:'action',   sla:null, paiement:'devis' },
+      { slug:'devis-envoye',      label:'Devis envoyé',             color:'#378ADD', type:'attente',  sla:7,    paiement:'devis' },
+      { slug:'devis-accepte',     label:'Devis accepté',            color:'#378ADD', type:'jalon',    sla:null, paiement:'devis' },
+      { slug:'contrat-acompte',   label:'Contrat & acompte lancés', color:'#BA7517', type:'action',   sla:null, paiement:'acompte' },
+      { slug:'acompte-recu',      label:'Acompte reçu',             color:'#378ADD', type:'attente',  sla:5,    paiement:'acompte' },
+      { slug:'en-production',     label:'En production',            color:'#BA7517', type:'action',   sla:null, paiement:'acompte' },
+      { slug:'validation-client', label:'En validation client',     color:'#378ADD', type:'attente',  sla:5,    paiement:'acompte' },
+      { slug:'projet-valide',     label:'Projet validé',            color:'#378ADD', type:'jalon',    sla:null, paiement:'acompte' },
+      { slug:'facture-envoyee',   label:'Facture finale envoyée',   color:'#BA7517', type:'action',   sla:null, paiement:'acompte' },
+      { slug:'paye-a-livrer',     label:'Payé & à livrer',          color:'#BA7517', type:'action',   sla:null, paiement:'paye' },
+      { slug:'livre',             label:'Livré',                    color:'#1D9E75', type:'jalon',    sla:null, paiement:'paye' },
+      { slug:'archive',           label:'Archivé',                  color:'#888780', type:'terminal', sla:null, paiement:'paye' },
     ],
 
     // studio
@@ -2209,7 +2227,8 @@ function app() {
         type: data.typeVideo || 'Autre',
         budget: data.budgetStudio || '',
         deadline: data.deadlineStudio || '',
-        status: data.statutStudio || 'brief',
+        status: this.normalizeStatus(data.statutStudio || 'brief'),
+        statusHistory: Array.isArray(data.statusHistory) ? data.statusHistory : [],
         progress: data.progress || 0,
         pitch: data.pitch || '',
         idees: data.idees || '',
@@ -2283,6 +2302,7 @@ function app() {
           clientId: project.clientId,
           statut: project.statutCrm || 'prospection',
           statutStudio: project.status,
+          statusHistory: Array.isArray(project.statusHistory) ? project.statusHistory : [],
           typeVideo: project.type,
           secteurClient: project.secteurClient || '',
           budgetStudio: project.budget,
@@ -2335,22 +2355,43 @@ function app() {
       return s ? s.label : slug;
     },
     statusStyle(status) {
-      const map = {
-        'prospection':'background:#5C7D8722;color:#5C7D87;border:1px solid #5C7D8744',
-        'brief':'background:#3CD6D122;color:#024059;border:1px solid #3CD6D155',
-        'pre-production':'background:#02405922;color:#024059;border:1px solid #02405944',
-        'tournage':'background:#02405933;color:#024059;border:1px solid #02405955',
-        'montage':'background:#3CD6D133;color:#024059;border:1px solid #3CD6D166',
-        'livraison':'background:#1FAF8822;color:#1FAF88;border:1px solid #1FAF8844',
-        'facture':'background:#1FAF8844;color:#1FAF88;border:1px solid #1FAF8866',
-      };
-      return map[status] || map['brief'];
+      const s = this.statusPipeline.find(s => s.slug === status)
+        || this.statusPipeline.find(s => s.slug === 'devis-a-faire');
+      const c = s.color;
+      return `background:${c}22;color:${c};border:1px solid ${c}44`;
     },
     renderTimeline(p) {
-      const stages = this.statusPipeline.map(s => s.slug);
-      const idx = stages.indexOf(p.status);
-      const colors = ['#5C7D87','#3CD6D1','#024059','#024059','#3CD6D1','#1FAF88','#1FAF88'];
-      return stages.map((s,i) => `<div class="timeline-seg" style="flex:1;background:${i<=idx ? colors[i] : '#DCE6E9'}"></div>`).join('');
+      const idx = this.statusPipeline.findIndex(s => s.slug === p.status);
+      return this.statusPipeline
+        .map((s,i) => `<div class="timeline-seg" style="flex:1;background:${i<=idx ? s.color : '#DCE6E9'}"></div>`)
+        .join('');
+    },
+    // Migration des anciens statuts Studio (statutStudio) vers les slugs du
+    // nouveau pipeline workflow. Appliqué au chargement ; ne touche PAS le
+    // champ CRM `statut`. Un slug déjà valide passe tel quel.
+    normalizeStatus(slug) {
+      if (this.statusPipeline.some(s => s.slug === slug)) return slug;
+      const map = {
+        'prospection':    'devis-a-faire',
+        'brief':          'devis-a-faire',
+        'pre-production': 'en-production',
+        'tournage':       'en-production',
+        'montage':        'en-production',
+        'livraison':      'paye-a-livrer',
+        'facture':        'facture-envoyee',
+      };
+      return map[slug] || 'devis-a-faire';
+    },
+    // Change le statut workflow du projet courant et journalise le passage
+    // dans statusHistory (slug + horodatage), puis sauvegarde. Le retour
+    // arrière est autorisé (aucune contrainte d'ordre).
+    changeStatus(slug) {
+      const p = this.currentProject;
+      if (!p || !slug || p.status === slug) return;
+      p.status = slug;
+      if (!Array.isArray(p.statusHistory)) p.statusHistory = [];
+      p.statusHistory.push({ slug, at: new Date().toISOString() });
+      this.saveProjects();
     },
     copyText(text) {
       navigator.clipboard.writeText(text || '');
@@ -2696,7 +2737,8 @@ Moustikprod`;
         secteurClient: this.newProject.secteurClient || '',
         budget: this.newProject.budget,
         deadline: this.newProject.deadline,
-        status: 'brief',
+        status: 'devis-a-faire',
+        statusHistory: [{ slug: 'devis-a-faire', at: new Date().toISOString() }],
         progress: 5,
         pitch: this.newProject.briefContext || '',
         idees: '',
@@ -4439,11 +4481,11 @@ FORMAT DE SORTIE :
     calendarEvents() {
       const evs = [];
       for (const p of this.projects) {
-        if (p.deadline && !['facture'].includes(p.status)) {
-          evs.push({ date: p.deadline, label: '🎬 ' + p.title, tag:'Deadline', cls:'bg-accent/15 text-accent', projectId: p.id, done: p.status==='livraison' });
+        if (p.deadline && !['livre','archive'].includes(p.status)) {
+          evs.push({ date: p.deadline, label: '🎬 ' + p.title, tag:'Deadline', cls:'bg-accent/15 text-accent', projectId: p.id, done: ['livre','archive'].includes(p.status) });
         }
-        if (p.status === 'tournage' && p.deadline) {
-          evs.push({ date: p.deadline, label: '📷 Tournage — ' + p.title, tag:'Tournage', cls:'bg-amber-100 text-amber-700', projectId: p.id });
+        if (p.status === 'en-production' && p.deadline) {
+          evs.push({ date: p.deadline, label: '📷 En production — ' + p.title, tag:'Production', cls:'bg-amber-100 text-amber-700', projectId: p.id });
         }
       }
       for (const a of this.autorisations) {
