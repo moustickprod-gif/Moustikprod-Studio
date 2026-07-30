@@ -550,6 +550,7 @@ tailwind.config = {
                 <button @click="generateDecoupageAB()" class="bg-accent text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2">
                   <span x-show="decoupageABLoading" class="spinner"></span> Générer A-roll / B-roll avec Claude
                 </button>
+                <button @click="openTournageMode()" class="bg-surface border border-line text-sm px-4 py-2 rounded-lg flex items-center gap-2 hover:border-accent/50 transition">🎬 Mode tournage</button>
                 <p class="text-xs text-muted">Se nourrit du scénario + entretien. La régénération complète sans écraser tes plans ni les cases cochées.</p>
               </div>
               <p x-show="decoupageABError" class="text-xs text-accent" x-text="decoupageABError"></p>
@@ -566,10 +567,13 @@ tailwind.config = {
                   </div>
                   <div class="space-y-1.5">
                     <template x-for="(a,i) in (currentProject.decoupageAB?.aroll || [])" :key="a.id">
-                      <div class="flex items-center gap-2 group" :class="a.done ? 'opacity-60' : ''">
-                        <input type="checkbox" x-model="a.done" @change="saveProjects()" class="accent-accent shrink-0">
-                        <input x-model="a.description" @blur="saveProjects()" placeholder="Décris le plan A-roll…" class="flex-1 bg-transparent border-0 text-sm p-0" :class="a.done ? 'line-through text-muted' : ''">
-                        <button @click="currentProject.decoupageAB.aroll.splice(i,1); saveProjects()" class="text-muted hover:text-accent text-xs opacity-0 group-hover:opacity-100 shrink-0">✕</button>
+                      <div class="flex items-start gap-2 group" :class="a.done ? 'opacity-60' : ''">
+                        <input type="checkbox" x-model="a.done" @change="saveProjects()" class="accent-accent shrink-0 mt-1">
+                        <div class="flex-1 min-w-0">
+                          <input x-model="a.description" @blur="saveProjects()" placeholder="Décris le plan A-roll…" class="w-full bg-transparent border-0 text-sm p-0" :class="a.done ? 'line-through text-muted' : ''">
+                          <input x-model="a.notes" @blur="saveProjects()" placeholder="↳ notes (montage, à refaire…)" class="w-full bg-transparent border-0 text-xs text-muted p-0 mt-0.5">
+                        </div>
+                        <button @click="currentProject.decoupageAB.aroll.splice(i,1); saveProjects()" class="text-muted hover:text-accent text-xs opacity-0 group-hover:opacity-100 shrink-0 mt-1">✕</button>
                       </div>
                     </template>
                     <p x-show="!(currentProject.decoupageAB?.aroll || []).length" class="text-xs text-muted italic">Aucun plan A-roll. Génère avec Claude ou ajoute une ligne.</p>
@@ -592,6 +596,7 @@ tailwind.config = {
                         <div class="flex-1 min-w-0">
                           <input x-model="b.description" @blur="saveProjects()" placeholder="Décris le plan B-roll…" class="w-full bg-transparent border-0 text-sm p-0" :class="b.done ? 'line-through text-muted' : ''">
                           <input x-model="b.sequenceRef" @blur="saveProjects()" placeholder="↳ séquence du scénario (ex. Séquence 2)" class="w-full bg-transparent border-0 text-xs text-muted p-0 mt-0.5">
+                          <input x-model="b.notes" @blur="saveProjects()" placeholder="↳ notes (montage, à refaire…)" class="w-full bg-transparent border-0 text-xs text-muted p-0 mt-0.5">
                         </div>
                         <button @click="currentProject.decoupageAB.broll.splice(i,1); saveProjects()" class="text-muted hover:text-accent text-xs opacity-0 group-hover:opacity-100 shrink-0 mt-1">✕</button>
                       </div>
@@ -599,6 +604,11 @@ tailwind.config = {
                     <p x-show="!(currentProject.decoupageAB?.broll || []).length" class="text-xs text-muted italic">Aucun plan B-roll. Génère avec Claude ou ajoute une ligne.</p>
                   </div>
                 </div>
+              </div>
+
+              <div class="bg-surface border border-line rounded-xl p-4">
+                <p class="text-muted font-mono text-xs mb-2 uppercase">Notes de tournage</p>
+                <textarea x-model="ensureDecoupageAB().notesTournage" @blur="saveProjects()" rows="3" placeholder="Notes libres pour le tournage (matériel, contraintes, ordre des plans…) — non rattachées à un plan." class="w-full bg-transparent border-0 text-sm p-0"></textarea>
               </div>
             </div>
           </div>
@@ -1380,6 +1390,59 @@ tailwind.config = {
   </div>
 </div>
 
+<!-- ===================== MODE TOURNAGE (plein écran, tablette) ===================== -->
+<!-- Checklist terrain : lit/écrit les MÊMES champs que la vue édition
+     (currentProject.decoupageAB). Une seule source de vérité. -->
+<div x-show="tournageMode" x-cloak class="fixed inset-0 z-[60] bg-bg overflow-y-auto" @keydown.escape.window="tournageMode && closeTournageMode()">
+  <div class="max-w-2xl mx-auto px-4 py-4">
+    <div class="flex items-center justify-between gap-3 mb-4 sticky top-0 bg-bg py-3 border-b border-line z-10">
+      <div class="min-w-0">
+        <p class="text-xs accent font-bold uppercase tracking-wide">🎬 Mode tournage</p>
+        <h2 class="font-display font-bold text-lg truncate" x-text="currentProject?.title || ''"></h2>
+      </div>
+      <button @click="closeTournageMode()" class="bg-surface border border-line rounded-xl px-5 py-3 text-sm font-medium shrink-0 active:bg-line">Terminer ✕</button>
+    </div>
+
+    <div class="bg-surface border border-line rounded-xl p-4 mb-5">
+      <p class="text-muted font-mono text-xs mb-2 uppercase">Notes de tournage</p>
+      <textarea x-model="ensureDecoupageAB().notesTournage" @input="saveTournageDebounced()" rows="2" placeholder="Notes libres (matériel, contraintes, ordre des plans…)" class="w-full bg-bg border border-line rounded-lg p-3 text-base"></textarea>
+    </div>
+
+    <template x-for="section in [{key:'aroll',label:'A-roll',sub:'matière principale',broll:false},{key:'broll',label:'B-roll',sub:'plans d\'illustration',broll:true}]" :key="section.key">
+      <div class="mb-6">
+        <h3 class="font-display font-bold text-base mb-2 flex items-baseline gap-2">
+          <span x-text="section.label"></span>
+          <span class="text-xs text-muted font-normal" x-text="'— ' + section.sub"></span>
+        </h3>
+        <div class="space-y-2">
+          <template x-for="plan in (currentProject.decoupageAB?.[section.key] || [])" :key="plan.id">
+            <div class="bg-surface border border-line rounded-xl p-3" :class="plan.done ? 'opacity-60' : ''">
+              <label class="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" x-model="plan.done" @change="saveProjects()" class="accent-accent shrink-0 mt-0.5" style="width:26px;height:26px">
+                <span class="flex-1 min-w-0">
+                  <span class="block text-base leading-snug" :class="plan.done ? 'line-through text-muted' : ''" x-text="plan.description || '(plan sans description)'"></span>
+                  <span x-show="section.broll && plan.sequenceRef" class="block text-xs text-muted mt-0.5" x-text="'↳ ' + plan.sequenceRef"></span>
+                </span>
+              </label>
+              <button @click="toggleTournageNote(plan.id)" class="text-xs text-muted mt-2 ml-9 flex items-center gap-1.5">
+                <span x-text="tournageNoteOpen[plan.id] ? '▾' : '▸'"></span>
+                <span x-text="plan.notes ? 'Note' : 'Ajouter une note'"></span>
+                <span x-show="plan.notes && !tournageNoteOpen[plan.id]" class="truncate max-w-[160px] opacity-70" x-text="'— ' + plan.notes"></span>
+              </button>
+              <div x-show="tournageNoteOpen[plan.id]" class="ml-9 mt-1">
+                <textarea x-model="plan.notes" @input="saveTournageDebounced()" rows="2" placeholder="Note (montage, à refaire…)" class="w-full bg-bg border border-line rounded-lg p-2 text-sm"></textarea>
+              </div>
+            </div>
+          </template>
+          <p x-show="!(currentProject.decoupageAB?.[section.key] || []).length" class="text-sm text-muted italic px-1" x-text="'Aucun plan ' + section.label + '.'"></p>
+        </div>
+      </div>
+    </template>
+
+    <div class="h-10"></div>
+  </div>
+</div>
+
 <!-- ===================== MODAL ENVOI LIEN PAR EMAIL ===================== -->
 <div x-show="emailShareOpen" x-cloak class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @keydown.escape.window="emailShareOpen=false">
   <div class="modal-slide-enter bg-surface border border-line rounded-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto" x-show="emailShareOpen">
@@ -1797,6 +1860,7 @@ function app() {
     scenarioCritiqueLoading: false, scenarioCritiqueError: '', scenarioCritique: null,
     decoupageLoading: false, decoupageError: '',
     decoupageABLoading: false, decoupageABError: '',
+    tournageMode: false, tournageNoteOpen: {}, _tournageSaveTimer: null,
     scenarioLoading: false, scenarioError: '',
     logistiqueLoading: false, logistiqueError: '',
     captionsLoading: false, captionsError: '',
@@ -2233,7 +2297,7 @@ function app() {
           entretien: project.entretien || [],
           entretienNotes: project.entretienNotes || '',
           decoupage: project.decoupage || [],
-          decoupageAB: project.decoupageAB || { aroll: [], broll: [] },
+          decoupageAB: project.decoupageAB || { aroll: [], broll: [], notesTournage: '' },
           matos: project.matos || [],
           lieu: project.lieu || '',
           moodboardNotes: project.moodboardNotes || '',
@@ -2643,7 +2707,7 @@ Moustikprod`;
         entretien: [],
         entretienNotes: '',
         decoupage: [],
-        decoupageAB: { aroll: [], broll: [] },
+        decoupageAB: { aroll: [], broll: [], notesTournage: '' },
         matos: [],
         lieu: '',
         moodboardRefVisuelles: '',
@@ -2811,6 +2875,25 @@ Moustikprod`;
     },
     // ── Découpage A-roll / B-roll ─────────────────────────────────────────
     abId() { return 'p' + Math.random().toString(36).slice(2, 9); },
+    // ── Mode tournage (vue plein écran tablette) ──────────────────────────
+    // Lit/écrit exactement les mêmes champs que la vue édition : une seule
+    // source de vérité (currentProject.decoupageAB). Ne recrée aucune donnée.
+    openTournageMode() {
+      this.ensureDecoupageAB();
+      this.tournageNoteOpen = {};
+      this.tournageMode = true;
+    },
+    closeTournageMode() {
+      if (this._tournageSaveTimer) { clearTimeout(this._tournageSaveTimer); this._tournageSaveTimer = null; this.saveProjects(); }
+      this.tournageMode = false;
+    },
+    toggleTournageNote(id) { this.tournageNoteOpen[id] = !this.tournageNoteOpen[id]; },
+    // Auto-save débouncé (~1s après la dernière frappe) : pas de bouton
+    // enregistrer à penser en plein tournage.
+    saveTournageDebounced() {
+      if (this._tournageSaveTimer) clearTimeout(this._tournageSaveTimer);
+      this._tournageSaveTimer = setTimeout(() => { this._tournageSaveTimer = null; this.saveProjects(); }, 1000);
+    },
     // Normalise le champ decoupageAB au chargement. S'il existe déjà (objet),
     // on le nettoie ; sinon on migre UNE SEULE FOIS l'ancien tableau `decoupage`
     // vers A-roll (l'absence du champ fait office de marqueur de migration).
@@ -2818,8 +2901,9 @@ Moustikprod`;
       const ab = data.decoupageAB;
       if (ab && typeof ab === 'object' && !Array.isArray(ab)) {
         return {
-          aroll: (ab.aroll || []).map(x => ({ id: x.id || this.abId(), description: x.description || '', done: !!x.done })),
-          broll: (ab.broll || []).map(x => ({ id: x.id || this.abId(), description: x.description || '', done: !!x.done, sequenceRef: x.sequenceRef || '' })),
+          aroll: (ab.aroll || []).map(x => ({ id: x.id || this.abId(), description: x.description || '', done: !!x.done, notes: x.notes || '' })),
+          broll: (ab.broll || []).map(x => ({ id: x.id || this.abId(), description: x.description || '', done: !!x.done, sequenceRef: x.sequenceRef || '', notes: x.notes || '' })),
+          notesTournage: ab.notesTournage || '',
         };
       }
       const legacy = Array.isArray(data.decoupage) ? data.decoupage : [];
@@ -2828,8 +2912,10 @@ Moustikprod`;
           id: this.abId(),
           description: [s.plan, s.focale, s.description].filter(Boolean).join(' — '),
           done: !!s.fait,
+          notes: '',
         })),
         broll: [],
+        notesTournage: '',
       };
     },
     // Fusion non-destructive : conserve les plans existants (et leur état `done`),
@@ -2842,7 +2928,7 @@ Moustikprod`;
         const desc = (item.description || '').trim();
         if (!desc || seen.has(norm(desc))) return;
         seen.add(norm(desc));
-        const entry = { id: this.abId(), description: desc, done: false };
+        const entry = { id: this.abId(), description: desc, done: false, notes: '' };
         if (isBroll) entry.sequenceRef = item.sequenceRef || '';
         merged.push(entry);
       });
@@ -2855,14 +2941,15 @@ Moustikprod`;
       }
       if (!Array.isArray(p.decoupageAB.aroll)) p.decoupageAB.aroll = [];
       if (!Array.isArray(p.decoupageAB.broll)) p.decoupageAB.broll = [];
+      if (typeof p.decoupageAB.notesTournage !== 'string') p.decoupageAB.notesTournage = '';
       return p.decoupageAB;
     },
     addArollRow() {
-      this.ensureDecoupageAB().aroll.push({ id: this.abId(), description: '', done: false });
+      this.ensureDecoupageAB().aroll.push({ id: this.abId(), description: '', done: false, notes: '' });
       this.saveProjects();
     },
     addBrollRow() {
-      this.ensureDecoupageAB().broll.push({ id: this.abId(), description: '', done: false, sequenceRef: '' });
+      this.ensureDecoupageAB().broll.push({ id: this.abId(), description: '', done: false, sequenceRef: '', notes: '' });
       this.saveProjects();
     },
     decoupageABPrompt() {
