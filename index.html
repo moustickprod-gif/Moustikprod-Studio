@@ -522,6 +522,64 @@ tailwind.config = {
                 </tbody>
               </table>
             </div>
+
+            <!-- A-ROLL / B-ROLL -->
+            <div class="pt-2 space-y-3">
+              <div class="flex items-center gap-3 flex-wrap">
+                <button @click="generateDecoupageAB()" class="bg-accent text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2">
+                  <span x-show="decoupageABLoading" class="spinner"></span> Générer A-roll / B-roll avec Claude
+                </button>
+                <p class="text-xs text-muted">Se nourrit du scénario + entretien. La régénération complète sans écraser tes plans ni les cases cochées.</p>
+              </div>
+              <p x-show="decoupageABError" class="text-xs text-accent" x-text="decoupageABError"></p>
+
+              <div class="grid gap-4 md:grid-cols-2">
+                <!-- A-ROLL -->
+                <div class="bg-surface border border-line rounded-xl p-4">
+                  <div class="flex items-start justify-between mb-3 gap-2">
+                    <div>
+                      <h4 class="font-display font-semibold text-sm">A-roll</h4>
+                      <p class="text-xs text-muted">Matière principale : interview, prises de parole</p>
+                    </div>
+                    <button @click="addArollRow()" class="text-xs text-muted hover:text-accent shrink-0 mt-0.5">+ Ajouter</button>
+                  </div>
+                  <div class="space-y-1.5">
+                    <template x-for="(a,i) in (currentProject.decoupageAB?.aroll || [])" :key="a.id">
+                      <div class="flex items-center gap-2 group" :class="a.done ? 'opacity-60' : ''">
+                        <input type="checkbox" x-model="a.done" @change="saveProjects()" class="accent-accent shrink-0">
+                        <input x-model="a.description" @blur="saveProjects()" placeholder="Décris le plan A-roll…" class="flex-1 bg-transparent border-0 text-sm p-0" :class="a.done ? 'line-through text-muted' : ''">
+                        <button @click="currentProject.decoupageAB.aroll.splice(i,1); saveProjects()" class="text-muted hover:text-accent text-xs opacity-0 group-hover:opacity-100 shrink-0">✕</button>
+                      </div>
+                    </template>
+                    <p x-show="!(currentProject.decoupageAB?.aroll || []).length" class="text-xs text-muted italic">Aucun plan A-roll. Génère avec Claude ou ajoute une ligne.</p>
+                  </div>
+                </div>
+
+                <!-- B-ROLL -->
+                <div class="bg-surface border border-line rounded-xl p-4">
+                  <div class="flex items-start justify-between mb-3 gap-2">
+                    <div>
+                      <h4 class="font-display font-semibold text-sm">B-roll</h4>
+                      <p class="text-xs text-muted">Plans d'illustration : mains, détails, ambiance</p>
+                    </div>
+                    <button @click="addBrollRow()" class="text-xs text-muted hover:text-accent shrink-0 mt-0.5">+ Ajouter</button>
+                  </div>
+                  <div class="space-y-1.5">
+                    <template x-for="(b,i) in (currentProject.decoupageAB?.broll || [])" :key="b.id">
+                      <div class="flex items-start gap-2 group" :class="b.done ? 'opacity-60' : ''">
+                        <input type="checkbox" x-model="b.done" @change="saveProjects()" class="accent-accent shrink-0 mt-1">
+                        <div class="flex-1 min-w-0">
+                          <input x-model="b.description" @blur="saveProjects()" placeholder="Décris le plan B-roll…" class="w-full bg-transparent border-0 text-sm p-0" :class="b.done ? 'line-through text-muted' : ''">
+                          <input x-model="b.sequenceRef" @blur="saveProjects()" placeholder="↳ séquence du scénario (ex. Séquence 2)" class="w-full bg-transparent border-0 text-xs text-muted p-0 mt-0.5">
+                        </div>
+                        <button @click="currentProject.decoupageAB.broll.splice(i,1); saveProjects()" class="text-muted hover:text-accent text-xs opacity-0 group-hover:opacity-100 shrink-0 mt-1">✕</button>
+                      </div>
+                    </template>
+                    <p x-show="!(currentProject.decoupageAB?.broll || []).length" class="text-xs text-muted italic">Aucun plan B-roll. Génère avec Claude ou ajoute une ligne.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- LOGISTIQUE TAB -->
@@ -1717,6 +1775,7 @@ function app() {
     moodboardLoading: false, moodboardError: '',
     scenarioCritiqueLoading: false, scenarioCritiqueError: '', scenarioCritique: null,
     decoupageLoading: false, decoupageError: '',
+    decoupageABLoading: false, decoupageABError: '',
     scenarioLoading: false, scenarioError: '',
     logistiqueLoading: false, logistiqueError: '',
     captionsLoading: false, captionsError: '',
@@ -2076,6 +2135,7 @@ function app() {
         entretien: data.entretien || [],
         entretienNotes: data.entretienNotes || '',
         decoupage: data.decoupage || [],
+        decoupageAB: this.normalizeDecoupageAB(data),
         matos: data.matos || [],
         lieu: data.lieu || '',
         moodboardNotes: data.moodboardNotes || '',
@@ -2152,6 +2212,7 @@ function app() {
           entretien: project.entretien || [],
           entretienNotes: project.entretienNotes || '',
           decoupage: project.decoupage || [],
+          decoupageAB: project.decoupageAB || { aroll: [], broll: [] },
           matos: project.matos || [],
           lieu: project.lieu || '',
           moodboardNotes: project.moodboardNotes || '',
@@ -2545,6 +2606,7 @@ Moustikprod`;
         entretien: [],
         entretienNotes: '',
         decoupage: [],
+        decoupageAB: { aroll: [], broll: [] },
         matos: [],
         lieu: '',
         moodboardRefVisuelles: '',
@@ -2709,6 +2771,102 @@ Moustikprod`;
     copyDecoupage() {
       const rows = (this.currentProject.decoupage||[]).map(s => `${s.plan} — ${s.focale} — ${s.description} (${s.heure})${s.intention ? ' — intention: '+s.intention : ''}${s.son ? ' — son: '+s.son : ''}`);
       this.copyText(rows.join('\n'));
+    },
+    // ── Découpage A-roll / B-roll ─────────────────────────────────────────
+    abId() { return 'p' + Math.random().toString(36).slice(2, 9); },
+    // Normalise le champ decoupageAB au chargement. S'il existe déjà (objet),
+    // on le nettoie ; sinon on migre UNE SEULE FOIS l'ancien tableau `decoupage`
+    // vers A-roll (l'absence du champ fait office de marqueur de migration).
+    normalizeDecoupageAB(data) {
+      const ab = data.decoupageAB;
+      if (ab && typeof ab === 'object' && !Array.isArray(ab)) {
+        return {
+          aroll: (ab.aroll || []).map(x => ({ id: x.id || this.abId(), description: x.description || '', done: !!x.done })),
+          broll: (ab.broll || []).map(x => ({ id: x.id || this.abId(), description: x.description || '', done: !!x.done, sequenceRef: x.sequenceRef || '' })),
+        };
+      }
+      const legacy = Array.isArray(data.decoupage) ? data.decoupage : [];
+      return {
+        aroll: legacy.map(s => ({
+          id: this.abId(),
+          description: [s.plan, s.focale, s.description].filter(Boolean).join(' — '),
+          done: !!s.fait,
+        })),
+        broll: [],
+      };
+    },
+    // Fusion non-destructive : conserve les plans existants (et leur état `done`),
+    // n'ajoute que les nouveaux plans (comparaison sur la description normalisée).
+    mergeABList(existing, incoming, isBroll) {
+      const norm = s => (s || '').trim().toLowerCase();
+      const seen = new Set((existing || []).map(e => norm(e.description)));
+      const merged = (existing || []).slice();
+      (incoming || []).forEach(item => {
+        const desc = (item.description || '').trim();
+        if (!desc || seen.has(norm(desc))) return;
+        seen.add(norm(desc));
+        const entry = { id: this.abId(), description: desc, done: false };
+        if (isBroll) entry.sequenceRef = item.sequenceRef || '';
+        merged.push(entry);
+      });
+      return merged;
+    },
+    ensureDecoupageAB() {
+      const p = this.currentProject;
+      if (!p.decoupageAB || typeof p.decoupageAB !== 'object' || Array.isArray(p.decoupageAB)) {
+        p.decoupageAB = { aroll: [], broll: [] };
+      }
+      if (!Array.isArray(p.decoupageAB.aroll)) p.decoupageAB.aroll = [];
+      if (!Array.isArray(p.decoupageAB.broll)) p.decoupageAB.broll = [];
+      return p.decoupageAB;
+    },
+    addArollRow() {
+      this.ensureDecoupageAB().aroll.push({ id: this.abId(), description: '', done: false });
+      this.saveProjects();
+    },
+    addBrollRow() {
+      this.ensureDecoupageAB().broll.push({ id: this.abId(), description: '', done: false, sequenceRef: '' });
+      this.saveProjects();
+    },
+    decoupageABPrompt() {
+      return `Tu es un chef opérateur / monteur expert. À partir du scénario et de l'entretien préparatoire, propose un découpage en A-roll et B-roll pour ce tournage.
+
+A-roll = la matière principale : interview, prises de parole face caméra, moments clés du sujet.
+B-roll = les plans d'illustration et de coupe (mains, gestes, détails, objets, ambiance, lieu) qui viennent habiller le A-roll au montage.
+
+Pour CHAQUE plan B-roll, renseigne "sequenceRef" en pointant la séquence du scénario qu'il illustre (reprends le titre ou le numéro de séquence tel qu'il apparaît dans le scénario, ex. "Séquence 2 - le four"). Le A-roll n'a pas besoin de sequenceRef.
+
+Réponds UNIQUEMENT en JSON (sans markdown), avec ce format exact :
+{
+  "aroll": [
+    {"description": "Interview du boulanger sur son parcours"}
+  ],
+  "broll": [
+    {"description": "Gros plan sur les mains qui pétrissent la pâte", "sequenceRef": "Séquence 1 - le pétrissage"}
+  ]
+}
+
+Propose 5 à 8 plans A-roll et 8 à 14 plans B-roll. Sois concret et tourné terrain : une ligne = un plan filmable.`;
+    },
+    async generateDecoupageAB() {
+      this.decoupageABLoading = true; this.decoupageABError = '';
+      try {
+        const text = await this.callClaude(this.decoupageABPrompt(), this.projectContext());
+        const parsed = this.extractJson(text);
+        const toItem = x => typeof x === 'string' ? { description: x } : (x || {});
+        const inAroll = (Array.isArray(parsed.aroll) ? parsed.aroll : []).map(toItem);
+        const inBroll = (Array.isArray(parsed.broll) ? parsed.broll : []).map(toItem);
+        const ab = this.ensureDecoupageAB();
+        ab.aroll = this.mergeABList(ab.aroll, inAroll, false);
+        ab.broll = this.mergeABList(ab.broll, inBroll, true);
+        this.saveProjects();
+        this.toast('A-roll / B-roll générés');
+      } catch (e) {
+        console.error('[Découpage A/B] Erreur Claude API:', e);
+        this.decoupageABError = `Erreur Claude : ${e.message || 'Réessaie.'}`;
+      } finally {
+        this.decoupageABLoading = false;
+      }
     },
     // Format de sortie détaillé, partagé par tous les formats longs (film de
     // marque, documentaire, interview/témoignage) : le style et les contraintes
