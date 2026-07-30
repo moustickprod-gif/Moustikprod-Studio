@@ -2722,15 +2722,17 @@ Moustikprod`;
       const client = this.allClients.find(c => c.id === p.clientId);
       const prenom = (client && (client.prenom || client.nom)) || '';
       const nbRev = (this.currentContrat && this.currentContrat.nombreRevisions) || 2;
-      const lienVideo = p.frameioLink ? `\n\n▶ Visionner la vidéo : ${p.frameioLink}` : '';
+      const blocVideo = p.frameioLink
+        ? `\n\n▶ Visionner la vidéo : ${p.frameioLink}\nVous pouvez laisser vos remarques directement sur la vidéo dans Frame.io (commentaires horodatés, au moment précis concerné).`
+        : '';
       this.emailShareTo = (client && client.email) || '';
       this.emailShareSubject = `Votre vidéo « ${p.title} » est prête — validation finale`;
       this.emailShareBody =
 `Bonjour ${prenom},
 
-Votre vidéo « ${p.title} » est terminée 🎬${lienVideo}
+Votre vidéo « ${p.title} » est terminée 🎬${blocVideo}
 
-Merci de la valider en un clic via le lien ci-dessous, ou d'y demander une modification si besoin. Votre retour me parvient automatiquement.
+Merci ensuite de la valider en un clic via le lien ci-dessous, ou d'y demander une modification si besoin. Votre retour me parvient automatiquement.
 
 Pour rappel, la prestation inclut ${nbRev} série${nbRev > 1 ? 's' : ''} de modifications. Au-delà, les retouches supplémentaires font l'objet d'une facturation.
 

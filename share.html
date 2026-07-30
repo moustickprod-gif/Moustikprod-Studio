@@ -102,7 +102,8 @@ function render(data) {
         <h2 class="font-bold mb-2">🎬 Validation de la vidéo finale</h2>
         <p class="text-sm" style="color:#6b8a93">Visionnez la version finale de votre vidéo, puis validez-la — ou demandez une dernière modification. Votre retour me parvient automatiquement.</p>
         ${data.frameioLink
-          ? `<div style="margin:14px 0"><a href="${esc(data.frameioLink)}" target="_blank" rel="noopener" style="display:inline-block;background:#3CD6D1;color:#024059;font-weight:700;padding:10px 22px;border-radius:10px;text-decoration:none">▶ Voir la vidéo</a></div>`
+          ? `<div style="margin:14px 0"><a href="${esc(data.frameioLink)}" target="_blank" rel="noopener" style="display:inline-block;background:#3CD6D1;color:#024059;font-weight:700;padding:10px 22px;border-radius:10px;text-decoration:none">▶ Voir la vidéo</a></div>
+             <p class="text-sm" style="color:#6b8a93;margin-bottom:6px">💬 Vous pouvez laisser vos remarques directement sur la vidéo dans Frame.io (commentaires horodatés, au moment précis concerné), puis valider ou demander une modification ci-dessous.</p>`
           : `<p class="val-msg error" style="margin-top:12px">Le lien de la vidéo n'est pas encore disponible — contactez-nous avant de valider.</p>`}
         ${validationBlock('final', 'Vidéo finale', data.validationFinale)}
       </div>
