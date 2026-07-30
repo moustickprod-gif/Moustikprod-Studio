@@ -55,6 +55,7 @@
 let token = '';
 let currentData = null;
 let modalTarget = null;
+let finalMode = false; // ?final=1 → page minimale de validation de la vidéo finale
 
 const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const nl = s => esc(s).replace(/\n/g, '<br>');
@@ -98,6 +99,25 @@ function showFinalValidation(data) {
 function render(data) {
   currentData = data;
   const app = document.getElementById('app');
+
+  // Mode validation finale : page épurée, uniquement le bloc de validation de
+  // la vidéo. On ne réaffiche pas pitch/scénario/découpage (inutile à ce stade).
+  if (finalMode) {
+    app.innerHTML = `
+      <div class="mb-6">
+        <p class="text-xs accent font-bold uppercase tracking-wide mb-1">Validation finale — Moustikprod</p>
+        <h1 class="text-2xl font-bold">${esc(data.titre)}</h1>
+        <p class="text-sm mt-1" style="color:#6b8a93">${esc(data.client)}${data.typeVideo ? ' · ' + esc(data.typeVideo) : ''}</p>
+      </div>
+      <div class="card">
+        <h2 class="font-bold mb-2">🎬 Validation de la vidéo finale</h2>
+        <p class="text-sm" style="color:#6b8a93">Merci de valider la version finale de votre vidéo, ou de demander une dernière modification. Votre retour me parvient automatiquement.</p>
+        ${validationBlock('final', 'Vidéo finale', data.validationFinale)}
+      </div>
+      <p class="text-center text-xs mt-8" style="color:#6b8a93">Lien de validation en lecture seule — généré depuis Moustikprod Studio</p>
+    `;
+    return;
+  }
 
   let decoupageHtml = '';
   if (data.decoupage && data.decoupage.length) {
@@ -191,6 +211,7 @@ async function submitModal() {
 async function load() {
   const params = new URLSearchParams(location.search);
   token = params.get('token') || '';
+  finalMode = params.get('final') === '1';
   const app = document.getElementById('app');
   app.innerHTML = '<p class="text-center text-sm" style="color:#6b8a93">Chargement...</p>';
   try {

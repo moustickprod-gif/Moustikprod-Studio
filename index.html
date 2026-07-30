@@ -337,6 +337,11 @@ tailwind.config = {
             </div>
           </div>
 
+          <div x-show="currentProject.status === 'validation-client' && !(currentProject.validationFinale && currentProject.validationFinale.status === 'valide')" class="bg-sky-50 border border-sky-200 rounded-xl p-4 mb-5 flex items-center justify-between gap-4">
+            <p class="text-sm text-sky-900 flex items-center gap-2">🎬 <span>Ta vidéo est prête ? Envoie la demande de validation finale au client — il valide en un clic, sans relire tout le projet.</span></p>
+            <button @click="openFinalValidationEmail()" class="text-xs bg-sky-600 text-white px-3 py-1.5 rounded-lg whitespace-nowrap shrink-0">✉️ Demander la validation finale</button>
+          </div>
+
           <div x-show="currentProject.validationFinale && currentProject.validationFinale.status === 'valide' && !(currentContrat && currentContrat.abbyFinalPaidAt)" class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-5 flex items-center justify-between gap-4">
             <p class="text-sm text-emerald-800 flex items-center gap-2">🎬 <span>La vidéo finale a été <strong>validée par le client</strong> — tu peux lancer la facture finale.</span></p>
             <div class="flex items-center gap-2 shrink-0">
@@ -1942,7 +1947,7 @@ function app() {
     saveToProjectOpen: false,
     deleteProjectConfirmOpen: false,
     projectPendingDelete: null,
-    emailShareOpen: false, emailShareTo: '', emailShareSubject: '', emailShareBody: '', emailShareLoading: false,
+    emailShareOpen: false, emailShareTo: '', emailShareSubject: '', emailShareBody: '', emailShareLoading: false, emailShareFinal: false,
 
     // clients
     clientSearch: '', currentClient: null,
@@ -2689,6 +2694,35 @@ N'hésitez pas à répondre à cet email pour toute question.
 Bien à vous,
 Moustikprod`;
       if (!this.emailShareTo) this.toast('Aucun email sur la fiche client — renseigne le destinataire.', 'error');
+      this.emailShareFinal = false;
+      this.emailShareOpen = true;
+    },
+    // Demande au client de valider la VIDÉO FINALE : email dédié + lien vers une
+    // page de validation épurée (share.html?final=1, pas de scénario/découpage).
+    // Active le partage au besoin (le lien et project-validate exigent shareEnabled).
+    async openFinalValidationEmail() {
+      const p = this.currentProject;
+      if (!p) return;
+      if (!p.shareToken) {
+        p.shareToken = (crypto.randomUUID ? crypto.randomUUID() : (Date.now()+'-'+Math.random().toString(36).slice(2))).replace(/-/g,'');
+      }
+      if (!p.shareEnabled) { p.shareEnabled = true; }
+      await this.saveProjectDoc(p);
+      const client = this.allClients.find(c => c.id === p.clientId);
+      const prenom = (client && (client.prenom || client.nom)) || '';
+      this.emailShareTo = (client && client.email) || '';
+      this.emailShareSubject = `Votre vidéo « ${p.title} » est prête — validation finale`;
+      this.emailShareBody =
+`Bonjour ${prenom},
+
+Votre vidéo « ${p.title} » est terminée 🎬
+
+Merci de la valider en un clic via le lien ci-dessous, ou d'y demander une dernière modification si besoin. Votre retour me parvient automatiquement.
+
+Bien à vous,
+Moustikprod`;
+      if (!this.emailShareTo) this.toast('Aucun email sur la fiche client — renseigne le destinataire.', 'error');
+      this.emailShareFinal = true;
       this.emailShareOpen = true;
     },
     async sendEmailShare() {
@@ -2696,13 +2730,14 @@ Moustikprod`;
       if (!to) { this.toast('Renseigne un destinataire.', 'error'); return; }
       this.emailShareLoading = true;
       try {
-        const url = this.shareUrl();
+        const url = this.shareUrl() + (this.emailShareFinal ? '&final=1' : '');
+        const ctaLabel = this.emailShareFinal ? 'Valider ma vidéo →' : 'Consulter le projet →';
         const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
         // Corps texte -> HTML simple, avec le lien en bouton cliquable ajouté au bas.
         const html =
           `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#1a1a1a">` +
           esc(this.emailShareBody).replace(/\n/g, '<br>') +
-          `<div style="margin:24px 0"><a href="${esc(url)}" style="display:inline-block;background:#3CD6D1;color:#024059;font-weight:700;padding:12px 24px;border-radius:8px;text-decoration:none">Consulter le projet →</a></div>` +
+          `<div style="margin:24px 0"><a href="${esc(url)}" style="display:inline-block;background:#3CD6D1;color:#024059;font-weight:700;padding:12px 24px;border-radius:8px;text-decoration:none">${ctaLabel}</a></div>` +
           `<p style="font-size:12px;color:#888">Ou copiez ce lien : ${esc(url)}</p></div>`;
         const res = await this.apiFetch('/api/send-email.js', {
           method: 'POST',
