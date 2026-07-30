@@ -2710,6 +2710,7 @@ Moustikprod`;
       await this.saveProjectDoc(p);
       const client = this.allClients.find(c => c.id === p.clientId);
       const prenom = (client && (client.prenom || client.nom)) || '';
+      const nbRev = (this.currentContrat && this.currentContrat.nombreRevisions) || 2;
       this.emailShareTo = (client && client.email) || '';
       this.emailShareSubject = `Votre vidéo « ${p.title} » est prête — validation finale`;
       this.emailShareBody =
@@ -2717,7 +2718,9 @@ Moustikprod`;
 
 Votre vidéo « ${p.title} » est terminée 🎬
 
-Merci de la valider en un clic via le lien ci-dessous, ou d'y demander une dernière modification si besoin. Votre retour me parvient automatiquement.
+Merci de la valider en un clic via le lien ci-dessous, ou d'y demander une modification si besoin. Votre retour me parvient automatiquement.
+
+Pour rappel, la prestation inclut ${nbRev} série${nbRev > 1 ? 's' : ''} de modifications. Au-delà, les retouches supplémentaires font l'objet d'une facturation.
 
 Bien à vous,
 Moustikprod`;
