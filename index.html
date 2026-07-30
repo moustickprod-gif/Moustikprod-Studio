@@ -1889,12 +1889,12 @@ function app() {
     // statuts projet — pipeline unifié, partagé avec le CRM (mêmes slugs stockés en Firestore)
     statusPipeline: [
       { slug:'devis-a-faire',     label:'Devis à faire',            color:'#BA7517', type:'action',   sla:null, paiement:'devis' },
-      { slug:'devis-envoye',      label:'Devis envoyé',             color:'#378ADD', type:'attente',  sla:0,    paiement:'devis' },
+      { slug:'devis-envoye',      label:'Devis envoyé',             color:'#378ADD', type:'attente',  sla:7,    paiement:'devis' },
       { slug:'devis-accepte',     label:'Devis accepté',            color:'#378ADD', type:'jalon',    sla:null, paiement:'devis' },
       { slug:'contrat-acompte',   label:'Contrat & acompte lancés', color:'#BA7517', type:'action',   sla:null, paiement:'acompte' },
-      { slug:'acompte-recu',      label:'Acompte reçu',             color:'#378ADD', type:'attente',  sla:0,    paiement:'acompte' },
+      { slug:'acompte-recu',      label:'Acompte reçu',             color:'#378ADD', type:'attente',  sla:5,    paiement:'acompte' },
       { slug:'en-production',     label:'En production',            color:'#BA7517', type:'action',   sla:null, paiement:'acompte' },
-      { slug:'validation-client', label:'En validation client',     color:'#378ADD', type:'attente',  sla:0,    paiement:'acompte' },
+      { slug:'validation-client', label:'En validation client',     color:'#378ADD', type:'attente',  sla:5,    paiement:'acompte' },
       { slug:'projet-valide',     label:'Projet validé',            color:'#378ADD', type:'jalon',    sla:null, paiement:'acompte' },
       { slug:'facture-envoyee',   label:'Facture finale envoyée',   color:'#BA7517', type:'action',   sla:null, paiement:'acompte' },
       { slug:'paye-a-livrer',     label:'Payé & à livrer',          color:'#BA7517', type:'action',   sla:null, paiement:'paye' },
