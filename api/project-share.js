@@ -46,6 +46,8 @@ export default async function handler(req, res) {
       moodboardNotes: fields.moodboardNotes || '',
       validationScenario: fields.validationScenario || null,
       validationScript: fields.validationScript || null,
+      validationFinale: fields.validationFinale || null,
+      statutStudio: fields.statutStudio || '',
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

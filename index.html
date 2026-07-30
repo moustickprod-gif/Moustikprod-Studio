@@ -345,6 +345,14 @@ tailwind.config = {
             </div>
           </div>
 
+          <div x-show="currentProject.validationFinale && currentProject.validationFinale.status === 'valide' && !(currentContrat && currentContrat.abbyFinalPaidAt)" class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-5 flex items-center justify-between gap-4">
+            <p class="text-sm text-emerald-800 flex items-center gap-2">🎬 <span>La vidéo finale a été <strong>validée par le client</strong> — tu peux lancer la facture finale.</span></p>
+            <div class="flex items-center gap-2 shrink-0">
+              <button x-show="currentContrat && currentContrat.montantHT && !currentContrat.abbyFinalInvoiceId" @click="facturerFinaleAbby(currentContrat)" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded-lg whitespace-nowrap">Créer la facture finale →</button>
+              <span x-show="currentContrat && currentContrat.abbyFinalInvoiceId && !currentContrat.abbyFinalPaidAt" class="text-xs text-emerald-700 whitespace-nowrap">Facture finale créée — marque-la payée ci-dessous.</span>
+            </div>
+          </div>
+
           <div class="bg-surface border border-line rounded-xl p-4 mb-5">
             <p class="font-display font-bold text-sm flex items-center gap-2 mb-3">💶 Facturation Abby</p>
             <span x-show="!(currentContrat && currentContrat.montantHT)" class="text-xs text-muted">Lie un contrat avec un montant à ce projet pour facturer.</span>
@@ -798,10 +806,10 @@ tailwind.config = {
 
           <!-- SUIVI TAB -->
           <div x-show="detailTab==='suivi'" class="space-y-5">
-            <div class="bg-surface border border-line rounded-xl p-5" x-show="currentProject.validationScenario || currentProject.validationScript">
+            <div class="bg-surface border border-line rounded-xl p-5" x-show="currentProject.validationScenario || currentProject.validationScript || currentProject.validationFinale">
               <p class="font-display font-bold text-sm mb-3">Validation client</p>
               <div class="space-y-3">
-                <template x-for="item in [{key:'validationScenario',label:'Scénario'},{key:'validationScript',label:'Découpage / Script'}]" :key="item.key">
+                <template x-for="item in [{key:'validationScenario',label:'Scénario'},{key:'validationScript',label:'Découpage / Script'},{key:'validationFinale',label:'Vidéo finale'}]" :key="item.key">
                   <div x-show="currentProject[item.key]" class="flex items-start justify-between gap-3 text-sm border-b border-line/50 last:border-0 pb-3 last:pb-0">
                     <div class="min-w-0">
                       <span class="font-medium" x-text="item.label"></span>
@@ -2290,6 +2298,7 @@ function app() {
         shareEnabled: !!data.shareEnabled,
         validationScenario: data.validationScenario || null,
         validationScript: data.validationScript || null,
+        validationFinale: data.validationFinale || null,
         alertsSeenAt: data.alertsSeenAt || null,
         abbyEstimateId: data.abbyEstimateId || '',
         abbyEstimateNumber: data.abbyEstimateNumber || '',
@@ -2554,7 +2563,7 @@ function app() {
       const isNew = ts => ts && new Date(ts).getTime() > seen;
       const alerts = [];
       // Validations sur le projet
-      for (const { field, quoi } of [{ field:'validationScenario', quoi:'scénario' }, { field:'validationScript', quoi:'découpage' }]) {
+      for (const { field, quoi } of [{ field:'validationScenario', quoi:'scénario' }, { field:'validationScript', quoi:'découpage' }, { field:'validationFinale', quoi:'vidéo finale' }]) {
         const v = p[field];
         if (!v || !v.status || !isNew(v.respondedAt)) continue;
         if (v.status === 'valide') alerts.push({ type:'valide', color:'green', label:`✅ ${quoi} validé` });
@@ -2606,7 +2615,7 @@ function app() {
       const p = this.currentProject;
       if (!p) return [];
       const items = [];
-      for (const { field, quoi } of [{ field:'validationScenario', quoi:'Scénario' }, { field:'validationScript', quoi:'Découpage / Script' }]) {
+      for (const { field, quoi } of [{ field:'validationScenario', quoi:'Scénario' }, { field:'validationScript', quoi:'Découpage / Script' }, { field:'validationFinale', quoi:'Vidéo finale' }]) {
         const v = p[field];
         if (v && v.status === 'refuse' && v.comment) {
           items.push({ quoi, comment: v.comment, respondedAt: v.respondedAt || null });
