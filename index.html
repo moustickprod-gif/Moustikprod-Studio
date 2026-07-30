@@ -337,13 +337,9 @@ tailwind.config = {
             </div>
           </div>
 
-          <div x-show="currentProject.status === 'validation-client' && !(currentProject.validationFinale && currentProject.validationFinale.status === 'valide')" class="bg-sky-50 border border-sky-200 rounded-xl p-4 mb-5">
-            <p class="text-sm text-sky-900 flex items-center gap-2 mb-3">🎬 <span>Ta vidéo est prête ? Envoie la demande de validation finale — le client visionne la vidéo puis valide en un clic, sans relire tout le projet.</span></p>
-            <div class="flex items-center gap-2 flex-wrap">
-              <input x-model="currentProject.frameioLink" @change="saveProjects()" type="url" placeholder="Lien Frame.io de la vidéo (visionnage client)" class="flex-1 min-w-[220px] text-sm px-3 py-2 rounded-lg border border-sky-200 bg-white">
-              <button @click="openFinalValidationEmail()" class="text-xs bg-sky-600 text-white px-3 py-2 rounded-lg whitespace-nowrap shrink-0">✉️ Demander la validation finale</button>
-            </div>
-            <p x-show="!currentProject.frameioLink" class="text-xs text-sky-700 mt-2">Ajoute le lien Frame.io pour que le client puisse voir la vidéo avant de valider.</p>
+          <div x-show="currentProject.status === 'validation-client' && !(currentProject.validationFinale && currentProject.validationFinale.status === 'valide')" class="bg-sky-50 border border-sky-200 rounded-xl p-4 mb-5 flex items-center justify-between gap-4">
+            <p class="text-sm text-sky-900 flex items-center gap-2">🎬 <span>Ta vidéo est prête ? Envoie la demande de validation finale — le client visionne la vidéo (lien Frame.io ci-dessous) puis valide en un clic.</span></p>
+            <button @click="openFinalValidationEmail()" class="text-xs bg-sky-600 text-white px-3 py-2 rounded-lg whitespace-nowrap shrink-0">✉️ Demander la validation finale</button>
           </div>
 
           <div x-show="currentProject.validationFinale && currentProject.validationFinale.status === 'valide' && !(currentContrat && currentContrat.abbyFinalPaidAt)" class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-5 flex items-center justify-between gap-4">
@@ -375,6 +371,15 @@ tailwind.config = {
                 </div>
               </div>
             </template>
+          </div>
+
+          <div class="bg-surface border border-line rounded-xl p-4 mb-5">
+            <div class="flex items-center gap-3 flex-wrap">
+              <p class="font-display font-bold text-sm flex items-center gap-2 shrink-0">🎬 Lien Frame.io</p>
+              <input x-model="currentProject.frameioLink" @change="saveProjects()" type="url" placeholder="Colle le lien Frame.io de la vidéo (visionnage client)" class="flex-1 min-w-[220px] text-sm px-3 py-2 rounded-lg border border-line bg-bg">
+              <a x-show="currentProject.frameioLink" :href="currentProject.frameioLink" target="_blank" rel="noopener" class="text-xs bg-surface border border-line px-3 py-2 rounded-lg hover:border-accent/50 whitespace-nowrap shrink-0">▶ Ouvrir</a>
+            </div>
+            <p class="text-xs text-muted mt-2">Réutilisé automatiquement dans l'email de validation finale et sur la page de validation du client.</p>
           </div>
 
           <div x-show="!projectSuggestionDismissed && (projectSuggestionLoading || projectSuggestion)" class="bg-accent2/10 border border-accent2/30 rounded-xl p-4 mb-5 flex items-center justify-between gap-4">
@@ -2717,12 +2722,13 @@ Moustikprod`;
       const client = this.allClients.find(c => c.id === p.clientId);
       const prenom = (client && (client.prenom || client.nom)) || '';
       const nbRev = (this.currentContrat && this.currentContrat.nombreRevisions) || 2;
+      const lienVideo = p.frameioLink ? `\n\n▶ Visionner la vidéo : ${p.frameioLink}` : '';
       this.emailShareTo = (client && client.email) || '';
       this.emailShareSubject = `Votre vidéo « ${p.title} » est prête — validation finale`;
       this.emailShareBody =
 `Bonjour ${prenom},
 
-Votre vidéo « ${p.title} » est terminée 🎬
+Votre vidéo « ${p.title} » est terminée 🎬${lienVideo}
 
 Merci de la valider en un clic via le lien ci-dessous, ou d'y demander une modification si besoin. Votre retour me parvient automatiquement.
 
