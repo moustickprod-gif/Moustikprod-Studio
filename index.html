@@ -345,6 +345,23 @@ tailwind.config = {
             </div>
           </div>
 
+          <div class="bg-surface border border-line rounded-xl p-4 mb-5">
+            <div class="flex items-center justify-between gap-3 flex-wrap">
+              <p class="font-display font-bold text-sm flex items-center gap-2">💶 Facturation Abby</p>
+              <div class="flex items-center gap-2 flex-wrap">
+                <span x-show="!(currentContrat && currentContrat.montantHT)" class="text-xs text-muted">Lie un contrat avec un montant à ce projet pour facturer l'acompte.</span>
+                <template x-if="currentContrat && currentContrat.montantHT">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <button x-show="!currentContrat.abbyInvoiceId" @click="facturerAcompteAbby(currentContrat)" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded-lg">Créer la facture d'acompte (Abby)</button>
+                    <span x-show="currentContrat.abbyInvoiceId && !currentContrat.abbyAcomptePaidAt" class="text-xs font-mono text-muted" x-text="'Acompte : ' + (currentContrat.abbyInvoiceNumber || 'brouillon')"></span>
+                    <button x-show="currentContrat.abbyInvoiceId && !currentContrat.abbyAcomptePaidAt" @click="marquerAcomptePayeAbby(currentContrat)" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Marquer l'acompte payé ✓</button>
+                    <span x-show="currentContrat.abbyAcomptePaidAt" class="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1" x-text="'Acompte payé ✓ ' + (currentContrat.abbyInvoiceNumber || '')"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+
           <div x-show="!projectSuggestionDismissed && (projectSuggestionLoading || projectSuggestion)" class="bg-accent2/10 border border-accent2/30 rounded-xl p-4 mb-5 flex items-center justify-between gap-4">
             <p class="text-sm flex items-center gap-2">
               <span class="text-accent2">✦</span>
@@ -4477,6 +4494,43 @@ FORMAT DE SORTIE :
         window.open('https://app.abby.fr', '_blank');
       } catch(e) {
         this.toast('Acompte Abby : ' + e.message, 'error');
+      }
+    },
+    // Contrat lié au projet ouvert (signé en priorité, sinon le plus récent).
+    get currentContrat() {
+      const p = this.currentProject;
+      if (!p) return null;
+      const list = (this.contrats || []).filter(c => c.projetId === p.id);
+      return list.find(c => c.statut === 'signé') || list[list.length - 1] || null;
+    },
+    // Payload de rapprochement pour reconciliate. Un seul paiement du montant
+    // total (centimes). receivedAt en ISO ; method='transfer' (virement).
+    _abbyPaymentPayload(amountCents) {
+      return [{ amount: amountCents, receivedAt: new Date().toISOString(), method: 'transfer' }];
+    },
+    // 1-clic « Paiement validé » : finalise (si besoin) puis marque PAYÉE la
+    // facture d'acompte Abby du contrat, et avance le workflow. La finalisation
+    // est irréversible → confirmation explicite avec le montant.
+    async marquerAcomptePayeAbby(c) {
+      if (!c) { this.toast('Aucun contrat lié à ce projet', 'error'); return; }
+      if (!c.abbyInvoiceId) { this.toast('Crée d\'abord la facture d\'acompte', 'error'); return; }
+      if (c.abbyAcomptePaidAt) { this.toast('Acompte déjà marqué payé', 'error'); return; }
+      const acompteEur = Math.round(Number(c.montantHT) * (c.acompte || 30) / 100);
+      if (!confirm(`Finaliser la facture d'acompte ${c.abbyInvoiceNumber || ''} et la marquer PAYÉE (${acompteEur.toLocaleString('fr-FR')} €) dans Abby ?\n\n⚠️ La finalisation attribue un numéro définitif : elle est IRRÉVERSIBLE.`)) return;
+      try {
+        // 1. Finaliser (ignorée si déjà finalisée — reconciliate reste le vrai garde)
+        try { await this.abbyCall('finalizeInvoice', { billingId: c.abbyInvoiceId }); } catch (e) { /* peut être déjà finalisée */ }
+        // 2. Rapprocher le paiement → facture acquittée
+        await this.abbyCall('reconciliate', { invoiceId: c.abbyInvoiceId, payments: this._abbyPaymentPayload(acompteEur * 100) });
+        c.abbyAcomptePaidAt = new Date().toISOString();
+        await this.db.collection('users').doc(this.user.uid).collection('contrats').doc(c.id).set({ abbyAcomptePaidAt: c.abbyAcomptePaidAt }, { merge: true });
+        this.toast('Acompte marqué payé ✓ — facture acquittée disponible dans Abby');
+        // 3. Avancer le workflow vers « Acompte reçu » si on est en amont
+        if (['devis-a-faire','devis-envoye','devis-accepte','contrat-acompte'].includes(this.currentProject.status)) {
+          this.changeStatus('acompte-recu');
+        }
+      } catch (e) {
+        this.toast('Paiement acompte Abby : ' + e.message, 'error');
       }
     },
 
