@@ -1988,6 +1988,18 @@ function app() {
         const cfg = await res.json();
         if (cfg.apiKey && window.firebase) {
           firebase.initializeApp(cfg);
+          // Persistance offline : cache local (IndexedDB) pour cocher/annoter en
+          // mode tournage sans réseau ; la synchro remonte seule au retour du
+          // réseau. Le SDK compat 10.x n'expose pas persistentLocalCache —
+          // l'équivalent natif est enablePersistence, à appeler AVANT tout accès
+          // Firestore. Non bloquant : un échec (onglets multiples, navigateur non
+          // supporté) laisse l'app en mode online normal, rien d'autre n'est cassé.
+          try {
+            firebase.firestore().enablePersistence({ synchronizeTabs: true })
+              .catch(err => console.warn('Persistance offline non activée :', (err && err.code) || err));
+          } catch (err) {
+            console.warn('Persistance offline indisponible :', err);
+          }
           this.firebaseEnabled = true;
           firebase.auth().onAuthStateChanged(async u => {
             this.user = u;
