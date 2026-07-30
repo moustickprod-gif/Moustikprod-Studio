@@ -318,6 +318,10 @@ tailwind.config = {
                 </ul>
               </details>
             </template>
+            <template x-if="slaAlert(currentProject)">
+              <p class="mt-2 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 inline-flex items-center gap-1.5"
+                 x-text="'⏰ En attente depuis ' + slaAlert(currentProject).days + ' j en « ' + slaAlert(currentProject).label + ' » — SLA de ' + slaAlert(currentProject).sla + ' j dépassé'"></p>
+            </template>
             <div class="flex items-center justify-between mt-2">
               <p class="text-muted text-sm" x-text="currentProject.client + ' · ' + currentProject.type + ' · Deadline: ' + (currentProject.deadline || '—')"></p>
               <div class="flex items-center gap-2">
@@ -2542,7 +2546,30 @@ function app() {
         if (s.statut === 'signé' && isNew(s.dateSignature)) alerts.push({ type:'signe', color:'green', label:'✍️ signature reçue' });
         else if (s.statut === 'refusé' && isNew(s.dateRefus)) alerts.push({ type:'signe_refuse', color:'orange', label:'⚠️ signature refusée' });
       }
+      // Alerte SLA : étape d'attente dépassée. Persistante (indépendante de
+      // alertsSeenAt) : ne disparaît qu'au changement de statut.
+      const sla = this.slaAlert(p);
+      if (sla) alerts.push({ type:'sla', color:'orange', label:`⏰ ${sla.days} j en « ${sla.label} » (SLA ${sla.sla} j)` });
       return alerts;
+    },
+    // Retard SLA du projet : renvoie {days, sla, label} si le statut courant
+    // est une étape d'« attente » avec un SLA dépassé, sinon null. La date
+    // d'entrée dans le statut vient de la dernière entrée statusHistory du slug
+    // courant ; sans historique (ancien projet pas encore re-sauvé) → pas
+    // d'alerte (on ne peut pas dater l'entrée).
+    slaAlert(p) {
+      if (!p) return null;
+      const def = this.statusPipeline.find(s => s.slug === p.status);
+      if (!def || def.type !== 'attente' || !def.sla) return null;
+      const hist = Array.isArray(p.statusHistory) ? p.statusHistory : [];
+      let enteredAt = null;
+      for (let i = hist.length - 1; i >= 0; i--) {
+        if (hist[i].slug === p.status) { enteredAt = hist[i].at; break; }
+      }
+      if (!enteredAt) return null;
+      const days = Math.floor((Date.now() - new Date(enteredAt).getTime()) / 86400000);
+      if (days < def.sla) return null;
+      return { days, sla: def.sla, label: def.label };
     },
     // Projets ayant au moins une alerte en attente (pour le compteur global).
     get pendingAttentionProjects() {
