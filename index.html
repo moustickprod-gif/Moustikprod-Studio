@@ -348,6 +348,27 @@ tailwind.config = {
             </div>
           </div>
 
+          <!-- Retour client : affiche le contenu du/des retour(s) dès l'ouverture du projet,
+               quel que soit l'onglet. Lit validationScenario/validationScript directement
+               (indépendant de alertsSeenAt : la bannière ne disparaît pas à l'ouverture). -->
+          <div x-show="currentClientFeedback.length" class="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-5">
+            <div class="flex items-center justify-between gap-4 mb-2">
+              <p class="font-display font-bold text-sm text-orange-800 flex items-center gap-2">💬 <span x-text="currentClientFeedback.length > 1 ? 'Retours client à traiter' : 'Retour client à traiter'"></span></p>
+              <button @click="detailTab='suivi'" class="text-xs text-orange-700 hover:underline shrink-0 whitespace-nowrap">Voir dans Suivi →</button>
+            </div>
+            <div class="space-y-3">
+              <template x-for="(f,i) in currentClientFeedback" :key="i">
+                <div class="text-sm border-l-2 border-orange-300 pl-3">
+                  <p class="text-xs text-orange-700/80 font-medium">
+                    <span x-text="f.quoi"></span>
+                    <template x-if="f.respondedAt"><span> · <span x-text="new Date(f.respondedAt).toLocaleDateString('fr-FR',{day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'})"></span></span></template>
+                  </p>
+                  <p class="whitespace-pre-wrap mt-0.5 text-ink" x-text="f.comment"></p>
+                </div>
+              </template>
+            </div>
+          </div>
+
           <div class="flex gap-1 border-b border-line mb-5 overflow-x-auto">
             <template x-for="t in ['entretien','pitch','moodboard','scenario','decoupage','logistique','captions','suivi']" :key="t">
               <button @click="detailTab=t" :class="detailTab===t ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-ink'" class="px-4 py-2 text-sm font-medium border-b-2 transition whitespace-nowrap" x-text="{entretien:'Entretien',pitch:'Pitch',moodboard:'Moodboard & Références',scenario:'Scénario',decoupage:'Découpage technique',logistique:'Logistique',captions:'Captions / Réseaux',suivi:'Suivi'}[t]"></button>
@@ -2421,6 +2442,22 @@ function app() {
     // Projets ayant au moins une alerte en attente (pour le compteur global).
     get pendingAttentionProjects() {
       return (this.projects || []).filter(p => this.projectAlerts(p).length > 0);
+    },
+    // Contenu des retours client du projet ouvert (texte + séquence citée en
+    // texte libre + horodatage). Indépendant de alertsSeenAt : reste visible
+    // tant que le retour existe, pour que Romain le lise sans ouvrir sa boîte
+    // mail. Plus récent en haut. Ne modifie rien, lecture seule.
+    get currentClientFeedback() {
+      const p = this.currentProject;
+      if (!p) return [];
+      const items = [];
+      for (const { field, quoi } of [{ field:'validationScenario', quoi:'Scénario' }, { field:'validationScript', quoi:'Découpage / Script' }]) {
+        const v = p[field];
+        if (v && v.status === 'refuse' && v.comment) {
+          items.push({ quoi, comment: v.comment, respondedAt: v.respondedAt || null });
+        }
+      }
+      return items.sort((a, b) => new Date(b.respondedAt || 0) - new Date(a.respondedAt || 0));
     },
     // Va aux projets et, si des alertes existent, applique un filtre visuel léger
     // en faisant défiler vers la liste (le badge sur chaque carte suffit à repérer).
