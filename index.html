@@ -337,6 +337,11 @@ tailwind.config = {
             </div>
           </div>
 
+          <div x-show="currentProject.status === 'validation-client' && !(currentProject.validationFinale && currentProject.validationFinale.status === 'valide')" class="bg-sky-50 border border-sky-200 rounded-xl p-4 mb-5 flex items-center justify-between gap-4">
+            <p class="text-sm text-sky-900 flex items-center gap-2">🎬 <span>Ta vidéo est prête ? Envoie la demande de validation finale — le client visionne la vidéo (lien Frame.io ci-dessous) puis valide en un clic.</span></p>
+            <button @click="openFinalValidationEmail()" class="text-xs bg-sky-600 text-white px-3 py-2 rounded-lg whitespace-nowrap shrink-0">✉️ Demander la validation finale</button>
+          </div>
+
           <div x-show="currentProject.validationFinale && currentProject.validationFinale.status === 'valide' && !(currentContrat && currentContrat.abbyFinalPaidAt)" class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-5 flex items-center justify-between gap-4">
             <p class="text-sm text-emerald-800 flex items-center gap-2">🎬 <span>La vidéo finale a été <strong>validée par le client</strong> — tu peux lancer la facture finale.</span></p>
             <div class="flex items-center gap-2 shrink-0">
@@ -366,6 +371,15 @@ tailwind.config = {
                 </div>
               </div>
             </template>
+          </div>
+
+          <div class="bg-surface border border-line rounded-xl p-4 mb-5">
+            <div class="flex items-center gap-3 flex-wrap">
+              <p class="font-display font-bold text-sm flex items-center gap-2 shrink-0">🎬 Lien Frame.io</p>
+              <input x-model="currentProject.frameioLink" @change="saveProjects()" type="url" placeholder="Colle le lien Frame.io de la vidéo (visionnage client)" class="flex-1 min-w-[220px] text-sm px-3 py-2 rounded-lg border border-line bg-bg">
+              <a x-show="currentProject.frameioLink" :href="currentProject.frameioLink" target="_blank" rel="noopener" class="text-xs bg-surface border border-line px-3 py-2 rounded-lg hover:border-accent/50 whitespace-nowrap shrink-0">▶ Ouvrir</a>
+            </div>
+            <p class="text-xs text-muted mt-2">Réutilisé automatiquement dans l'email de validation finale et sur la page de validation du client.</p>
           </div>
 
           <div x-show="!projectSuggestionDismissed && (projectSuggestionLoading || projectSuggestion)" class="bg-accent2/10 border border-accent2/30 rounded-xl p-4 mb-5 flex items-center justify-between gap-4">
@@ -1942,7 +1956,7 @@ function app() {
     saveToProjectOpen: false,
     deleteProjectConfirmOpen: false,
     projectPendingDelete: null,
-    emailShareOpen: false, emailShareTo: '', emailShareSubject: '', emailShareBody: '', emailShareLoading: false,
+    emailShareOpen: false, emailShareTo: '', emailShareSubject: '', emailShareBody: '', emailShareLoading: false, emailShareFinal: false,
 
     // clients
     clientSearch: '', currentClient: null,
@@ -2291,6 +2305,7 @@ function app() {
         validationScenario: data.validationScenario || null,
         validationScript: data.validationScript || null,
         validationFinale: data.validationFinale || null,
+        frameioLink: data.frameioLink || '',
         alertsSeenAt: data.alertsSeenAt || null,
         abbyEstimateId: data.abbyEstimateId || '',
         abbyEstimateNumber: data.abbyEstimateNumber || '',
@@ -2359,6 +2374,7 @@ function app() {
           notes: project.notes || '',
           shareToken: project.shareToken || null,
           shareEnabled: !!project.shareEnabled,
+          frameioLink: project.frameioLink || '',
           abbyEstimateId: project.abbyEstimateId || null,
           abbyEstimateNumber: project.abbyEstimateNumber || null,
           dateCreation: project.dateCreation || new Date().toISOString(),
@@ -2689,6 +2705,41 @@ N'hésitez pas à répondre à cet email pour toute question.
 Bien à vous,
 Moustikprod`;
       if (!this.emailShareTo) this.toast('Aucun email sur la fiche client — renseigne le destinataire.', 'error');
+      this.emailShareFinal = false;
+      this.emailShareOpen = true;
+    },
+    // Demande au client de valider la VIDÉO FINALE : email dédié + lien vers une
+    // page de validation épurée (share.html?final=1, pas de scénario/découpage).
+    // Active le partage au besoin (le lien et project-validate exigent shareEnabled).
+    async openFinalValidationEmail() {
+      const p = this.currentProject;
+      if (!p) return;
+      if (!p.shareToken) {
+        p.shareToken = (crypto.randomUUID ? crypto.randomUUID() : (Date.now()+'-'+Math.random().toString(36).slice(2))).replace(/-/g,'');
+      }
+      if (!p.shareEnabled) { p.shareEnabled = true; }
+      await this.saveProjectDoc(p);
+      const client = this.allClients.find(c => c.id === p.clientId);
+      const prenom = (client && (client.prenom || client.nom)) || '';
+      const nbRev = (this.currentContrat && this.currentContrat.nombreRevisions) || 2;
+      const blocVideo = p.frameioLink
+        ? `\n\n▶ Visionner la vidéo : ${p.frameioLink}\nVous pouvez laisser vos remarques directement sur la vidéo dans Frame.io (commentaires horodatés, au moment précis concerné).`
+        : '';
+      this.emailShareTo = (client && client.email) || '';
+      this.emailShareSubject = `Votre vidéo « ${p.title} » est prête — validation finale`;
+      this.emailShareBody =
+`Bonjour ${prenom},
+
+Votre vidéo « ${p.title} » est terminée 🎬${blocVideo}
+
+Merci ensuite de la valider en un clic via le lien ci-dessous, ou d'y demander une modification si besoin. Votre retour me parvient automatiquement.
+
+Pour rappel, la prestation inclut ${nbRev} série${nbRev > 1 ? 's' : ''} de modifications. Au-delà, les retouches supplémentaires font l'objet d'une facturation.
+
+Bien à vous,
+Moustikprod`;
+      if (!this.emailShareTo) this.toast('Aucun email sur la fiche client — renseigne le destinataire.', 'error');
+      this.emailShareFinal = true;
       this.emailShareOpen = true;
     },
     async sendEmailShare() {
@@ -2696,13 +2747,14 @@ Moustikprod`;
       if (!to) { this.toast('Renseigne un destinataire.', 'error'); return; }
       this.emailShareLoading = true;
       try {
-        const url = this.shareUrl();
+        const url = this.shareUrl() + (this.emailShareFinal ? '&final=1' : '');
+        const ctaLabel = this.emailShareFinal ? 'Valider ma vidéo →' : 'Consulter le projet →';
         const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
         // Corps texte -> HTML simple, avec le lien en bouton cliquable ajouté au bas.
         const html =
           `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#1a1a1a">` +
           esc(this.emailShareBody).replace(/\n/g, '<br>') +
-          `<div style="margin:24px 0"><a href="${esc(url)}" style="display:inline-block;background:#3CD6D1;color:#024059;font-weight:700;padding:12px 24px;border-radius:8px;text-decoration:none">Consulter le projet →</a></div>` +
+          `<div style="margin:24px 0"><a href="${esc(url)}" style="display:inline-block;background:#3CD6D1;color:#024059;font-weight:700;padding:12px 24px;border-radius:8px;text-decoration:none">${ctaLabel}</a></div>` +
           `<p style="font-size:12px;color:#888">Ou copiez ce lien : ${esc(url)}</p></div>`;
         const res = await this.apiFetch('/api/send-email.js', {
           method: 'POST',
