@@ -566,10 +566,13 @@ tailwind.config = {
                   </div>
                   <div class="space-y-1.5">
                     <template x-for="(a,i) in (currentProject.decoupageAB?.aroll || [])" :key="a.id">
-                      <div class="flex items-center gap-2 group" :class="a.done ? 'opacity-60' : ''">
-                        <input type="checkbox" x-model="a.done" @change="saveProjects()" class="accent-accent shrink-0">
-                        <input x-model="a.description" @blur="saveProjects()" placeholder="Décris le plan A-roll…" class="flex-1 bg-transparent border-0 text-sm p-0" :class="a.done ? 'line-through text-muted' : ''">
-                        <button @click="currentProject.decoupageAB.aroll.splice(i,1); saveProjects()" class="text-muted hover:text-accent text-xs opacity-0 group-hover:opacity-100 shrink-0">✕</button>
+                      <div class="flex items-start gap-2 group" :class="a.done ? 'opacity-60' : ''">
+                        <input type="checkbox" x-model="a.done" @change="saveProjects()" class="accent-accent shrink-0 mt-1">
+                        <div class="flex-1 min-w-0">
+                          <input x-model="a.description" @blur="saveProjects()" placeholder="Décris le plan A-roll…" class="w-full bg-transparent border-0 text-sm p-0" :class="a.done ? 'line-through text-muted' : ''">
+                          <input x-model="a.notes" @blur="saveProjects()" placeholder="↳ notes (montage, à refaire…)" class="w-full bg-transparent border-0 text-xs text-muted p-0 mt-0.5">
+                        </div>
+                        <button @click="currentProject.decoupageAB.aroll.splice(i,1); saveProjects()" class="text-muted hover:text-accent text-xs opacity-0 group-hover:opacity-100 shrink-0 mt-1">✕</button>
                       </div>
                     </template>
                     <p x-show="!(currentProject.decoupageAB?.aroll || []).length" class="text-xs text-muted italic">Aucun plan A-roll. Génère avec Claude ou ajoute une ligne.</p>
@@ -592,6 +595,7 @@ tailwind.config = {
                         <div class="flex-1 min-w-0">
                           <input x-model="b.description" @blur="saveProjects()" placeholder="Décris le plan B-roll…" class="w-full bg-transparent border-0 text-sm p-0" :class="b.done ? 'line-through text-muted' : ''">
                           <input x-model="b.sequenceRef" @blur="saveProjects()" placeholder="↳ séquence du scénario (ex. Séquence 2)" class="w-full bg-transparent border-0 text-xs text-muted p-0 mt-0.5">
+                          <input x-model="b.notes" @blur="saveProjects()" placeholder="↳ notes (montage, à refaire…)" class="w-full bg-transparent border-0 text-xs text-muted p-0 mt-0.5">
                         </div>
                         <button @click="currentProject.decoupageAB.broll.splice(i,1); saveProjects()" class="text-muted hover:text-accent text-xs opacity-0 group-hover:opacity-100 shrink-0 mt-1">✕</button>
                       </div>
@@ -599,6 +603,11 @@ tailwind.config = {
                     <p x-show="!(currentProject.decoupageAB?.broll || []).length" class="text-xs text-muted italic">Aucun plan B-roll. Génère avec Claude ou ajoute une ligne.</p>
                   </div>
                 </div>
+              </div>
+
+              <div class="bg-surface border border-line rounded-xl p-4">
+                <p class="text-muted font-mono text-xs mb-2 uppercase">Notes de tournage</p>
+                <textarea x-model="ensureDecoupageAB().notesTournage" @blur="saveProjects()" rows="3" placeholder="Notes libres pour le tournage (matériel, contraintes, ordre des plans…) — non rattachées à un plan." class="w-full bg-transparent border-0 text-sm p-0"></textarea>
               </div>
             </div>
           </div>
@@ -2233,7 +2242,7 @@ function app() {
           entretien: project.entretien || [],
           entretienNotes: project.entretienNotes || '',
           decoupage: project.decoupage || [],
-          decoupageAB: project.decoupageAB || { aroll: [], broll: [] },
+          decoupageAB: project.decoupageAB || { aroll: [], broll: [], notesTournage: '' },
           matos: project.matos || [],
           lieu: project.lieu || '',
           moodboardNotes: project.moodboardNotes || '',
@@ -2643,7 +2652,7 @@ Moustikprod`;
         entretien: [],
         entretienNotes: '',
         decoupage: [],
-        decoupageAB: { aroll: [], broll: [] },
+        decoupageAB: { aroll: [], broll: [], notesTournage: '' },
         matos: [],
         lieu: '',
         moodboardRefVisuelles: '',
@@ -2818,8 +2827,9 @@ Moustikprod`;
       const ab = data.decoupageAB;
       if (ab && typeof ab === 'object' && !Array.isArray(ab)) {
         return {
-          aroll: (ab.aroll || []).map(x => ({ id: x.id || this.abId(), description: x.description || '', done: !!x.done })),
-          broll: (ab.broll || []).map(x => ({ id: x.id || this.abId(), description: x.description || '', done: !!x.done, sequenceRef: x.sequenceRef || '' })),
+          aroll: (ab.aroll || []).map(x => ({ id: x.id || this.abId(), description: x.description || '', done: !!x.done, notes: x.notes || '' })),
+          broll: (ab.broll || []).map(x => ({ id: x.id || this.abId(), description: x.description || '', done: !!x.done, sequenceRef: x.sequenceRef || '', notes: x.notes || '' })),
+          notesTournage: ab.notesTournage || '',
         };
       }
       const legacy = Array.isArray(data.decoupage) ? data.decoupage : [];
@@ -2828,8 +2838,10 @@ Moustikprod`;
           id: this.abId(),
           description: [s.plan, s.focale, s.description].filter(Boolean).join(' — '),
           done: !!s.fait,
+          notes: '',
         })),
         broll: [],
+        notesTournage: '',
       };
     },
     // Fusion non-destructive : conserve les plans existants (et leur état `done`),
@@ -2842,7 +2854,7 @@ Moustikprod`;
         const desc = (item.description || '').trim();
         if (!desc || seen.has(norm(desc))) return;
         seen.add(norm(desc));
-        const entry = { id: this.abId(), description: desc, done: false };
+        const entry = { id: this.abId(), description: desc, done: false, notes: '' };
         if (isBroll) entry.sequenceRef = item.sequenceRef || '';
         merged.push(entry);
       });
@@ -2855,14 +2867,15 @@ Moustikprod`;
       }
       if (!Array.isArray(p.decoupageAB.aroll)) p.decoupageAB.aroll = [];
       if (!Array.isArray(p.decoupageAB.broll)) p.decoupageAB.broll = [];
+      if (typeof p.decoupageAB.notesTournage !== 'string') p.decoupageAB.notesTournage = '';
       return p.decoupageAB;
     },
     addArollRow() {
-      this.ensureDecoupageAB().aroll.push({ id: this.abId(), description: '', done: false });
+      this.ensureDecoupageAB().aroll.push({ id: this.abId(), description: '', done: false, notes: '' });
       this.saveProjects();
     },
     addBrollRow() {
-      this.ensureDecoupageAB().broll.push({ id: this.abId(), description: '', done: false, sequenceRef: '' });
+      this.ensureDecoupageAB().broll.push({ id: this.abId(), description: '', done: false, sequenceRef: '', notes: '' });
       this.saveProjects();
     },
     decoupageABPrompt() {
