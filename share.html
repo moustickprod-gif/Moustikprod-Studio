@@ -84,6 +84,17 @@ function validationBlock(target, label, val) {
     </div>`;
 }
 
+// La validation de la vidéo finale n'apparaît qu'à partir du moment où Romain
+// a mis le projet « En validation client » (ou plus loin), pour éviter que le
+// client valide la vidéo avant qu'elle soit prête. Si une décision existe déjà,
+// on l'affiche quoi qu'il arrive.
+const FINAL_STAGES = ['validation-client', 'projet-valide', 'facture-envoyee', 'paye-a-livrer', 'livre', 'archive'];
+function showFinalValidation(data) {
+  const v = data.validationFinale;
+  if (v && v.status && v.status !== 'en_attente') return true;
+  return FINAL_STAGES.includes(data.statutStudio);
+}
+
 function render(data) {
   currentData = data;
   const app = document.getElementById('app');
@@ -109,6 +120,7 @@ function render(data) {
     ${decoupageHtml}
     ${data.lieu ? `<div class="card"><h2 class="font-bold mb-2">Lieu de tournage</h2><p class="text-sm">${nl(data.lieu)}</p></div>` : ''}
     ${data.moodboardNotes ? `<div class="card"><h2 class="font-bold mb-2">Moodboard</h2><p class="text-sm">${nl(data.moodboardNotes)}</p></div>` : ''}
+    ${showFinalValidation(data) ? `<div class="card"><h2 class="font-bold mb-2">🎬 Vidéo finale</h2><p class="text-sm" style="color:#6b8a93">Merci de valider la version finale de ta vidéo, ou de demander une dernière modification.</p>${validationBlock('final', 'Vidéo finale', data.validationFinale)}</div>` : ''}
     <p class="text-center text-xs mt-8" style="color:#6b8a93">Lien de partage en lecture seule — généré depuis Moustikprod Studio</p>
   `;
 }
@@ -139,7 +151,7 @@ async function decide(target, decision, comment) {
       showMsg(target, data.error || 'Une erreur est survenue, réessaie.', 'error');
       return;
     }
-    const fieldName = target === 'scenario' ? 'validationScenario' : 'validationScript';
+    const fieldName = { scenario:'validationScenario', script:'validationScript', final:'validationFinale' }[target] || 'validationScript';
     currentData[fieldName] = data.value;
     render(currentData);
     showMsg(target, decision === 'valide' ? 'Validation envoyée, merci !' : 'Ta demande de modification a bien été envoyée.', 'success');

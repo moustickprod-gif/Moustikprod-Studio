@@ -1,8 +1,8 @@
 import { getFirestoreAccessToken, getFirestoreProjectId } from './_firestoreAuth.js';
 import { resolveUid, findProjectByShareToken, patchProjectField } from './_lib/firestore-admin.js';
 
-const TARGET_FIELD = { scenario: 'validationScenario', script: 'validationScript' };
-const TARGET_LABEL = { scenario: 'Scénario', script: 'Découpage technique' };
+const TARGET_FIELD = { scenario: 'validationScenario', script: 'validationScript', final: 'validationFinale' };
+const TARGET_LABEL = { scenario: 'Scénario', script: 'Découpage technique', final: 'Vidéo finale' };
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Méthode non autorisée' });

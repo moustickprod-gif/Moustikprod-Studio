@@ -81,6 +81,22 @@ export default async function handler(req, res) {
         if (!payload.billingId) return res.status(400).json({ error: 'billingId requis' });
         r = await abby('PATCH', `/v2/billing/${encodeURIComponent(payload.billingId)}/lines`, { lines: payload.lines || [] });
         break;
+      case 'finalizeInvoice':
+        // Brouillon → facture émise (n° attribué). Irréversible côté Abby.
+        if (!payload.billingId) return res.status(400).json({ error: 'billingId requis' });
+        r = await abby('PATCH', `/v2/billing/${encodeURIComponent(payload.billingId)}/finalize`);
+        break;
+      case 'reconciliate':
+        // Marque une facture FINALISÉE comme payée (rapproche un/des paiements).
+        // La somme des payments.amount (centimes) doit égaler le restant dû TTC.
+        if (!payload.invoiceId) return res.status(400).json({ error: 'invoiceId requis' });
+        if (!Array.isArray(payload.payments) || !payload.payments.length) return res.status(400).json({ error: 'payments requis' });
+        r = await abby('POST', `/v2/accounting-billing/invoice/${encodeURIComponent(payload.invoiceId)}/reconciliate`, { payments: payload.payments });
+        break;
+      case 'markInvoiceUnpaid':
+        if (!payload.invoiceId) return res.status(400).json({ error: 'invoiceId requis' });
+        r = await abby('POST', `/v2/accounting-billing/invoice/${encodeURIComponent(payload.invoiceId)}/mark-as-unpaid`);
+        break;
       default:
         return res.status(400).json({ error: 'action inconnue : ' + action });
     }
