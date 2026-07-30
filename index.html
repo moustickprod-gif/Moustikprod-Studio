@@ -346,20 +346,26 @@ tailwind.config = {
           </div>
 
           <div class="bg-surface border border-line rounded-xl p-4 mb-5">
-            <div class="flex items-center justify-between gap-3 flex-wrap">
-              <p class="font-display font-bold text-sm flex items-center gap-2">💶 Facturation Abby</p>
-              <div class="flex items-center gap-2 flex-wrap">
-                <span x-show="!(currentContrat && currentContrat.montantHT)" class="text-xs text-muted">Lie un contrat avec un montant à ce projet pour facturer l'acompte.</span>
-                <template x-if="currentContrat && currentContrat.montantHT">
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <button x-show="!currentContrat.abbyInvoiceId" @click="facturerAcompteAbby(currentContrat)" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded-lg">Créer la facture d'acompte (Abby)</button>
-                    <span x-show="currentContrat.abbyInvoiceId && !currentContrat.abbyAcomptePaidAt" class="text-xs font-mono text-muted" x-text="'Acompte : ' + (currentContrat.abbyInvoiceNumber || 'brouillon')"></span>
-                    <button x-show="currentContrat.abbyInvoiceId && !currentContrat.abbyAcomptePaidAt" @click="marquerAcomptePayeAbby(currentContrat)" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Marquer l'acompte payé ✓</button>
-                    <span x-show="currentContrat.abbyAcomptePaidAt" class="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1" x-text="'Acompte payé ✓ ' + (currentContrat.abbyInvoiceNumber || '')"></span>
-                  </div>
-                </template>
+            <p class="font-display font-bold text-sm flex items-center gap-2 mb-3">💶 Facturation Abby</p>
+            <span x-show="!(currentContrat && currentContrat.montantHT)" class="text-xs text-muted">Lie un contrat avec un montant à ce projet pour facturer.</span>
+            <template x-if="currentContrat && currentContrat.montantHT">
+              <div class="space-y-2">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-xs font-mono text-muted w-16 shrink-0">Acompte</span>
+                  <button x-show="!currentContrat.abbyInvoiceId" @click="facturerAcompteAbby(currentContrat)" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded-lg">Créer (Abby)</button>
+                  <span x-show="currentContrat.abbyInvoiceId && !currentContrat.abbyAcomptePaidAt" class="text-xs font-mono text-muted" x-text="currentContrat.abbyInvoiceNumber || 'brouillon'"></span>
+                  <button x-show="currentContrat.abbyInvoiceId && !currentContrat.abbyAcomptePaidAt" @click="marquerAcomptePayeAbby(currentContrat)" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Marquer payé ✓</button>
+                  <span x-show="currentContrat.abbyAcomptePaidAt" class="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1" x-text="'Payé ✓ ' + (currentContrat.abbyInvoiceNumber || '')"></span>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-xs font-mono text-muted w-16 shrink-0">Finale</span>
+                  <button x-show="!currentContrat.abbyFinalInvoiceId" @click="facturerFinaleAbby(currentContrat)" class="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded-lg">Créer le solde (Abby)</button>
+                  <span x-show="currentContrat.abbyFinalInvoiceId && !currentContrat.abbyFinalPaidAt" class="text-xs font-mono text-muted" x-text="currentContrat.abbyFinalInvoiceNumber || 'brouillon'"></span>
+                  <button x-show="currentContrat.abbyFinalInvoiceId && !currentContrat.abbyFinalPaidAt" @click="marquerFinalePayeeAbby(currentContrat)" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg">Marquer payée ✓</button>
+                  <span x-show="currentContrat.abbyFinalPaidAt" class="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1" x-text="'Payée ✓ ' + (currentContrat.abbyFinalInvoiceNumber || '')"></span>
+                </div>
               </div>
-            </div>
+            </template>
           </div>
 
           <div x-show="!projectSuggestionDismissed && (projectSuggestionLoading || projectSuggestion)" class="bg-accent2/10 border border-accent2/30 rounded-xl p-4 mb-5 flex items-center justify-between gap-4">
@@ -4531,6 +4537,68 @@ FORMAT DE SORTIE :
         }
       } catch (e) {
         this.toast('Paiement acompte Abby : ' + e.message, 'error');
+      }
+    },
+    // Crée la facture FINALE en brouillon dans Abby : ligne = solde (total −
+    // acompte) PRÉ-REMPLIE mais modifiable dans Abby. La déduction d'acompte
+    // reste sous ton contrôle : tu ajustes puis finalises dans Abby.
+    async facturerFinaleAbby(c) {
+      if (!c) { this.toast('Aucun contrat lié à ce projet', 'error'); return; }
+      const client = this.allClients.find(x => x.id === c.clientId);
+      if (!client) { this.toast('Client introuvable', 'error'); return; }
+      if (!c.montantHT) { this.toast('Pas de montant sur ce contrat', 'error'); return; }
+      const projet = this.projects.find(p => p.id === c.projetId) || {};
+      const acompteEur = Math.round(Number(c.montantHT) * (c.acompte || 30) / 100);
+      const soldeEur = Number(c.montantHT) - acompteEur;
+      try {
+        const customerId = await this._abbyCustomer(client);
+        let invoice;
+        try {
+          invoice = await this.abbyCall('createInvoice', { customerId });
+        } catch (e) {
+          if (client.abbyKind === 'organization' && !client.abbyContactId) {
+            invoice = await this.abbyCall('createInvoice', { customerId: await this._abbyEnsureOrgContact(client) });
+          } else { throw e; }
+        }
+        await this.abbyCall('setLines', { billingId: invoice.data.id, lines: [{
+          designation: `Solde — ${projet.title || c.typePrestation || 'Prestation'} (facture finale, acompte ${c.acompte || 30}% déduit — à vérifier dans Abby)`.trim(),
+          quantity: 1,
+          unitPrice: soldeEur * 100,
+          vatCode: 'FR_00HT',
+          type: 'service_delivery',
+        }]});
+        c.abbyFinalInvoiceId = invoice.data.id;
+        c.abbyFinalInvoiceNumber = invoice.data.number || '';
+        await this.db.collection('users').doc(this.user.uid).collection('contrats').doc(c.id).set({ abbyFinalInvoiceId: c.abbyFinalInvoiceId, abbyFinalInvoiceNumber: c.abbyFinalInvoiceNumber }, { merge: true });
+        this.toast(`Facture finale (solde ${soldeEur.toLocaleString('fr-FR')} €) créée en brouillon — vérifie la déduction et finalise dans Abby`);
+        window.open('https://app.abby.fr', '_blank');
+      } catch (e) {
+        this.toast('Facture finale Abby : ' + e.message, 'error');
+      }
+    },
+    // 1-clic « Solde payé » : marque PAYÉE la facture finale. Le montant est
+    // confirmé (pré-rempli au solde) car tu as pu l'ajuster dans Abby. Tente
+    // une finalisation au cas où tu ne l'aurais pas faite (ignorée sinon).
+    async marquerFinalePayeeAbby(c) {
+      if (!c) { this.toast('Aucun contrat lié à ce projet', 'error'); return; }
+      if (!c.abbyFinalInvoiceId) { this.toast('Crée d\'abord la facture finale', 'error'); return; }
+      if (c.abbyFinalPaidAt) { this.toast('Facture finale déjà marquée payée', 'error'); return; }
+      const acompteEur = Math.round(Number(c.montantHT) * (c.acompte || 30) / 100);
+      const soldeEur = Number(c.montantHT) - acompteEur;
+      const saisie = prompt(`Montant réellement facturé sur la facture finale ${c.abbyFinalInvoiceNumber || ''} (€, tel que dans Abby) :`, String(soldeEur));
+      if (saisie === null) return;
+      const montantEur = Math.round(Number(String(saisie).replace(',', '.')));
+      if (!montantEur || montantEur <= 0) { this.toast('Montant invalide', 'error'); return; }
+      if (!confirm(`Finaliser (si besoin) et marquer PAYÉE la facture finale ${c.abbyFinalInvoiceNumber || ''} pour ${montantEur.toLocaleString('fr-FR')} € dans Abby ?\n\n⚠️ La finalisation est IRRÉVERSIBLE.`)) return;
+      try {
+        try { await this.abbyCall('finalizeInvoice', { billingId: c.abbyFinalInvoiceId }); } catch (e) { /* peut être déjà finalisée */ }
+        await this.abbyCall('reconciliate', { invoiceId: c.abbyFinalInvoiceId, payments: this._abbyPaymentPayload(montantEur * 100) });
+        c.abbyFinalPaidAt = new Date().toISOString();
+        await this.db.collection('users').doc(this.user.uid).collection('contrats').doc(c.id).set({ abbyFinalPaidAt: c.abbyFinalPaidAt }, { merge: true });
+        this.toast('Facture finale marquée payée ✓ — acquittée disponible dans Abby');
+        if (this.currentProject.status !== 'livre' && this.currentProject.status !== 'archive') this.changeStatus('paye-a-livrer');
+      } catch (e) {
+        this.toast('Paiement finale Abby : ' + e.message, 'error');
       }
     },
 
