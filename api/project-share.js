@@ -48,6 +48,7 @@ export default async function handler(req, res) {
       validationScript: fields.validationScript || null,
       validationFinale: fields.validationFinale || null,
       statutStudio: fields.statutStudio || '',
+      frameioLink: fields.frameioLink || '',
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -100,7 +100,10 @@ function render(data) {
       </div>
       <div class="card">
         <h2 class="font-bold mb-2">🎬 Validation de la vidéo finale</h2>
-        <p class="text-sm" style="color:#6b8a93">Merci de valider la version finale de votre vidéo, ou de demander une dernière modification. Votre retour me parvient automatiquement.</p>
+        <p class="text-sm" style="color:#6b8a93">Visionnez la version finale de votre vidéo, puis validez-la — ou demandez une dernière modification. Votre retour me parvient automatiquement.</p>
+        ${data.frameioLink
+          ? `<div style="margin:14px 0"><a href="${esc(data.frameioLink)}" target="_blank" rel="noopener" style="display:inline-block;background:#3CD6D1;color:#024059;font-weight:700;padding:10px 22px;border-radius:10px;text-decoration:none">▶ Voir la vidéo</a></div>`
+          : `<p class="val-msg error" style="margin-top:12px">Le lien de la vidéo n'est pas encore disponible — contactez-nous avant de valider.</p>`}
         ${validationBlock('final', 'Vidéo finale', data.validationFinale)}
       </div>
       <p class="text-center text-xs mt-8" style="color:#6b8a93">Lien de validation en lecture seule — généré depuis Moustikprod Studio</p>

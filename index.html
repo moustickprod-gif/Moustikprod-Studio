@@ -337,9 +337,13 @@ tailwind.config = {
             </div>
           </div>
 
-          <div x-show="currentProject.status === 'validation-client' && !(currentProject.validationFinale && currentProject.validationFinale.status === 'valide')" class="bg-sky-50 border border-sky-200 rounded-xl p-4 mb-5 flex items-center justify-between gap-4">
-            <p class="text-sm text-sky-900 flex items-center gap-2">🎬 <span>Ta vidéo est prête ? Envoie la demande de validation finale au client — il valide en un clic, sans relire tout le projet.</span></p>
-            <button @click="openFinalValidationEmail()" class="text-xs bg-sky-600 text-white px-3 py-1.5 rounded-lg whitespace-nowrap shrink-0">✉️ Demander la validation finale</button>
+          <div x-show="currentProject.status === 'validation-client' && !(currentProject.validationFinale && currentProject.validationFinale.status === 'valide')" class="bg-sky-50 border border-sky-200 rounded-xl p-4 mb-5">
+            <p class="text-sm text-sky-900 flex items-center gap-2 mb-3">🎬 <span>Ta vidéo est prête ? Envoie la demande de validation finale — le client visionne la vidéo puis valide en un clic, sans relire tout le projet.</span></p>
+            <div class="flex items-center gap-2 flex-wrap">
+              <input x-model="currentProject.frameioLink" @change="saveProjects()" type="url" placeholder="Lien Frame.io de la vidéo (visionnage client)" class="flex-1 min-w-[220px] text-sm px-3 py-2 rounded-lg border border-sky-200 bg-white">
+              <button @click="openFinalValidationEmail()" class="text-xs bg-sky-600 text-white px-3 py-2 rounded-lg whitespace-nowrap shrink-0">✉️ Demander la validation finale</button>
+            </div>
+            <p x-show="!currentProject.frameioLink" class="text-xs text-sky-700 mt-2">Ajoute le lien Frame.io pour que le client puisse voir la vidéo avant de valider.</p>
           </div>
 
           <div x-show="currentProject.validationFinale && currentProject.validationFinale.status === 'valide' && !(currentContrat && currentContrat.abbyFinalPaidAt)" class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-5 flex items-center justify-between gap-4">
@@ -2296,6 +2300,7 @@ function app() {
         validationScenario: data.validationScenario || null,
         validationScript: data.validationScript || null,
         validationFinale: data.validationFinale || null,
+        frameioLink: data.frameioLink || '',
         alertsSeenAt: data.alertsSeenAt || null,
         abbyEstimateId: data.abbyEstimateId || '',
         abbyEstimateNumber: data.abbyEstimateNumber || '',
@@ -2364,6 +2369,7 @@ function app() {
           notes: project.notes || '',
           shareToken: project.shareToken || null,
           shareEnabled: !!project.shareEnabled,
+          frameioLink: project.frameioLink || '',
           abbyEstimateId: project.abbyEstimateId || null,
           abbyEstimateNumber: project.abbyEstimateNumber || null,
           dateCreation: project.dateCreation || new Date().toISOString(),
