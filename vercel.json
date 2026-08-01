@@ -5,6 +5,10 @@
       "destination": "/api/google?action=:action"
     },
     {
+      "source": "/api/submit-signature",
+      "destination": "/api/sign"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
