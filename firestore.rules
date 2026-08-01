@@ -57,5 +57,15 @@ service cloud.firestore {
     match /stripeSubscriptions/{subId} {
       allow read, write: if false;
     }
+    // OAuth Google Calendar (T3) : refresh token + mapping state→uid. Écrits
+    // UNIQUEMENT par les functions serverless via le compte de service (qui
+    // contourne ces règles). Le navigateur ne doit jamais y accéder — le
+    // refresh token ne quitte jamais le serveur.
+    match /googleAuth/{uid} {
+      allow read, write: if false;
+    }
+    match /googleAuthState/{state} {
+      allow read, write: if false;
+    }
   }
 }

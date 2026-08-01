@@ -1375,6 +1375,31 @@ tailwind.config = {
           </div>
 
           <div class="bg-surface border border-line rounded-xl p-5">
+            <div class="flex items-center justify-between gap-3 mb-1">
+              <h3 class="font-display font-bold">Google Calendar</h3>
+              <span x-show="googleCal.loading" class="spinner"></span>
+              <span x-show="!googleCal.loading && googleCal.connected" class="text-xs font-mono px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 shrink-0">● Connecté</span>
+              <span x-show="!googleCal.loading && !googleCal.connected" class="text-xs font-mono px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 shrink-0">○ Non connecté</span>
+            </div>
+            <p class="text-xs text-muted mb-3">Synchronise tes tournages, relances et deadlines vers Google Calendar (synchro manuelle depuis le calendrier). Nécessite les variables <span class="font-mono">GOOGLE_OAUTH_CLIENT_ID</span>, <span class="font-mono">GOOGLE_OAUTH_CLIENT_SECRET</span> et <span class="font-mono">GOOGLE_OAUTH_REDIRECT_URI</span> sur Vercel.</p>
+            <template x-if="googleCal.connected">
+              <p class="text-xs text-muted mb-3">
+                Agenda : <span class="font-mono text-ink" x-text="googleCal.calendarId"></span>
+                <template x-if="googleCal.connectedAt"><span> · connecté le <span x-text="new Date(googleCal.connectedAt).toLocaleDateString('fr-FR')"></span></span></template>
+                <template x-if="googleCal.lastSyncAt"><span> · dernière synchro <span x-text="new Date(googleCal.lastSyncAt).toLocaleString('fr-FR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})"></span></span></template>
+              </p>
+            </template>
+            <div class="flex gap-2">
+              <button x-show="!googleCal.connected" @click="connectGoogleCalendar()" :disabled="googleCal.busy" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg flex items-center gap-2 disabled:opacity-50">
+                <span x-show="googleCal.busy" class="spinner"></span> Connecter Google Calendar
+              </button>
+              <button x-show="googleCal.connected" @click="disconnectGoogleCalendar()" :disabled="googleCal.busy" class="text-xs bg-surface border border-red-200 text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-50 transition flex items-center gap-2 disabled:opacity-50">
+                <span x-show="googleCal.busy" class="spinner"></span> Déconnecter
+              </button>
+            </div>
+          </div>
+
+          <div class="bg-surface border border-line rounded-xl p-5">
             <h3 class="font-display font-bold mb-3">Identité (documents légaux)</h3>
             <p class="text-xs text-muted mb-3">Utilisée dans les autorisations de droit à l'image.</p>
             <div class="grid grid-cols-2 gap-2">
@@ -2074,11 +2099,16 @@ function app() {
     // toasts
     toasts: [],
 
+    // Google Calendar (T3) — état de connexion lu depuis /api/google/status.
+    // Ne contient JAMAIS le refresh token (serveur-only).
+    googleCal: { connected:false, calendarId:'primary', connectedAt:null, lastSyncAt:null, loading:false, busy:false },
+
     init() {
       this.loadSettings();
       this.bindShortcuts();
       this.initFirebase();
       this.handleDeepLinkParams();
+      this.handleGcalReturn();
     },
     // Supporte les liens du type /nouveau-projet?titre=...&type=...&contexte=...
     // (utile pour des liens externes ou des intégrations qui veulent pré-remplir
@@ -2131,6 +2161,7 @@ function app() {
               await this.loadData();
               this.loadScenarioInstructionsDoc();
               this.loadSuggestions();
+              this.loadGoogleStatus();
             }
           });
         } else {
@@ -2540,6 +2571,80 @@ function app() {
         ...options,
         headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${idToken}`, ...(options.headers||{}) },
       });
+    },
+
+    // ---------- GOOGLE CALENDAR (T3) ----------
+    // Lit l'état de connexion (sans jamais recevoir le refresh token, qui reste
+    // serveur-only). Appelé après authentification et au retour du callback.
+    async loadGoogleStatus() {
+      if (!this.db || !this.user) return;
+      this.googleCal.loading = true;
+      try {
+        const res = await this.apiFetch('/api/google/status');
+        if (res.ok) {
+          const s = await res.json();
+          this.googleCal = { ...this.googleCal, connected: !!s.connected, calendarId: s.calendarId || 'primary', connectedAt: s.connectedAt || null, lastSyncAt: s.lastSyncAt || null };
+        }
+      } catch(e) {
+        console.error('loadGoogleStatus error', e);
+      } finally {
+        this.googleCal.loading = false;
+      }
+    },
+    // Démarre le flow : le serveur renvoie l'URL de consentement (avec le state),
+    // on redirige le navigateur. Le refresh token est capté côté serveur au callback.
+    async connectGoogleCalendar() {
+      this.googleCal.busy = true;
+      try {
+        const res = await this.apiFetch('/api/google/auth');
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.url) {
+          this.toast(data.error || 'Impossible de démarrer la connexion Google', 'error');
+          this.googleCal.busy = false;
+          return;
+        }
+        window.location.href = data.url; // redirection vers Google (pas de retour ici)
+      } catch(e) {
+        this.toast('Erreur réseau lors de la connexion Google', 'error');
+        this.googleCal.busy = false;
+      }
+    },
+    async disconnectGoogleCalendar() {
+      if (!confirm('Déconnecter Google Calendar ? Le refresh token sera révoqué et effacé côté serveur.')) return;
+      this.googleCal.busy = true;
+      try {
+        const res = await this.apiFetch('/api/google/disconnect', { method:'POST' });
+        if (res.ok) {
+          this.googleCal = { ...this.googleCal, connected:false, connectedAt:null, lastSyncAt:null };
+          this.toast('Google Calendar déconnecté');
+        } else {
+          const d = await res.json().catch(() => ({}));
+          this.toast(d.error || 'Erreur de déconnexion', 'error');
+        }
+      } catch(e) {
+        this.toast('Erreur réseau lors de la déconnexion', 'error');
+      } finally {
+        this.googleCal.busy = false;
+      }
+    },
+    // Toast au retour du callback (/?gcal=...), puis nettoie l'URL. Le rafraîchissement
+    // du statut connecté se fait via loadGoogleStatus une fois l'auth prête.
+    handleGcalReturn() {
+      const params = new URLSearchParams(location.search);
+      const g = params.get('gcal');
+      if (!g) return;
+      const map = {
+        connecte:     ['Google Calendar connecté ✓', 'success'],
+        refus:        ['Connexion Google annulée', 'error'],
+        sans_refresh: ['Google n\'a pas renvoyé de refresh token — déconnecte puis reconnecte', 'error'],
+        config:       ['Configuration OAuth Google incomplète (variables Vercel)', 'error'],
+        erreur:       ['Échec de la connexion Google — réessaie', 'error'],
+      };
+      const [msg, type] = map[g] || ['Retour Google Calendar', 'success'];
+      this.toast(msg, type);
+      params.delete('gcal');
+      const qs = params.toString();
+      history.replaceState({}, '', location.pathname + (qs ? '?' + qs : ''));
     },
     // Avec le thinking activé, content[] contient un ou plusieurs blocs
     // 'thinking' AVANT le bloc 'text' final (parfois plusieurs blocs 'text'
