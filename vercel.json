@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/google/:action",
+      "destination": "/api/google?action=:action"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
