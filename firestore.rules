@@ -10,6 +10,13 @@ service cloud.firestore {
       match /projets/{projetId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
+      // Événements créés par le Studio (tournages, relances, deadlines) —
+      // matérialisés depuis les projets et poussés vers Google Calendar. Le
+      // refreshToken Google ne vit PAS ici : il reste dans un doc serveur-only
+      // écrit par les functions via le compte de service (jamais côté client).
+      match /calendarEvents/{eventId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
       match /idees/{ideeId} {
         // Le propriétaire connecté peut lire, supprimer ET générer à la demande
         // ses propres études/idées depuis l'app ("Générer maintenant" /

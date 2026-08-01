@@ -693,6 +693,32 @@ tailwind.config = {
               <textarea x-model="currentProject.lieu" @blur="saveProjects()" rows="3" placeholder="Lieu de tournage..." class="w-full bg-bg border border-line rounded-lg p-3 text-sm"></textarea>
             </div>
             <div class="bg-surface border border-line rounded-xl p-5">
+              <div class="flex items-center justify-between mb-2">
+                <p class="font-display font-bold text-sm">🎥 Date de tournage</p>
+                <span class="text-[11px] font-mono text-muted">→ apparaît dans le calendrier</span>
+              </div>
+              <input type="date" x-model="currentProject.shootDate" @change="saveProjects()" class="text-sm px-3 py-2 rounded-lg border border-line bg-bg">
+              <p class="text-xs text-muted mt-2">Crée automatiquement un événement « Tournage » dans le calendrier, prêt à pousser vers Google Calendar.</p>
+            </div>
+            <div class="bg-surface border border-line rounded-xl p-5">
+              <div class="flex items-center justify-between mb-3">
+                <p class="font-display font-bold text-sm">✉️ Relances programmées</p>
+                <button @click="(currentProject.relances||(currentProject.relances=[])).push({ date:'', done:false, note:'' }); saveProjects()" class="text-xs bg-bg border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition">+ Relance</button>
+              </div>
+              <div x-show="!(currentProject.relances||[]).length" class="text-muted text-sm">Aucune relance programmée. Ajoute une date pour ne pas oublier de relancer le client.</div>
+              <div class="space-y-2">
+                <template x-for="(r,i) in (currentProject.relances||[])" :key="i">
+                  <div class="flex items-center gap-2">
+                    <input type="checkbox" x-model="r.done" @change="saveProjects()" class="accent-accent shrink-0" title="Relance effectuée">
+                    <input type="date" x-model="r.date" @change="saveProjects()" class="text-sm px-2 py-1.5 rounded-lg border border-line bg-bg shrink-0" :class="r.done ? 'opacity-50' : ''">
+                    <input x-model="r.note" @blur="saveProjects()" placeholder="Note (objet de la relance…)" class="flex-1 text-sm px-2 py-1.5 rounded-lg border border-line bg-bg" :class="r.done ? 'line-through text-muted' : ''">
+                    <button @click="currentProject.relances.splice(i,1); saveProjects()" class="text-muted hover:text-accent text-xs shrink-0">✕</button>
+                  </div>
+                </template>
+              </div>
+              <p x-show="(currentProject.relances||[]).length" class="text-xs text-muted mt-2">Chaque relance non cochée génère un événement « Relance » dans le calendrier ; cocher « effectuée » le retire.</p>
+            </div>
+            <div class="bg-surface border border-line rounded-xl p-5">
               <p class="font-display font-bold text-sm mb-3">Format de livraison</p>
               <div class="space-y-1.5">
                 <template x-for="f in ['Master 16:9 (YouTube / Vimeo)','Carré 1:1 (Instagram feed)','Vertical 9:16 (Reels / TikTok / Shorts)','Sous-titres inclus','Export audio séparé','Exports par séquence']" :key="f">
@@ -1169,22 +1195,26 @@ tailwind.config = {
       <template x-if="view==='calendrier'">
         <div class="max-w-4xl space-y-6" x-transition.opacity.duration.150ms>
           <div class="bg-surface border border-line rounded-xl p-5">
-            <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center justify-between mb-1">
               <button @click="calPrev()" class="px-3 py-1.5 rounded-lg border border-line text-sm hover:border-accent/50">←</button>
               <p class="font-display font-bold" x-text="calTitle()"></p>
               <button @click="calNext()" class="px-3 py-1.5 rounded-lg border border-line text-sm hover:border-accent/50">→</button>
+            </div>
+            <div class="flex items-center justify-between mb-4">
+              <p class="text-[11px] font-mono text-muted">Clique sur un jour pour ajouter un événement</p>
+              <button @click="openCalEventCreate(new Date().toISOString().slice(0,10))" class="text-xs bg-bg border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition">+ Événement</button>
             </div>
             <div class="grid grid-cols-7 gap-1 text-center text-xs font-mono text-muted mb-1">
               <template x-for="d in ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']" :key="d"><div x-text="d"></div></template>
             </div>
             <div class="grid grid-cols-7 gap-1">
               <template x-for="(day,i) in calDays()" :key="i">
-                <div class="min-h-[72px] rounded-lg border p-1 text-left" :class="day ? (day.isToday ? 'border-accent bg-accent/5' : 'border-line bg-bg') : 'border-transparent'">
+                <div @click="day && openCalEventCreate(day.dateStr)" class="min-h-[72px] rounded-lg border p-1 text-left transition" :class="day ? (day.isToday ? 'border-accent bg-accent/5 cursor-pointer hover:border-accent' : 'border-line bg-bg cursor-pointer hover:border-accent/50') : 'border-transparent'">
                   <template x-if="day">
                     <div>
                       <p class="text-xs font-mono" :class="day.isToday ? 'text-accent font-bold' : 'text-muted'" x-text="day.n"></p>
                       <template x-for="(ev,j) in day.events.slice(0,3)" :key="j">
-                        <div @click="ev.projectId && openProjectById(ev.projectId)" class="text-[10px] leading-tight truncate rounded px-1 py-0.5 mt-0.5" :class="ev.cls + (ev.projectId ? ' cursor-pointer' : '')" :title="ev.label" x-text="ev.label"></div>
+                        <div @click.stop="onCalEventClick(ev)" class="text-[10px] leading-tight truncate rounded px-1 py-0.5 mt-0.5 cursor-pointer" :class="ev.cls" :title="ev.label + (ev.syncStatus==='error' ? ' — erreur de synchro' : '')" x-text="ev.label"></div>
                       </template>
                       <p x-show="day.events.length>3" class="text-[10px] text-muted" x-text="'+' + (day.events.length-3)"></p>
                     </div>
@@ -1199,7 +1229,7 @@ tailwind.config = {
             <div x-show="!upcomingEvents().length" class="text-muted text-sm">Rien à l'horizon — profite pour prospecter ou tourner pour toi.</div>
             <div class="space-y-2">
               <template x-for="(ev,i) in upcomingEvents()" :key="i">
-                <div @click="ev.projectId && openProjectById(ev.projectId)" class="flex items-center justify-between p-3 bg-bg border border-line rounded-lg" :class="ev.projectId ? 'cursor-pointer hover:border-accent/50' : ''">
+                <div @click="onCalEventClick(ev)" class="flex items-center justify-between p-3 bg-bg border border-line rounded-lg cursor-pointer hover:border-accent/50">
                   <div class="flex items-center gap-3">
                     <span class="text-xs font-mono px-2 py-0.5 rounded" :class="ev.cls" x-text="ev.tag"></span>
                     <span class="text-sm" x-text="ev.label"></span>
@@ -1428,6 +1458,43 @@ tailwind.config = {
     <div class="flex gap-3">
       <button @click="deleteProjectConfirmOpen=false; projectPendingDelete=null" class="flex-1 text-sm border border-line rounded-lg px-4 py-2 hover:bg-bg transition">Annuler</button>
       <button @click="deleteProject()" class="flex-1 text-sm bg-red-500 text-white rounded-lg px-4 py-2 hover:bg-red-600 transition">Supprimer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Création / édition d'un événement Studio manuel (T2) -->
+<div x-show="calEventModalOpen" x-cloak class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @keydown.escape.window="calEventModalOpen=false">
+  <div class="modal-slide-enter bg-surface border border-line rounded-xl w-full max-w-md p-6" x-show="calEventModalOpen">
+    <h3 class="font-display font-bold text-lg mb-4" x-text="calEventForm.id ? 'Modifier l\'événement' : 'Nouvel événement'"></h3>
+    <div class="space-y-3">
+      <div>
+        <label class="text-muted font-mono text-xs uppercase block mb-1.5">Type</label>
+        <div class="grid grid-cols-3 gap-2">
+          <template x-for="t in ['tournage','deadline','relance']" :key="t">
+            <button type="button" @click="calEventForm.type=t"
+              :class="calEventForm.type===t ? calTypeStyle(t).cls + ' ring-2 ring-offset-1 ring-accent/40' : 'bg-bg border border-line text-muted hover:border-accent/50'"
+              class="text-xs font-medium px-2 py-2 rounded-lg transition capitalize"
+              x-text="calTypeStyle(t).icon + ' ' + calTypeStyle(t).tag"></button>
+          </template>
+        </div>
+      </div>
+      <div>
+        <label class="text-muted font-mono text-xs uppercase block mb-1.5">Titre</label>
+        <input x-model="calEventForm.title" @keydown.enter="saveCalEvent()" placeholder="Ex : Tournage – Boulangerie Martin" class="w-full text-sm px-3 py-2 rounded-lg border border-line bg-bg">
+      </div>
+      <div>
+        <label class="text-muted font-mono text-xs uppercase block mb-1.5">Date</label>
+        <input type="date" x-model="calEventForm.date" class="text-sm px-3 py-2 rounded-lg border border-line bg-bg">
+      </div>
+      <div>
+        <label class="text-muted font-mono text-xs uppercase block mb-1.5">Notes</label>
+        <textarea x-model="calEventForm.notes" rows="3" placeholder="Notes libres…" class="w-full text-sm px-3 py-2 rounded-lg border border-line bg-bg"></textarea>
+      </div>
+    </div>
+    <div class="flex items-center gap-3 mt-6">
+      <button x-show="calEventForm.id" @click="deleteCalEvent()" class="text-sm text-red-500 hover:text-red-600 mr-auto">Supprimer</button>
+      <button @click="calEventModalOpen=false" class="text-sm border border-line rounded-lg px-4 py-2 hover:bg-bg transition" :class="calEventForm.id ? '' : 'ml-auto'">Annuler</button>
+      <button @click="saveCalEvent()" class="text-sm bg-accent text-white rounded-lg px-4 py-2 hover:opacity-90 transition" x-text="calEventForm.id ? 'Enregistrer' : 'Créer'"></button>
     </div>
   </div>
 </div>
@@ -1989,6 +2056,14 @@ function app() {
     // calendrier
     calMonth: new Date().getMonth(),
     calYear: new Date().getFullYear(),
+    // Événements du Studio matérialisés (collection users/{uid}/calendarEvents).
+    // Source unique de la vue calendrier pour les types tournage/relance/deadline,
+    // et base de la future synchro Google (chaque doc porte googleEventId/syncStatus).
+    calEvents: [],
+    // Modal de création/édition d'un événement Studio « manuel » (auto:false),
+    // ouvert au clic sur un jour du calendrier ou sur un événement manuel existant.
+    calEventModalOpen: false,
+    calEventForm: { id:null, type:'tournage', title:'', date:'', notes:'' },
 
     // settings
     settings: { profileName:'Moustikprod', billingInfo:'', prenom:'Romain', nom:'ANDRE', nomCommercial:'Moustikprod', siret:'89033460000040', ville:'Montpellier', emailPro:'contact@moustikprod.fr', scenarioInstructions:'' },
@@ -2168,6 +2243,12 @@ function app() {
         this.loadAutorisations();
         this.loadContrats();
         this.loadCatalogue();
+        // Charge les événements calendrier déjà matérialisés, puis réconcilie une
+        // fois pour rattraper les projets existants (deadline/tournage/relances
+        // saisis avant l'introduction de la collection). La réconciliation
+        // n'écrit que les deltas, donc c'est un no-op aux chargements suivants.
+        await this.loadCalEvents();
+        this.reconcileAllCalendarEvents();
         this.handleOpenProjectDeepLink();
         this.syncStatus = 'ok';
         this.lastSyncAt = new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
@@ -2268,6 +2349,8 @@ function app() {
         type: data.typeVideo || 'Autre',
         budget: data.budgetStudio || '',
         deadline: data.deadlineStudio || '',
+        shootDate: data.shootDate || '',
+        relances: Array.isArray(data.relances) ? data.relances : [],
         status: this.normalizeStatus(data.statutStudio || 'brief'),
         statusHistory: Array.isArray(data.statusHistory) ? data.statusHistory : [],
         progress: data.progress || 0,
@@ -2350,6 +2433,8 @@ function app() {
           secteurClient: project.secteurClient || '',
           budgetStudio: project.budget,
           deadlineStudio: project.deadline,
+          shootDate: project.shootDate || null,
+          relances: project.relances || [],
           progress: project.progress,
           pitch: project.pitch || '',
           idees: project.idees || '',
@@ -2380,6 +2465,10 @@ function app() {
           dateCreation: project.dateCreation || new Date().toISOString(),
         };
         await this.db.collection('users').doc(this.user.uid).collection('projets').doc(project.id).set(docData, { merge:true });
+        // Matérialise/rafraîchit les événements calendrier dérivés du projet
+        // (tournage, deadline, relances). Non bloquant et silencieux : un échec
+        // ne doit pas remonter comme une erreur de sauvegarde du projet lui-même.
+        this.syncProjectCalendarEvents(project).catch(e => console.error('syncProjectCalendarEvents error', e));
         this.syncStatus = 'ok';
         this.lastSyncAt = new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
       } catch(e) {
@@ -2840,6 +2929,8 @@ Moustikprod`;
         secteurClient: this.newProject.secteurClient || '',
         budget: this.newProject.budget,
         deadline: this.newProject.deadline,
+        shootDate: '',
+        relances: [],
         status: 'devis-a-faire',
         statusHistory: [{ slug: 'devis-a-faire', at: new Date().toISOString() }],
         progress: 5,
@@ -4665,26 +4756,227 @@ FORMAT DE SORTIE :
       this.saveSettings();
     },
 
+    // ---------- CALENDRIER : collection calendarEvents ----------
+    calEventsCol() {
+      return this.db.collection('users').doc(this.user.uid).collection('calendarEvents');
+    },
+    async loadCalEvents() {
+      if (!this.db || !this.user) return;
+      try {
+        const snap = await this.calEventsCol().get();
+        this.calEvents = snap.docs.map(d => d.data());
+      } catch(e) {
+        console.error('Firestore loadCalEvents error', e);
+      }
+    },
+    // Recalcule les événements « auto » (dérivés d'un projet) et les aligne sur
+    // la collection : upsert des désirés qui ont changé, suppression des périmés
+    // (tournage annulé, deadline livrée, relance faite/supprimée). Idempotent grâce
+    // à des IDs déterministes ; n'écrit que les deltas pour rester peu coûteux.
+    // Les événements créés à la main (auto !== true) ne sont jamais touchés ici.
+    async syncProjectCalendarEvents(project) {
+      if (!this.db || !this.user || !project) return;
+      // Garde : ne jamais (re)matérialiser un projet qui n'est plus dans la liste
+      // (ex. suppression en cours) — sinon on ressusciterait ses événements.
+      if (!this.projects.some(p => p.id === project.id)) return;
+      const done = ['livre','archive'].includes(project.status);
+      const desired = [];
+      if (project.shootDate) {
+        desired.push({ id:`evt_shoot_${project.id}`, type:'tournage', date:project.shootDate, title:`Tournage – ${project.title||'Projet'}`, notes:project.lieu||'' });
+      }
+      if (project.deadline && !done) {
+        desired.push({ id:`evt_deadline_${project.id}`, type:'deadline', date:project.deadline, title:`Deadline – ${project.title||'Projet'}`, notes:'' });
+      }
+      (project.relances || []).forEach((r, i) => {
+        if (r && r.date && !r.done) {
+          desired.push({ id:`evt_relance_${project.id}_${i}`, type:'relance', date:r.date, title:`Relance – ${project.title||'Projet'}`, notes:r.note||'' });
+        }
+      });
+
+      const now = new Date().toISOString();
+      const desiredIds = new Set(desired.map(d => d.id));
+      const ops = [];
+
+      for (const d of desired) {
+        const existing = this.calEvents.find(e => e.id === d.id);
+        const changed = !existing
+          || existing.date !== d.date
+          || existing.title !== d.title
+          || (existing.notes || '') !== (d.notes || '');
+        if (existing && !changed) continue; // rien à écrire
+        const doc = {
+          id: d.id,
+          type: d.type,
+          projectId: project.id,
+          title: d.title,
+          date: d.date,
+          endDate: existing?.endDate || null,
+          notes: d.notes || '',
+          auto: true,
+          // Une modif du contenu invalide la synchro Google (le doc devra être
+          // re-poussé) ; on préserve googleEventId pour permettre un update.
+          googleEventId: existing?.googleEventId || null,
+          syncStatus: changed ? 'local' : (existing?.syncStatus || 'local'),
+          createdAt: existing?.createdAt || now,
+          updatedAt: now,
+        };
+        ops.push(this.calEventsCol().doc(d.id).set(doc, { merge:true }).then(() => doc));
+      }
+
+      // Suppression des événements auto de ce projet qui ne sont plus désirés.
+      const stale = this.calEvents.filter(e => e.auto && e.projectId === project.id && !desiredIds.has(e.id));
+      for (const e of stale) {
+        // TODO T6 : si e.googleEventId, supprimer aussi côté Google avant l'effacement local.
+        ops.push(this.calEventsCol().doc(e.id).delete().then(() => ({ _deleted: e.id })));
+      }
+
+      const results = await Promise.all(ops);
+      // Reflète les changements en mémoire pour rafraîchir la vue sans reload.
+      for (const r of results) {
+        if (!r) continue;
+        if (r._deleted) { this.calEvents = this.calEvents.filter(e => e.id !== r._deleted); continue; }
+        const idx = this.calEvents.findIndex(e => e.id === r.id);
+        if (idx >= 0) this.calEvents[idx] = r; else this.calEvents.push(r);
+      }
+    },
+    async reconcileAllCalendarEvents() {
+      for (const p of this.projects) {
+        try { await this.syncProjectCalendarEvents(p); }
+        catch(e) { console.error('reconcile calEvents error', e); }
+      }
+    },
+    // Supprime les événements calendrier (auto ou manuels) rattachés à un projet
+    // effacé, pour ne pas laisser d'orphelins dans la collection.
+    async purgeProjectCalendarEvents(projectId) {
+      if (!this.db || !this.user) return;
+      const orphans = this.calEvents.filter(e => e.projectId === projectId);
+      for (const e of orphans) {
+        try { await this.calEventsCol().doc(e.id).delete(); }
+        catch(err) { console.error('purge calEvent error', err); }
+      }
+      this.calEvents = this.calEvents.filter(e => e.projectId !== projectId);
+    },
+
+    // ---------- CALENDRIER : événements manuels (T2) ----------
+    // Un clic sur un jour ouvre le modal pré-rempli à cette date pour créer un
+    // événement Studio autonome (auto:false, projectId:null). Ces événements ne
+    // sont jamais touchés par syncProjectCalendarEvents (qui ne gère que auto:true).
+    openCalEventCreate(dateStr) {
+      this.calEventForm = { id:null, type:'tournage', title:'', date: dateStr || new Date().toISOString().slice(0,10), notes:'' };
+      this.calEventModalOpen = true;
+    },
+    openCalEventEdit(id) {
+      const e = this.calEvents.find(ev => ev.id === id);
+      if (!e) return;
+      this.calEventForm = { id: e.id, type: e.type || 'tournage', title: e.title || '', date: (e.date||'').slice(0,10), notes: e.notes || '' };
+      this.calEventModalOpen = true;
+    },
+    // Routage du clic sur une pastille du calendrier : un événement manuel s'édite,
+    // un événement auto (dérivé d'un projet) ou de signature ouvre le projet lié.
+    onCalEventClick(ev) {
+      if (ev.source === 'studio' && !ev.auto) this.openCalEventEdit(ev.id);
+      else if (ev.projectId) this.openProjectById(ev.projectId);
+    },
+    async saveCalEvent() {
+      if (!this.db || !this.user) { this.toast('Connexion requise', 'error'); return; }
+      const f = this.calEventForm;
+      if (!f.title.trim() || !f.date) { this.toast('Titre et date obligatoires', 'error'); return; }
+      const now = new Date().toISOString();
+      const id = f.id || ('evt_manual_' + Date.now());
+      const existing = this.calEvents.find(e => e.id === id);
+      // Même logique idempotente que les événements auto : une modif du contenu
+      // repasse syncStatus à 'local' pour forcer un re-push Google (T4).
+      const changed = !existing
+        || existing.date !== f.date
+        || existing.title !== f.title.trim()
+        || existing.type !== f.type
+        || (existing.notes || '') !== (f.notes || '');
+      const doc = {
+        id,
+        type: f.type,
+        projectId: existing?.projectId ?? null,
+        title: f.title.trim(),
+        date: f.date,
+        endDate: existing?.endDate || null,
+        notes: f.notes || '',
+        auto: false,
+        googleEventId: existing?.googleEventId || null,
+        syncStatus: changed ? 'local' : (existing?.syncStatus || 'local'),
+        createdAt: existing?.createdAt || now,
+        updatedAt: now,
+      };
+      try {
+        await this.calEventsCol().doc(id).set(doc, { merge:true });
+        const idx = this.calEvents.findIndex(e => e.id === id);
+        if (idx >= 0) this.calEvents[idx] = doc; else this.calEvents.push(doc);
+        this.calEventModalOpen = false;
+        this.toast(existing ? 'Événement mis à jour' : 'Événement créé');
+      } catch(e) {
+        console.error('saveCalEvent error', e);
+        this.toast('Erreur d\'enregistrement', 'error');
+      }
+    },
+    async deleteCalEvent() {
+      const id = this.calEventForm.id;
+      if (!id) { this.calEventModalOpen = false; return; }
+      if (!confirm('Supprimer cet événement ?')) return;
+      try {
+        // TODO T6 : si le doc a un googleEventId, supprimer aussi côté Google
+        // (DELETE /api/calendar/event/:id) avant l'effacement local.
+        await this.calEventsCol().doc(id).delete();
+        this.calEvents = this.calEvents.filter(e => e.id !== id);
+        this.calEventModalOpen = false;
+        this.toast('Événement supprimé');
+      } catch(e) {
+        console.error('deleteCalEvent error', e);
+        this.toast('Erreur de suppression', 'error');
+      }
+    },
+
     // ---------- CALENDRIER ----------
     calTitle() {
       return new Date(this.calYear, this.calMonth, 1).toLocaleDateString('fr-FR', { month:'long', year:'numeric' }).replace(/^./, c => c.toUpperCase());
     },
     calPrev() { this.calMonth--; if (this.calMonth < 0) { this.calMonth = 11; this.calYear--; } },
     calNext() { this.calMonth++; if (this.calMonth > 11) { this.calMonth = 0; this.calYear++; } },
+    // Style visuel par type d'événement Studio. Un syncStatus 'error' force un
+    // rendu d'alerte (encadré rouge) quel que soit le type — cf. section 5 du CDC.
+    calTypeStyle(type) {
+      const map = {
+        tournage: { tag:'Tournage', icon:'🎥', cls:'bg-emerald-100 text-emerald-700' },
+        deadline: { tag:'Deadline', icon:'🎬', cls:'bg-accent/15 text-accent' },
+        relance:  { tag:'Relance',  icon:'✉️', cls:'bg-violet-100 text-violet-700' },
+      };
+      return map[type] || { tag:'Événement', icon:'📌', cls:'bg-slate-100 text-slate-600' };
+    },
     calendarEvents() {
       const evs = [];
-      for (const p of this.projects) {
-        if (p.deadline && !['livre','archive'].includes(p.status)) {
-          evs.push({ date: p.deadline, label: '🎬 ' + p.title, tag:'Deadline', cls:'bg-accent/15 text-accent', projectId: p.id, done: ['livre','archive'].includes(p.status) });
-        }
-        if (p.status === 'en-production' && p.deadline) {
-          evs.push({ date: p.deadline, label: '📷 En production — ' + p.title, tag:'Production', cls:'bg-amber-100 text-amber-700', projectId: p.id });
-        }
+      // Source principale : la collection matérialisée (tournage/relance/deadline
+      // + événements créés à la main). Chaque doc porte son syncStatus.
+      for (const e of this.calEvents) {
+        const st = this.calTypeStyle(e.type);
+        const cls = e.syncStatus === 'error'
+          ? 'bg-red-100 text-red-700 ring-1 ring-red-400'
+          : st.cls;
+        evs.push({
+          id: e.id,
+          date: (e.date || '').slice(0, 10),
+          label: `${st.icon} ${e.title}`,
+          tag: st.tag,
+          cls,
+          projectId: e.projectId || null,
+          source: 'studio',
+          auto: !!e.auto,
+          syncStatus: e.syncStatus || 'local',
+          done: false,
+        });
       }
+      // Overlay dérivé, lecture seule et non matérialisé : expiration des demandes
+      // de signature (hors périmètre synchro Google, purement informatif).
       for (const a of this.autorisations) {
         if (a.statut === 'envoyé' && a.signatureEnvoyeLe) {
           const exp = new Date(new Date(a.signatureEnvoyeLe).getTime() + 30*24*60*60*1000).toISOString().slice(0,10);
-          evs.push({ date: exp, label: '✍️ Expiration signature — ' + (a.prenom+' '+a.nom).trim(), tag:'Signature', cls:'bg-red-100 text-red-600', projectId: a.projetId || null });
+          evs.push({ date: exp, label: '✍️ Expiration signature — ' + (a.prenom+' '+a.nom).trim(), tag:'Signature', cls:'bg-red-100 text-red-600', projectId: a.projetId || null, source:'derived', auto:false, done:false });
         }
       }
       return evs;
@@ -4722,6 +5014,7 @@ FORMAT DE SORTIE :
         } catch(e) { /* continue même si Firestore échoue */ }
       }
       this.projects = this.projects.filter(pr => pr.id !== p.id);
+      this.purgeProjectCalendarEvents(p.id);
       this.saveProjects();
       this.deleteProjectConfirmOpen = false;
       this.projectPendingDelete = null;
