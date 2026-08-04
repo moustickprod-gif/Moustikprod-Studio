@@ -1200,9 +1200,14 @@ tailwind.config = {
               <p class="font-display font-bold" x-text="calTitle()"></p>
               <button @click="calNext()" class="px-3 py-1.5 rounded-lg border border-line text-sm hover:border-accent/50">→</button>
             </div>
-            <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center justify-between mb-4 gap-2">
               <p class="text-[11px] font-mono text-muted">Clique sur un jour pour ajouter un événement</p>
-              <button @click="openCalEventCreate(new Date().toISOString().slice(0,10))" class="text-xs bg-bg border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition">+ Événement</button>
+              <div class="flex items-center gap-2 shrink-0">
+                <button x-show="googleCal.connected" @click="syncCalendar()" :disabled="googleCal.syncing" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg flex items-center gap-2 disabled:opacity-50" title="Pousser tournages/relances/deadlines vers Google et importer tes dispos">
+                  <span x-show="googleCal.syncing" class="spinner"></span> Synchroniser
+                </button>
+                <button @click="openCalEventCreate(new Date().toISOString().slice(0,10))" class="text-xs bg-bg border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition">+ Événement</button>
+              </div>
             </div>
             <div class="grid grid-cols-7 gap-1 text-center text-xs font-mono text-muted mb-1">
               <template x-for="d in ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']" :key="d"><div x-text="d"></div></template>
@@ -1214,12 +1219,21 @@ tailwind.config = {
                     <div>
                       <p class="text-xs font-mono" :class="day.isToday ? 'text-accent font-bold' : 'text-muted'" x-text="day.n"></p>
                       <template x-for="(ev,j) in day.events.slice(0,3)" :key="j">
-                        <div @click.stop="onCalEventClick(ev)" class="text-[10px] leading-tight truncate rounded px-1 py-0.5 mt-0.5 cursor-pointer" :class="ev.cls" :title="ev.label + (ev.syncStatus==='error' ? ' — erreur de synchro' : '')" x-text="ev.label"></div>
+                        <div @click.stop="onCalEventClick(ev)" class="text-[10px] leading-tight truncate rounded px-1 py-0.5 mt-0.5" :class="[ev.cls, ev.readonly ? 'cursor-default' : 'cursor-pointer']" :style="ev.style || ''" :title="ev.label + (ev.calendarSummary ? ' — '+ev.calendarSummary : '') + (ev.syncStatus==='error' ? ' — erreur de synchro' : '')" x-text="ev.label"></div>
                       </template>
                       <p x-show="day.events.length>3" class="text-[10px] text-muted" x-text="'+' + (day.events.length-3)"></p>
                     </div>
                   </template>
                 </div>
+              </template>
+            </div>
+            <div x-show="googleCalendarsLegend.length" class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-4 pt-3 border-t border-line">
+              <span class="text-[11px] font-mono text-muted">Agendas Google (lecture seule) :</span>
+              <template x-for="c in googleCalendarsLegend" :key="c.id">
+                <span class="inline-flex items-center gap-1.5 text-[11px] text-ink">
+                  <span class="w-2.5 h-2.5 rounded-full shrink-0" :style="'background-color:' + (c.backgroundColor || '#e2e8f0')"></span>
+                  <span x-text="c.summary"></span>
+                </span>
               </template>
             </div>
           </div>
@@ -2101,7 +2115,13 @@ function app() {
 
     // Google Calendar (T3) — état de connexion lu depuis /api/google/status.
     // Ne contient JAMAIS le refresh token (serveur-only).
-    googleCal: { connected:false, calendarId:'primary', connectedAt:null, lastSyncAt:null, loading:false, busy:false },
+    googleCal: { connected:false, calendarId:'primary', connectedAt:null, lastSyncAt:null, loading:false, busy:false, syncing:false },
+    // Événements Google (TOUS les agendas) remontés en LECTURE SEULE à chaque
+    // sync (T4/T5). Éphémères : jamais stockés en Firestore, re-lus à chaque
+    // synchro. Chaque event porte la couleur de son agenda. googleCalendarsLegend
+    // = liste des agendas lus (pour la légende couleur sous le calendrier).
+    googleReadEvents: [],
+    googleCalendarsLegend: [],
 
     init() {
       this.loadSettings();
@@ -2645,6 +2665,37 @@ function app() {
       params.delete('gcal');
       const qs = params.toString();
       history.replaceState({}, '', location.pathname + (qs ? '?' + qs : ''));
+    },
+    // Synchro manuelle Studio ↔ Google (T4). Pousse les calendarEvents non
+    // synchro vers l'agenda dédié + relit les dispos du primary sur 3 mois.
+    async syncCalendar() {
+      if (!this.googleCal.connected) { this.toast('Connecte d\'abord Google Calendar (Réglages)', 'error'); return; }
+      if (this.googleCal.syncing) return;
+      this.googleCal.syncing = true;
+      try {
+        const res = await this.apiFetch('/api/calendar/sync', { method:'POST' });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          // Token révoqué/expiré → l'UI repasse en déconnecté pour inviter à reconnecter.
+          if (d.error === 'reauth') { this.googleCal.connected = false; }
+          this.toast(d.message || 'Erreur de synchronisation', 'error');
+          return;
+        }
+        // Recharge les events locaux (googleEventId/syncStatus mis à jour côté serveur).
+        await this.loadCalEvents();
+        this.googleReadEvents = Array.isArray(d.googleEvents) ? d.googleEvents : [];
+        this.googleCalendarsLegend = Array.isArray(d.calendars) ? d.calendars : [];
+        this.googleCal.lastSyncAt = d.lastSyncAt || this.googleCal.lastSyncAt;
+        const parts = [`${(d.pushed||0) + (d.updated||0)} événement(s) synchronisé(s)`];
+        if (d.failed) parts.push(`${d.failed} en erreur`);
+        parts.push(`${d.imported||0} dispo(s) importée(s)`);
+        if (d.importError) parts.push('(lecture agenda perso indisponible)');
+        this.toast(parts.join(', '), d.failed ? 'error' : 'success');
+      } catch(e) {
+        this.toast('Erreur réseau lors de la synchro', 'error');
+      } finally {
+        this.googleCal.syncing = false;
+      }
     },
     // Avec le thinking activé, content[] contient un ou plusieurs blocs
     // 'thinking' AVANT le bloc 'text' final (parfois plusieurs blocs 'text'
@@ -5084,6 +5135,24 @@ FORMAT DE SORTIE :
           evs.push({ date: exp, label: '✍️ Expiration signature — ' + (a.prenom+' '+a.nom).trim(), tag:'Signature', cls:'bg-red-100 text-red-600', projectId: a.projetId || null, source:'derived', auto:false, done:false });
         }
       }
+      // Dispos Google (TOUS les agendas, LECTURE SEULE) : non cliquables, jamais
+      // modifiées par le Studio. Couleur reprise de chaque agenda Google pour
+      // distinguer Keolis / perso / etc. d'un coup d'œil.
+      for (const g of this.googleReadEvents) {
+        const date = (g.start || '').slice(0, 10);
+        if (!date) continue;
+        const bg = g.backgroundColor || '#e2e8f0';
+        const fg = g.foregroundColor || '#1e293b';
+        evs.push({
+          date,
+          label: (g.title || '(sans titre)'),
+          tag: 'Google',
+          cls: '',
+          style: `background-color:${bg};color:${fg};opacity:.9`,
+          calendarSummary: g.calendarSummary || '',
+          projectId: null, source:'google', auto:false, readonly:true, done:false,
+        });
+      }
       return evs;
     },
     calDays() {
@@ -5102,7 +5171,7 @@ FORMAT DE SORTIE :
     upcomingEvents() {
       const todayStr = new Date().toISOString().slice(0,10);
       return this.calendarEvents()
-        .filter(e => !e.done)
+        .filter(e => !e.done && e.source !== 'google')
         .map(e => ({ ...e, overdue: e.date < todayStr, dateLabel: new Date(e.date + 'T00:00:00').toLocaleDateString('fr-FR', { day:'numeric', month:'short' }) + (e.date < todayStr ? ' — en retard' : '') }))
         .filter(e => e.overdue || (new Date(e.date) - new Date()) < 60*24*60*60*1000)
         .sort((a,b) => a.date.localeCompare(b.date))

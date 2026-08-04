@@ -9,6 +9,10 @@
       "destination": "/api/sign"
     },
     {
+      "source": "/api/calendar/:action",
+      "destination": "/api/calendar?action=:action"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
