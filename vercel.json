@@ -41,9 +41,6 @@
     "api/sign.js": {
       "memory": 256
     },
-    "api/submit-signature.js": {
-      "memory": 256
-    },
     "api/send-email.js": {
       "memory": 256
     },
