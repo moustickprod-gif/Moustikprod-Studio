@@ -163,6 +163,23 @@ export async function patchEvent(accessToken, calendarId, googleEventId, ev) {
   return data.id || googleEventId;
 }
 
+// Supprime un événement dans l'agenda `calendarId`. L'appelant garantit que
+// calendarId est l'agenda dédié (jamais primary). 404/410 = l'événement n'existe
+// déjà plus → succès (objectif atteint), pas une erreur.
+export async function deleteEvent(accessToken, calendarId, googleEventId) {
+  const res = await calFetch(
+    accessToken,
+    `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(googleEventId)}`,
+    { method: 'DELETE' }
+  );
+  if (res.ok || res.status === 404 || res.status === 410) return { ok: true };
+  const detail = await res.json().catch(() => ({}));
+  const e = new Error('EVENT_DELETE_FAILED');
+  e.status = res.status;
+  e.detail = detail;
+  throw e;
+}
+
 // Liste TOUS les agendas de l'utilisateur (lecture seule) avec leur couleur.
 // backgroundColor/foregroundColor permettent de distinguer visuellement
 // Keolis / perso / Moustikprod dans la vue Studio.

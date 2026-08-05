@@ -1,15 +1,54 @@
 import { requireUser } from './_verifyAuth.js';
 import { readGoogleAuth, writeGoogleAuth } from './_lib/google-store.js';
 import { getAccessToken, getFirestoreProjectId, fromFirestoreFields, toFirestoreFields } from './_lib/firestore-admin.js';
-import { getUserAccessToken, ensureDedicatedCalendar, insertEvent, patchEvent, listCalendars, listCalendarEventsGoogle } from './_lib/gcal.js';
+import { getUserAccessToken, ensureDedicatedCalendar, insertEvent, patchEvent, deleteEvent, listCalendars, listCalendarEventsGoogle } from './_lib/gcal.js';
 
-// Synchro Studio ↔ Google Calendar (T4). Fonction STATIQUE + rewrite
+// Synchro Studio ↔ Google Calendar (T4/T6). Fonction STATIQUE + rewrite
 // /api/calendar/:action → /api/calendar?action=:action (comme api/google.js),
 // pour rester sous la limite de 12 fonctions du plan Hobby.
 export default async function handler(req, res) {
   switch (req.query.action) {
-    case 'sync': return handleSync(req, res);
-    default:     return res.status(404).json({ error: 'Action calendrier inconnue' });
+    case 'sync':   return handleSync(req, res);
+    case 'delete': return handleDelete(req, res);
+    default:       return res.status(404).json({ error: 'Action calendrier inconnue' });
+  }
+}
+
+// POST /api/calendar/delete — supprime un événement dans Google (T6).
+// GARDE-FOU 1 : la suppression est STRICTEMENT limitée à l'agenda dédié
+// (dedicatedCalendarId du doc googleAuth). Le client n'envoie qu'un googleEventId,
+// jamais de calendarId → impossible de viser primary ou un autre agenda. Un
+// event de lecture seule (Keolis/perso) vit dans un autre agenda : un DELETE sur
+// l'agenda dédié avec son id renverrait 404 (= succès) sans rien supprimer.
+async function handleDelete(req, res) {
+  if (req.method !== 'POST') return res.status(405).end();
+
+  const user = await requireUser(req, res);
+  if (!user) return;
+  const uid = user.localId;
+
+  const { googleEventId } = req.body || {};
+  if (!googleEventId) return res.status(400).json({ error: 'missing_id', message: 'googleEventId requis.' });
+
+  try {
+    const auth = await readGoogleAuth(uid);
+    if (!auth || !auth.refreshToken) {
+      return res.status(400).json({ error: 'not_connected', message: 'Google Calendar non connecté.' });
+    }
+    // Pas d'agenda dédié → rien n'a pu être poussé côté Google : objectif atteint.
+    if (!auth.dedicatedCalendarId) return res.status(200).json({ ok: true, alreadyGone: true });
+
+    let accessToken;
+    try {
+      accessToken = await getUserAccessToken(auth.refreshToken);
+    } catch (e) {
+      return res.status(401).json({ error: 'reauth', message: 'Reconnecte Google Calendar (accès expiré ou révoqué).' });
+    }
+
+    await deleteEvent(accessToken, auth.dedicatedCalendarId, googleEventId); // 404/410 gérés comme succès
+    return res.status(200).json({ ok: true });
+  } catch (e) {
+    return res.status(502).json({ error: 'delete_failed', message: (e && e.message) || 'Suppression Google échouée.' });
   }
 }
 

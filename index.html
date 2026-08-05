@@ -5018,11 +5018,22 @@ FORMAT DE SORTIE :
         ops.push(this.calEventsCol().doc(d.id).set(doc, { merge:true }).then(() => doc));
       }
 
-      // Suppression des événements auto de ce projet qui ne sont plus désirés.
+      // Suppression des événements auto de ce projet qui ne sont plus désirés
+      // (T6) : Google d'abord (agenda dédié), puis Firestore. Si la suppression
+      // Google échoue (hors 404), on garde le doc en erreur au lieu d'orphelin.
       const stale = this.calEvents.filter(e => e.auto && e.projectId === project.id && !desiredIds.has(e.id));
       for (const e of stale) {
-        // TODO T6 : si e.googleEventId, supprimer aussi côté Google avant l'effacement local.
-        ops.push(this.calEventsCol().doc(e.id).delete().then(() => ({ _deleted: e.id })));
+        ops.push((async () => {
+          if (e.googleEventId) {
+            const r = await this.deleteGoogleEvent(e.googleEventId);
+            if (!r.ok) {
+              await this.calEventsCol().doc(e.id).set({ syncStatus:'error', syncError:r.error, updatedAt: now }, { merge:true }).catch(() => {});
+              return { _error: e.id, error: r.error };
+            }
+          }
+          await this.calEventsCol().doc(e.id).delete();
+          return { _deleted: e.id };
+        })());
       }
 
       const results = await Promise.all(ops);
@@ -5030,6 +5041,7 @@ FORMAT DE SORTIE :
       for (const r of results) {
         if (!r) continue;
         if (r._deleted) { this.calEvents = this.calEvents.filter(e => e.id !== r._deleted); continue; }
+        if (r._error) { const j = this.calEvents.findIndex(e => e.id === r._error); if (j >= 0) { this.calEvents[j].syncStatus = 'error'; this.calEvents[j].syncError = r.error; } continue; }
         const idx = this.calEvents.findIndex(e => e.id === r.id);
         if (idx >= 0) this.calEvents[idx] = r; else this.calEvents.push(r);
       }
@@ -5045,11 +5057,17 @@ FORMAT DE SORTIE :
     async purgeProjectCalendarEvents(projectId) {
       if (!this.db || !this.user) return;
       const orphans = this.calEvents.filter(e => e.projectId === projectId);
+      let googleFails = 0;
       for (const e of orphans) {
+        // T6 : suppression best-effort côté Google (le projet est de toute façon
+        // supprimé). On efface le doc local dans tous les cas, mais on compte les
+        // échecs Google pour prévenir l'utilisateur d'un éventuel orphelin.
+        if (e.googleEventId) { const r = await this.deleteGoogleEvent(e.googleEventId); if (!r.ok) googleFails++; }
         try { await this.calEventsCol().doc(e.id).delete(); }
         catch(err) { console.error('purge calEvent error', err); }
       }
       this.calEvents = this.calEvents.filter(e => e.projectId !== projectId);
+      if (googleFails) this.toast(`${googleFails} événement(s) Google non supprimé(s) (agenda Moustikprod)`, 'error');
     },
 
     // ---------- CALENDRIER : événements manuels (T2) ----------
@@ -5147,21 +5165,78 @@ FORMAT DE SORTIE :
         this.toast('Erreur d\'enregistrement', 'error');
       }
     },
+    // Supprime l'événement côté Google (agenda dédié uniquement, côté serveur).
+    // Garde-fou 2 : sans googleEventId (ou Google non connecté) → rien à faire,
+    // suppression purement locale. Renvoie { ok, error }.
+    async deleteGoogleEvent(googleEventId) {
+      if (!googleEventId || !this.googleCal.connected) return { ok: true };
+      try {
+        const res = await this.apiFetch('/api/calendar/delete', { method:'POST', body: JSON.stringify({ googleEventId }) });
+        const d = await res.json().catch(() => ({}));
+        return res.ok ? { ok: true } : { ok: false, error: d.message || 'Erreur suppression Google' };
+      } catch(e) {
+        return { ok: false, error: 'Erreur réseau' };
+      }
+    },
+    // Suppression synchronisée d'un doc calEvent : Google D'ABORD (garde-fou 4),
+    // puis Firestore. Si Google échoue (hors 404, géré comme succès côté serveur),
+    // on N'EFFACE PAS le local — on le garde en syncStatus:'error' pour éviter un
+    // orphelin inversé. Renvoie true si l'événement a bien été supprimé.
+    async removeCalEvent(ev) {
+      const r = await this.deleteGoogleEvent(ev.googleEventId);
+      if (!r.ok) {
+        try {
+          await this.calEventsCol().doc(ev.id).set({ syncStatus:'error', syncError:r.error, updatedAt:new Date().toISOString() }, { merge:true });
+          const i = this.calEvents.findIndex(e => e.id === ev.id);
+          if (i >= 0) { this.calEvents[i].syncStatus = 'error'; this.calEvents[i].syncError = r.error; }
+        } catch(_) {}
+        this.toast('Suppression Google échouée — événement conservé : ' + r.error, 'error');
+        return false;
+      }
+      try {
+        await this.calEventsCol().doc(ev.id).delete();
+        this.calEvents = this.calEvents.filter(e => e.id !== ev.id);
+        return true;
+      } catch(e) {
+        console.error('removeCalEvent local error', e);
+        this.toast('Erreur de suppression locale', 'error');
+        return false;
+      }
+    },
     async deleteCalEvent() {
       const id = this.calEventForm.id;
       if (!id) { this.calEventModalOpen = false; return; }
-      if (!confirm('Supprimer cet événement ?')) return;
-      try {
-        // TODO T6 : si le doc a un googleEventId, supprimer aussi côté Google
-        // (DELETE /api/calendar/event/:id) avant l'effacement local.
-        await this.calEventsCol().doc(id).delete();
-        this.calEvents = this.calEvents.filter(e => e.id !== id);
+      const ev = this.calEvents.find(e => e.id === id);
+      if (!ev) { this.calEventModalOpen = false; return; }
+      // Garde-fou 1 : jamais un événement en lecture seule (dispos Google).
+      if (ev.source === 'google' || ev.readonly) { this.toast('Événement en lecture seule', 'error'); return; }
+
+      // Cas AUTO : supprimer = retirer le champ correspondant de la fiche projet,
+      // sinon l'événement serait recréé au prochain enregistrement. On supprime
+      // d'abord l'événement (Google + Firestore), puis on aligne la fiche projet.
+      if (ev.auto) {
+        const p = this.projects.find(pr => pr.id === ev.projectId);
+        const quoi = ev.type === 'tournage' ? 'la date de tournage' : ev.type === 'deadline' ? 'la deadline' : 'cette relance';
+        if (!confirm(`Cela retirera ${quoi} de la fiche projet et supprimera l'événement dans Google Calendar. Continuer ?`)) return;
+        const ok = await this.removeCalEvent(ev);
+        if (!ok) return; // échec Google → conservé en erreur, message déjà affiché
+        if (p) {
+          if (ev.type === 'tournage') { p.shootDate = ''; p.shootStartTime = ''; p.shootEndTime = ''; }
+          else if (ev.type === 'deadline') { p.deadline = ''; p.deadlineStartTime = ''; p.deadlineEndTime = ''; }
+          else if (ev.type === 'relance') { const i = Number(ev.id.split('_').pop()); if (p.relances && p.relances[i]) p.relances.splice(i, 1); }
+          await this.saveProjectDoc(p);
+        }
         this.calEventModalOpen = false;
-        this.toast('Événement supprimé');
-      } catch(e) {
-        console.error('deleteCalEvent error', e);
-        this.toast('Erreur de suppression', 'error');
+        this.toast('Événement supprimé (fiche projet mise à jour)');
+        return;
       }
+
+      // Cas MANUEL : suppression synchronisée directe.
+      if (!confirm('Supprimer cet événement ?')) return;
+      const ok = await this.removeCalEvent(ev);
+      if (!ok) return;
+      this.calEventModalOpen = false;
+      this.toast('Événement supprimé');
     },
 
     // ---------- CALENDRIER ----------
