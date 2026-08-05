@@ -697,8 +697,21 @@ tailwind.config = {
                 <p class="font-display font-bold text-sm">🎥 Date de tournage</p>
                 <span class="text-[11px] font-mono text-muted">→ apparaît dans le calendrier</span>
               </div>
-              <input type="date" x-model="currentProject.shootDate" @change="saveProjects()" class="text-sm px-3 py-2 rounded-lg border border-line bg-bg">
-              <p class="text-xs text-muted mt-2">Crée automatiquement un événement « Tournage » dans le calendrier, prêt à pousser vers Google Calendar.</p>
+              <div class="flex items-end gap-2 flex-wrap">
+                <div>
+                  <label class="text-[11px] font-mono text-muted block mb-1">Date</label>
+                  <input type="date" x-model="currentProject.shootDate" @change="saveProjects()" class="text-sm px-3 py-2 rounded-lg border border-line bg-bg">
+                </div>
+                <div>
+                  <label class="text-[11px] font-mono text-muted block mb-1">Début</label>
+                  <input type="time" x-model="currentProject.shootStartTime" @change="saveProjects()" class="text-sm px-2 py-2 rounded-lg border border-line bg-bg">
+                </div>
+                <div>
+                  <label class="text-[11px] font-mono text-muted block mb-1">Fin</label>
+                  <input type="time" x-model="currentProject.shootEndTime" @change="saveProjects()" class="text-sm px-2 py-2 rounded-lg border border-line bg-bg">
+                </div>
+              </div>
+              <p class="text-xs text-muted mt-2">Crée automatiquement un événement « Tournage » dans le calendrier, prêt à pousser vers Google Calendar. Heures optionnelles (sinon journée entière).</p>
             </div>
             <div class="bg-surface border border-line rounded-xl p-5">
               <div class="flex items-center justify-between mb-3">
@@ -711,7 +724,9 @@ tailwind.config = {
                   <div class="flex items-center gap-2">
                     <input type="checkbox" x-model="r.done" @change="saveProjects()" class="accent-accent shrink-0" title="Relance effectuée">
                     <input type="date" x-model="r.date" @change="saveProjects()" class="text-sm px-2 py-1.5 rounded-lg border border-line bg-bg shrink-0" :class="r.done ? 'opacity-50' : ''">
-                    <input x-model="r.note" @blur="saveProjects()" placeholder="Note (objet de la relance…)" class="flex-1 text-sm px-2 py-1.5 rounded-lg border border-line bg-bg" :class="r.done ? 'line-through text-muted' : ''">
+                    <input type="time" x-model="r.startTime" @change="saveProjects()" title="Heure de début" class="text-xs px-1.5 py-1.5 rounded-lg border border-line bg-bg shrink-0" :class="r.done ? 'opacity-50' : ''">
+                    <input type="time" x-model="r.endTime" @change="saveProjects()" title="Heure de fin" class="text-xs px-1.5 py-1.5 rounded-lg border border-line bg-bg shrink-0" :class="r.done ? 'opacity-50' : ''">
+                    <input x-model="r.note" @blur="saveProjects()" placeholder="Note (objet…)" class="flex-1 min-w-0 text-sm px-2 py-1.5 rounded-lg border border-line bg-bg" :class="r.done ? 'line-through text-muted' : ''">
                     <button @click="currentProject.relances.splice(i,1); saveProjects()" class="text-muted hover:text-accent text-xs shrink-0">✕</button>
                   </div>
                 </template>
@@ -1506,28 +1521,40 @@ tailwind.config = {
   <div class="modal-slide-enter bg-surface border border-line rounded-xl w-full max-w-md p-6" x-show="calEventModalOpen">
     <h3 class="font-display font-bold text-lg mb-4" x-text="calEventForm.id ? 'Modifier l\'événement' : 'Nouvel événement'"></h3>
     <div class="space-y-3">
+      <p x-show="calEventForm.auto" class="text-[11px] text-muted bg-bg border border-line rounded-lg px-3 py-2">Type, titre et notes sont gérés depuis la fiche projet. Ici tu modifies la date et les horaires ; la fiche projet sera mise à jour.</p>
       <div>
         <label class="text-muted font-mono text-xs uppercase block mb-1.5">Type</label>
         <div class="grid grid-cols-3 gap-2">
           <template x-for="t in ['tournage','deadline','relance']" :key="t">
-            <button type="button" @click="calEventForm.type=t"
+            <button type="button" @click="!calEventForm.auto && (calEventForm.type=t)" :disabled="calEventForm.auto"
               :class="calEventForm.type===t ? calTypeStyle(t).cls + ' ring-2 ring-offset-1 ring-accent/40' : 'bg-bg border border-line text-muted hover:border-accent/50'"
-              class="text-xs font-medium px-2 py-2 rounded-lg transition capitalize"
+              class="text-xs font-medium px-2 py-2 rounded-lg transition capitalize disabled:opacity-60 disabled:cursor-not-allowed"
               x-text="calTypeStyle(t).icon + ' ' + calTypeStyle(t).tag"></button>
           </template>
         </div>
       </div>
       <div>
         <label class="text-muted font-mono text-xs uppercase block mb-1.5">Titre</label>
-        <input x-model="calEventForm.title" @keydown.enter="saveCalEvent()" placeholder="Ex : Tournage – Boulangerie Martin" class="w-full text-sm px-3 py-2 rounded-lg border border-line bg-bg">
+        <input x-model="calEventForm.title" :disabled="calEventForm.auto" @keydown.enter="saveCalEvent()" placeholder="Ex : Tournage – Boulangerie Martin" class="w-full text-sm px-3 py-2 rounded-lg border border-line bg-bg disabled:opacity-60">
       </div>
-      <div>
-        <label class="text-muted font-mono text-xs uppercase block mb-1.5">Date</label>
-        <input type="date" x-model="calEventForm.date" class="text-sm px-3 py-2 rounded-lg border border-line bg-bg">
+      <div class="grid grid-cols-3 gap-2">
+        <div>
+          <label class="text-muted font-mono text-xs uppercase block mb-1.5">Date</label>
+          <input type="date" x-model="calEventForm.date" class="w-full text-sm px-3 py-2 rounded-lg border border-line bg-bg">
+        </div>
+        <div>
+          <label class="text-muted font-mono text-xs uppercase block mb-1.5">Début</label>
+          <input type="time" x-model="calEventForm.startTime" class="w-full text-sm px-2 py-2 rounded-lg border border-line bg-bg">
+        </div>
+        <div>
+          <label class="text-muted font-mono text-xs uppercase block mb-1.5">Fin</label>
+          <input type="time" x-model="calEventForm.endTime" class="w-full text-sm px-2 py-2 rounded-lg border border-line bg-bg">
+        </div>
       </div>
+      <p class="text-[11px] text-muted">Laisse les heures vides pour un événement « journée entière ». Sans heure de fin, 1&nbsp;h par défaut.</p>
       <div>
         <label class="text-muted font-mono text-xs uppercase block mb-1.5">Notes</label>
-        <textarea x-model="calEventForm.notes" rows="3" placeholder="Notes libres…" class="w-full text-sm px-3 py-2 rounded-lg border border-line bg-bg"></textarea>
+        <textarea x-model="calEventForm.notes" :disabled="calEventForm.auto" rows="3" placeholder="Notes libres…" class="w-full text-sm px-3 py-2 rounded-lg border border-line bg-bg disabled:opacity-60"></textarea>
       </div>
     </div>
     <div class="flex items-center gap-3 mt-6">
@@ -2102,7 +2129,7 @@ function app() {
     // Modal de création/édition d'un événement Studio « manuel » (auto:false),
     // ouvert au clic sur un jour du calendrier ou sur un événement manuel existant.
     calEventModalOpen: false,
-    calEventForm: { id:null, type:'tournage', title:'', date:'', notes:'' },
+    calEventForm: { id:null, type:'tournage', title:'', date:'', startTime:'', endTime:'', notes:'', auto:false },
 
     // settings
     settings: { profileName:'Moustikprod', billingInfo:'', prenom:'Romain', nom:'ANDRE', nomCommercial:'Moustikprod', siret:'89033460000040', ville:'Montpellier', emailPro:'contact@moustikprod.fr', scenarioInstructions:'' },
@@ -2401,6 +2428,10 @@ function app() {
         budget: data.budgetStudio || '',
         deadline: data.deadlineStudio || '',
         shootDate: data.shootDate || '',
+        shootStartTime: data.shootStartTime || '',
+        shootEndTime: data.shootEndTime || '',
+        deadlineStartTime: data.deadlineStartTime || '',
+        deadlineEndTime: data.deadlineEndTime || '',
         relances: Array.isArray(data.relances) ? data.relances : [],
         status: this.normalizeStatus(data.statutStudio || 'brief'),
         statusHistory: Array.isArray(data.statusHistory) ? data.statusHistory : [],
@@ -2485,6 +2516,10 @@ function app() {
           budgetStudio: project.budget,
           deadlineStudio: project.deadline,
           shootDate: project.shootDate || null,
+          shootStartTime: project.shootStartTime || '',
+          shootEndTime: project.shootEndTime || '',
+          deadlineStartTime: project.deadlineStartTime || '',
+          deadlineEndTime: project.deadlineEndTime || '',
           relances: project.relances || [],
           progress: project.progress,
           pitch: project.pitch || '',
@@ -4938,14 +4973,14 @@ FORMAT DE SORTIE :
       const done = ['livre','archive'].includes(project.status);
       const desired = [];
       if (project.shootDate) {
-        desired.push({ id:`evt_shoot_${project.id}`, type:'tournage', date:project.shootDate, title:`Tournage – ${project.title||'Projet'}`, notes:project.lieu||'' });
+        desired.push({ id:`evt_shoot_${project.id}`, type:'tournage', date:project.shootDate, startTime:project.shootStartTime||'', endTime:project.shootEndTime||'', title:`Tournage – ${project.title||'Projet'}`, notes:project.lieu||'' });
       }
       if (project.deadline && !done) {
-        desired.push({ id:`evt_deadline_${project.id}`, type:'deadline', date:project.deadline, title:`Deadline – ${project.title||'Projet'}`, notes:'' });
+        desired.push({ id:`evt_deadline_${project.id}`, type:'deadline', date:project.deadline, startTime:project.deadlineStartTime||'', endTime:project.deadlineEndTime||'', title:`Deadline – ${project.title||'Projet'}`, notes:'' });
       }
       (project.relances || []).forEach((r, i) => {
         if (r && r.date && !r.done) {
-          desired.push({ id:`evt_relance_${project.id}_${i}`, type:'relance', date:r.date, title:`Relance – ${project.title||'Projet'}`, notes:r.note||'' });
+          desired.push({ id:`evt_relance_${project.id}_${i}`, type:'relance', date:r.date, startTime:r.startTime||'', endTime:r.endTime||'', title:`Relance – ${project.title||'Projet'}`, notes:r.note||'' });
         }
       });
 
@@ -4957,6 +4992,8 @@ FORMAT DE SORTIE :
         const existing = this.calEvents.find(e => e.id === d.id);
         const changed = !existing
           || existing.date !== d.date
+          || (existing.startTime || '') !== (d.startTime || '')
+          || (existing.endTime || '') !== (d.endTime || '')
           || existing.title !== d.title
           || (existing.notes || '') !== (d.notes || '');
         if (existing && !changed) continue; // rien à écrire
@@ -4966,6 +5003,8 @@ FORMAT DE SORTIE :
           projectId: project.id,
           title: d.title,
           date: d.date,
+          startTime: d.startTime || '',
+          endTime: d.endTime || '',
           endDate: existing?.endDate || null,
           notes: d.notes || '',
           auto: true,
@@ -5018,32 +5057,66 @@ FORMAT DE SORTIE :
     // événement Studio autonome (auto:false, projectId:null). Ces événements ne
     // sont jamais touchés par syncProjectCalendarEvents (qui ne gère que auto:true).
     openCalEventCreate(dateStr) {
-      this.calEventForm = { id:null, type:'tournage', title:'', date: dateStr || new Date().toISOString().slice(0,10), notes:'' };
+      this.calEventForm = { id:null, type:'tournage', title:'', date: dateStr || new Date().toISOString().slice(0,10), startTime:'', endTime:'', notes:'', auto:false };
       this.calEventModalOpen = true;
     },
     openCalEventEdit(id) {
       const e = this.calEvents.find(ev => ev.id === id);
       if (!e) return;
-      this.calEventForm = { id: e.id, type: e.type || 'tournage', title: e.title || '', date: (e.date||'').slice(0,10), notes: e.notes || '' };
+      this.calEventForm = { id: e.id, type: e.type || 'tournage', title: e.title || '', date: (e.date||'').slice(0,10), startTime: e.startTime || '', endTime: e.endTime || '', notes: e.notes || '', auto: !!e.auto };
       this.calEventModalOpen = true;
     },
-    // Routage du clic sur une pastille du calendrier : un événement manuel s'édite,
-    // un événement auto (dérivé d'un projet) ou de signature ouvre le projet lié.
+    // Routage du clic sur une pastille : tout événement Studio (auto OU manuel)
+    // ouvre le modal d'édition ; les événements Google/signature (lecture seule)
+    // ouvrent le projet lié le cas échéant, jamais le modal.
     onCalEventClick(ev) {
-      if (ev.source === 'studio' && !ev.auto) this.openCalEventEdit(ev.id);
+      if (ev.source === 'studio') this.openCalEventEdit(ev.id);
       else if (ev.projectId) this.openProjectById(ev.projectId);
     },
     async saveCalEvent() {
       if (!this.db || !this.user) { this.toast('Connexion requise', 'error'); return; }
       const f = this.calEventForm;
-      if (!f.title.trim() || !f.date) { this.toast('Titre et date obligatoires', 'error'); return; }
-      const now = new Date().toISOString();
+      // Titre requis seulement pour un event manuel (les auto ont un titre dérivé du projet).
+      if ((!f.auto && !f.title.trim()) || !f.date) { this.toast('Titre et date obligatoires', 'error'); return; }
+      // Validation des heures : fin strictement après début (si les deux saisies).
+      if (f.startTime && f.endTime && f.endTime <= f.startTime) {
+        this.toast('L\'heure de fin doit être après le début', 'error'); return;
+      }
       const id = f.id || ('evt_manual_' + Date.now());
       const existing = this.calEvents.find(e => e.id === id);
-      // Même logique idempotente que les événements auto : une modif du contenu
-      // repasse syncStatus à 'local' pour forcer un re-push Google (T4).
+
+      // Cas AUTO (tournage/deadline/relance) : la fiche projet est la source de
+      // vérité. On répercute date/heures sur le PROJET, puis on re-matérialise le
+      // doc calEvent (syncStatus->local, googleEventId conservé) → cohérence
+      // bidirectionnelle Studio-interne + push de la modif au prochain sync.
+      if (existing && existing.auto) {
+        const p = this.projects.find(pr => pr.id === existing.projectId);
+        if (!p) { this.toast('Projet lié introuvable', 'error'); return; }
+        if (existing.type === 'tournage') { p.shootDate = f.date; p.shootStartTime = f.startTime || ''; p.shootEndTime = f.endTime || ''; }
+        else if (existing.type === 'deadline') { p.deadline = f.date; p.deadlineStartTime = f.startTime || ''; p.deadlineEndTime = f.endTime || ''; }
+        else if (existing.type === 'relance') {
+          const i = Number(existing.id.split('_').pop());
+          if (p.relances && p.relances[i]) { p.relances[i].date = f.date; p.relances[i].startTime = f.startTime || ''; p.relances[i].endTime = f.endTime || ''; }
+        }
+        try {
+          await this.saveProjectDoc(p);
+          await this.syncProjectCalendarEvents(p);
+          this.calEventModalOpen = false;
+          this.toast('Événement et fiche projet mis à jour');
+        } catch(e) {
+          console.error('saveCalEvent (auto) error', e);
+          this.toast('Erreur d\'enregistrement', 'error');
+        }
+        return;
+      }
+
+      // Cas MANUEL : mise à jour directe du doc calEvents (une modif du contenu
+      // repasse syncStatus à 'local' pour forcer un re-push Google).
+      const now = new Date().toISOString();
       const changed = !existing
         || existing.date !== f.date
+        || (existing.startTime || '') !== (f.startTime || '')
+        || (existing.endTime || '') !== (f.endTime || '')
         || existing.title !== f.title.trim()
         || existing.type !== f.type
         || (existing.notes || '') !== (f.notes || '');
@@ -5053,6 +5126,8 @@ FORMAT DE SORTIE :
         projectId: existing?.projectId ?? null,
         title: f.title.trim(),
         date: f.date,
+        startTime: f.startTime || '',
+        endTime: f.endTime || '',
         endDate: existing?.endDate || null,
         notes: f.notes || '',
         auto: false,
@@ -5114,10 +5189,11 @@ FORMAT DE SORTIE :
         const cls = e.syncStatus === 'error'
           ? 'bg-red-100 text-red-700 ring-1 ring-red-400'
           : st.cls;
+        const t = e.startTime ? String(e.startTime).slice(0, 5) + ' ' : '';
         evs.push({
           id: e.id,
           date: (e.date || '').slice(0, 10),
-          label: `${st.icon} ${e.title}`,
+          label: `${st.icon} ${t}${e.title}`,
           tag: st.tag,
           cls,
           projectId: e.projectId || null,
@@ -5143,9 +5219,12 @@ FORMAT DE SORTIE :
         if (!date) continue;
         const bg = g.backgroundColor || '#e2e8f0';
         const fg = g.foregroundColor || '#1e293b';
+        // Heure affichée si l'event Google est « timed » (start.dateTime → contient
+        // un 'T', ex. « Bus 1255 » Illévia). All-day → pas d'heure.
+        const gt = (g.start && g.start.includes('T')) ? g.start.slice(11, 16) + ' ' : '';
         evs.push({
           date,
-          label: (g.title || '(sans titre)'),
+          label: gt + (g.title || '(sans titre)'),
           tag: 'Google',
           cls: '',
           style: `background-color:${bg};color:${fg};opacity:.9`,

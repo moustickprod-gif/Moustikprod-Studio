@@ -80,17 +80,51 @@ function addDays(dateStr, n) {
   return d.toISOString().slice(0, 10);
 }
 
+// Décale hh:mm de `hours` heures en gérant le passage minuit (pour l'end +1h
+// par défaut). Renvoie le jour éventuellement incrémenté + l'heure.
+function shiftHour(day, hhmm, hours) {
+  let [h, m] = hhmm.split(':').map(Number);
+  h += hours;
+  let d = day;
+  while (h >= 24) { h -= 24; d = addDays(d, 1); }
+  return { day: d, time: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}` };
+}
+
+const TZ = 'Europe/Paris';
+
+// Événement Google. Deux formats mutuellement exclusifs selon la présence d'une
+// heure de début :
+// - TIMED (startTime) : start.dateTime/end.dateTime SANS offset + timeZone
+//   Europe/Paris → Google interprète l'heure comme heure locale (aucune dérive
+//   UTC, on ne passe pas par un Date JS). Fin = endTime, sinon défaut +1h.
+// - ALL-DAY (pas de startTime) : start.date/end.date, end exclusif = lendemain.
+// patchEvent envoie toujours l'objet start/end COMPLET → le patch remplace
+// l'objet entier, donc la bascule all-day <-> timed d'un event déjà poussé se
+// fait sans erreur « both date and dateTime » et en conservant le googleEventId.
 function toGoogleEvent(ev) {
-  const start = (ev.date || '').slice(0, 10);
-  const endBase = (ev.endDate || ev.date || '').slice(0, 10);
-  return {
+  const day = (ev.date || '').slice(0, 10);
+  const endDay = (ev.endDate || ev.date || '').slice(0, 10);
+  const base = {
     summary: ev.title || 'Événement',
     description: ev.notes || '',
-    start: { date: start },
-    end: { date: addDays(endBase, 1) },
-    // Trace de provenance côté Google (debug/repérage).
     extendedProperties: { private: { moustikprodEventId: String(ev.id || ''), moustikprodType: String(ev.type || '') } },
   };
+  if (ev.startTime) {
+    const st = String(ev.startTime).slice(0, 5);
+    let endStr;
+    if (ev.endTime) {
+      endStr = `${endDay}T${String(ev.endTime).slice(0, 5)}:00`;
+    } else {
+      const e = shiftHour(day, st, 1); // défaut +1h
+      endStr = `${e.day}T${e.time}:00`;
+    }
+    base.start = { dateTime: `${day}T${st}:00`, timeZone: TZ };
+    base.end = { dateTime: endStr, timeZone: TZ };
+  } else {
+    base.start = { date: day };
+    base.end = { date: addDays(endDay, 1) };
+  }
+  return base;
 }
 
 export async function insertEvent(accessToken, calendarId, ev) {
