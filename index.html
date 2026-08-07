@@ -204,8 +204,9 @@ tailwind.config = {
             </div>
             <div class="space-y-2">
               <template x-for="(ev,i) in weekEvents()" :key="i">
-                <div @click="ev.projectId && openProjectById(ev.projectId)" class="text-sm flex items-center justify-between gap-2 p-2 rounded-lg bg-bg border border-line" :class="ev.projectId ? 'cursor-pointer hover:border-accent/50' : ''">
-                  <span x-text="ev.label"></span>
+                <div class="text-sm flex items-center gap-2 p-2 rounded-lg bg-bg border border-line">
+                  <input type="checkbox" @change="setEventDone(ev, true)" class="accent-accent shrink-0" title="Marquer comme fait">
+                  <span class="truncate flex-1" @click="ev.projectId && openProjectById(ev.projectId)" :class="ev.projectId ? 'cursor-pointer hover:underline' : ''" x-text="ev.label"></span>
                   <span class="text-xs font-mono shrink-0" :class="ev.overdue ? 'text-red-500' : 'text-muted'" x-text="ev.dateLabel"></span>
                 </div>
               </template>
@@ -1556,6 +1557,10 @@ tailwind.config = {
         <label class="text-muted font-mono text-xs uppercase block mb-1.5">Notes</label>
         <textarea x-model="calEventForm.notes" :disabled="calEventForm.auto" rows="3" placeholder="Notes libres…" class="w-full text-sm px-3 py-2 rounded-lg border border-line bg-bg disabled:opacity-60"></textarea>
       </div>
+      <label x-show="calEventForm.id" class="flex items-center gap-2 text-sm text-ink cursor-pointer">
+        <input type="checkbox" x-model="calEventForm.done" class="accent-accent">
+        <span>Marquer comme <strong>fait</strong> <span class="text-muted">(retire l'alerte « en retard » ; sans effet sur Google)</span></span>
+      </label>
     </div>
     <div class="flex items-center gap-3 mt-6">
       <button x-show="calEventForm.id" @click="deleteCalEvent()" class="text-sm text-red-500 hover:text-red-600 mr-auto">Supprimer</button>
@@ -2129,7 +2134,7 @@ function app() {
     // Modal de création/édition d'un événement Studio « manuel » (auto:false),
     // ouvert au clic sur un jour du calendrier ou sur un événement manuel existant.
     calEventModalOpen: false,
-    calEventForm: { id:null, type:'tournage', title:'', date:'', startTime:'', endTime:'', notes:'', auto:false },
+    calEventForm: { id:null, type:'tournage', title:'', date:'', startTime:'', endTime:'', notes:'', auto:false, done:false },
 
     // settings
     settings: { profileName:'Moustikprod', billingInfo:'', prenom:'Romain', nom:'ANDRE', nomCommercial:'Moustikprod', siret:'89033460000040', ville:'Montpellier', emailPro:'contact@moustikprod.fr', scenarioInstructions:'' },
@@ -2430,8 +2435,10 @@ function app() {
         shootDate: data.shootDate || '',
         shootStartTime: data.shootStartTime || '',
         shootEndTime: data.shootEndTime || '',
+        shootDone: !!data.shootDone,
         deadlineStartTime: data.deadlineStartTime || '',
         deadlineEndTime: data.deadlineEndTime || '',
+        deadlineDone: !!data.deadlineDone,
         relances: Array.isArray(data.relances) ? data.relances : [],
         status: this.normalizeStatus(data.statutStudio || 'brief'),
         statusHistory: Array.isArray(data.statusHistory) ? data.statusHistory : [],
@@ -2518,8 +2525,10 @@ function app() {
           shootDate: project.shootDate || null,
           shootStartTime: project.shootStartTime || '',
           shootEndTime: project.shootEndTime || '',
+          shootDone: !!project.shootDone,
           deadlineStartTime: project.deadlineStartTime || '',
           deadlineEndTime: project.deadlineEndTime || '',
+          deadlineDone: !!project.deadlineDone,
           relances: project.relances || [],
           progress: project.progress,
           pitch: project.pitch || '',
@@ -4654,7 +4663,9 @@ FORMAT DE SORTIE :
       const in7 = new Date(now.getTime() + 7*24*60*60*1000);
       const todayStr = now.toISOString().slice(0,10);
       return this.calendarEvents()
-        .filter(e => !e.done)
+        // Volet 1 : QUE les événements Moustikprod (exclut les dispos Google
+        // lecture seule) ; et pas les événements « faits ».
+        .filter(e => !e.done && e.source !== 'google')
         .map(e => ({ ...e, overdue: e.date < todayStr, dateLabel: new Date(e.date+'T00:00:00').toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'}) + (e.date < todayStr ? ' — en retard' : '') }))
         .filter(e => e.overdue || new Date(e.date+'T00:00:00') <= in7)
         .sort((a,b) => a.date.localeCompare(b.date))
@@ -4973,14 +4984,17 @@ FORMAT DE SORTIE :
       const done = ['livre','archive'].includes(project.status);
       const desired = [];
       if (project.shootDate) {
-        desired.push({ id:`evt_shoot_${project.id}`, type:'tournage', date:project.shootDate, startTime:project.shootStartTime||'', endTime:project.shootEndTime||'', title:`Tournage – ${project.title||'Projet'}`, notes:project.lieu||'' });
+        desired.push({ id:`evt_shoot_${project.id}`, type:'tournage', date:project.shootDate, startTime:project.shootStartTime||'', endTime:project.shootEndTime||'', title:`Tournage – ${project.title||'Projet'}`, notes:project.lieu||'', done: !!project.shootDone });
       }
       if (project.deadline && !done) {
-        desired.push({ id:`evt_deadline_${project.id}`, type:'deadline', date:project.deadline, startTime:project.deadlineStartTime||'', endTime:project.deadlineEndTime||'', title:`Deadline – ${project.title||'Projet'}`, notes:'' });
+        desired.push({ id:`evt_deadline_${project.id}`, type:'deadline', date:project.deadline, startTime:project.deadlineStartTime||'', endTime:project.deadlineEndTime||'', title:`Deadline – ${project.title||'Projet'}`, notes:'', done: !!project.deadlineDone });
       }
+      // Les relances « effectuées » (r.done) sont désormais MATÉRIALISÉES avec
+      // done:true (grisées, conservées dans Google) au lieu d'être retirées —
+      // « fait » est un état interne, pas une suppression.
       (project.relances || []).forEach((r, i) => {
-        if (r && r.date && !r.done) {
-          desired.push({ id:`evt_relance_${project.id}_${i}`, type:'relance', date:r.date, startTime:r.startTime||'', endTime:r.endTime||'', title:`Relance – ${project.title||'Projet'}`, notes:r.note||'' });
+        if (r && r.date) {
+          desired.push({ id:`evt_relance_${project.id}_${i}`, type:'relance', date:r.date, startTime:r.startTime||'', endTime:r.endTime||'', title:`Relance – ${project.title||'Projet'}`, notes:r.note||'', done: !!r.done });
         }
       });
 
@@ -4990,13 +5004,17 @@ FORMAT DE SORTIE :
 
       for (const d of desired) {
         const existing = this.calEvents.find(e => e.id === d.id);
-        const changed = !existing
+        // On sépare « contenu » (date/heure/titre/notes → affecte Google, repasse
+        // syncStatus à local) de « done » (état interne : persisté SANS toucher la
+        // synchro Google — cf. Q3).
+        const contentChanged = !existing
           || existing.date !== d.date
           || (existing.startTime || '') !== (d.startTime || '')
           || (existing.endTime || '') !== (d.endTime || '')
           || existing.title !== d.title
           || (existing.notes || '') !== (d.notes || '');
-        if (existing && !changed) continue; // rien à écrire
+        const doneChanged = !existing || (!!existing.done !== !!d.done);
+        if (existing && !contentChanged && !doneChanged) continue; // rien à écrire
         const doc = {
           id: d.id,
           type: d.type,
@@ -5007,11 +5025,12 @@ FORMAT DE SORTIE :
           endTime: d.endTime || '',
           endDate: existing?.endDate || null,
           notes: d.notes || '',
+          done: !!d.done,
           auto: true,
-          // Une modif du contenu invalide la synchro Google (le doc devra être
-          // re-poussé) ; on préserve googleEventId pour permettre un update.
+          // Une modif du CONTENU invalide la synchro Google (le doc devra être
+          // re-poussé) ; « done » seul ne la touche pas. googleEventId préservé.
           googleEventId: existing?.googleEventId || null,
-          syncStatus: changed ? 'local' : (existing?.syncStatus || 'local'),
+          syncStatus: contentChanged ? 'local' : (existing?.syncStatus || 'local'),
           createdAt: existing?.createdAt || now,
           updatedAt: now,
         };
@@ -5074,14 +5093,41 @@ FORMAT DE SORTIE :
     // Un clic sur un jour ouvre le modal pré-rempli à cette date pour créer un
     // événement Studio autonome (auto:false, projectId:null). Ces événements ne
     // sont jamais touchés par syncProjectCalendarEvents (qui ne gère que auto:true).
+    // Marque un événement Moustikprod « fait » / « non fait ». Source-aware :
+    // écrit au MÊME endroit quel que soit l'appelant (Dashboard ou calendrier) —
+    // projet pour les events auto (shootDone/deadlineDone/relances[i].done), doc
+    // pour les manuels. N'affecte PAS Google (état interne, cf. Q3).
+    async setEventDone(ev, done) {
+      if (!this.db || !this.user || !ev) return;
+      if (ev.source === 'google' || ev.readonly) return; // jamais les lecture seule
+      try {
+        if (ev.auto) {
+          const p = this.projects.find(pr => pr.id === ev.projectId);
+          if (!p) return;
+          if (ev.type === 'tournage') p.shootDone = done;
+          else if (ev.type === 'deadline') p.deadlineDone = done;
+          else if (ev.type === 'relance') { const i = Number(ev.id.split('_').pop()); if (p.relances && p.relances[i]) p.relances[i].done = done; }
+          await this.saveProjectDoc(p);
+          await this.syncProjectCalendarEvents(p);
+        } else {
+          await this.calEventsCol().doc(ev.id).set({ done, updatedAt: new Date().toISOString() }, { merge:true });
+          const i = this.calEvents.findIndex(e => e.id === ev.id);
+          if (i >= 0) this.calEvents[i].done = done;
+        }
+        this.toast(done ? 'Marqué fait ✓' : 'Marqué non fait');
+      } catch(e) {
+        console.error('setEventDone error', e);
+        this.toast('Erreur', 'error');
+      }
+    },
     openCalEventCreate(dateStr) {
-      this.calEventForm = { id:null, type:'tournage', title:'', date: dateStr || new Date().toISOString().slice(0,10), startTime:'', endTime:'', notes:'', auto:false };
+      this.calEventForm = { id:null, type:'tournage', title:'', date: dateStr || new Date().toISOString().slice(0,10), startTime:'', endTime:'', notes:'', auto:false, done:false };
       this.calEventModalOpen = true;
     },
     openCalEventEdit(id) {
       const e = this.calEvents.find(ev => ev.id === id);
       if (!e) return;
-      this.calEventForm = { id: e.id, type: e.type || 'tournage', title: e.title || '', date: (e.date||'').slice(0,10), startTime: e.startTime || '', endTime: e.endTime || '', notes: e.notes || '', auto: !!e.auto };
+      this.calEventForm = { id: e.id, type: e.type || 'tournage', title: e.title || '', date: (e.date||'').slice(0,10), startTime: e.startTime || '', endTime: e.endTime || '', notes: e.notes || '', auto: !!e.auto, done: !!e.done };
       this.calEventModalOpen = true;
     },
     // Routage du clic sur une pastille : tout événement Studio (auto OU manuel)
@@ -5110,11 +5156,11 @@ FORMAT DE SORTIE :
       if (existing && existing.auto) {
         const p = this.projects.find(pr => pr.id === existing.projectId);
         if (!p) { this.toast('Projet lié introuvable', 'error'); return; }
-        if (existing.type === 'tournage') { p.shootDate = f.date; p.shootStartTime = f.startTime || ''; p.shootEndTime = f.endTime || ''; }
-        else if (existing.type === 'deadline') { p.deadline = f.date; p.deadlineStartTime = f.startTime || ''; p.deadlineEndTime = f.endTime || ''; }
+        if (existing.type === 'tournage') { p.shootDate = f.date; p.shootStartTime = f.startTime || ''; p.shootEndTime = f.endTime || ''; p.shootDone = !!f.done; }
+        else if (existing.type === 'deadline') { p.deadline = f.date; p.deadlineStartTime = f.startTime || ''; p.deadlineEndTime = f.endTime || ''; p.deadlineDone = !!f.done; }
         else if (existing.type === 'relance') {
           const i = Number(existing.id.split('_').pop());
-          if (p.relances && p.relances[i]) { p.relances[i].date = f.date; p.relances[i].startTime = f.startTime || ''; p.relances[i].endTime = f.endTime || ''; }
+          if (p.relances && p.relances[i]) { p.relances[i].date = f.date; p.relances[i].startTime = f.startTime || ''; p.relances[i].endTime = f.endTime || ''; p.relances[i].done = !!f.done; }
         }
         try {
           await this.saveProjectDoc(p);
@@ -5148,6 +5194,7 @@ FORMAT DE SORTIE :
         endTime: f.endTime || '',
         endDate: existing?.endDate || null,
         notes: f.notes || '',
+        done: !!f.done,
         auto: false,
         googleEventId: existing?.googleEventId || null,
         syncStatus: changed ? 'local' : (existing?.syncStatus || 'local'),
@@ -5261,21 +5308,22 @@ FORMAT DE SORTIE :
       // + événements créés à la main). Chaque doc porte son syncStatus.
       for (const e of this.calEvents) {
         const st = this.calTypeStyle(e.type);
-        const cls = e.syncStatus === 'error'
-          ? 'bg-red-100 text-red-700 ring-1 ring-red-400'
-          : st.cls;
+        // Un événement « fait » : grisé/barré (pas de rouge « en retard »).
+        let cls = e.syncStatus === 'error' ? 'bg-red-100 text-red-700 ring-1 ring-red-400' : st.cls;
+        if (e.done) cls = 'bg-slate-100 text-slate-400 line-through';
         const t = e.startTime ? String(e.startTime).slice(0, 5) + ' ' : '';
         evs.push({
           id: e.id,
+          type: e.type,
           date: (e.date || '').slice(0, 10),
-          label: `${st.icon} ${t}${e.title}`,
+          label: `${e.done ? '✓ ' : ''}${st.icon} ${t}${e.title}`,
           tag: st.tag,
           cls,
           projectId: e.projectId || null,
           source: 'studio',
           auto: !!e.auto,
           syncStatus: e.syncStatus || 'local',
-          done: false,
+          done: !!e.done,
         });
       }
       // Overlay dérivé, lecture seule et non matérialisé : expiration des demandes

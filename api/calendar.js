@@ -128,6 +128,11 @@ async function handleSync(req, res) {
 
     for (const ev of events) {
       if (ev.syncStatus === 'synced' && ev.googleEventId) continue;
+      // Un événement « fait » jamais poussé (ex. ancienne relance re-matérialisée)
+      // ne doit PAS être créé dans Google — « fait » est un état interne. Un
+      // événement déjà poussé puis marqué fait garde son googleEventId et reste
+      // dans Google tel quel.
+      if (ev.done && !ev.googleEventId) continue;
       try {
         if (!ev.googleEventId) {
           const gid = await insertEvent(accessToken, calendarId, ev);
