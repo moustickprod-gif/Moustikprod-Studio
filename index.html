@@ -204,8 +204,9 @@ tailwind.config = {
             </div>
             <div class="space-y-2">
               <template x-for="(ev,i) in weekEvents()" :key="i">
-                <div @click="ev.projectId && openProjectById(ev.projectId)" class="text-sm flex items-center justify-between gap-2 p-2 rounded-lg bg-bg border border-line" :class="ev.projectId ? 'cursor-pointer hover:border-accent/50' : ''">
-                  <span x-text="ev.label"></span>
+                <div class="text-sm flex items-center gap-2 p-2 rounded-lg bg-bg border border-line">
+                  <input type="checkbox" @change="setEventDone(ev, true)" class="accent-accent shrink-0" title="Marquer comme fait">
+                  <span class="truncate flex-1" @click="ev.projectId && openProjectById(ev.projectId)" :class="ev.projectId ? 'cursor-pointer hover:underline' : ''" x-text="ev.label"></span>
                   <span class="text-xs font-mono shrink-0" :class="ev.overdue ? 'text-red-500' : 'text-muted'" x-text="ev.dateLabel"></span>
                 </div>
               </template>
@@ -693,6 +694,47 @@ tailwind.config = {
               <textarea x-model="currentProject.lieu" @blur="saveProjects()" rows="3" placeholder="Lieu de tournage..." class="w-full bg-bg border border-line rounded-lg p-3 text-sm"></textarea>
             </div>
             <div class="bg-surface border border-line rounded-xl p-5">
+              <div class="flex items-center justify-between mb-2">
+                <p class="font-display font-bold text-sm">🎥 Date de tournage</p>
+                <span class="text-[11px] font-mono text-muted">→ apparaît dans le calendrier</span>
+              </div>
+              <div class="flex items-end gap-2 flex-wrap">
+                <div>
+                  <label class="text-[11px] font-mono text-muted block mb-1">Date</label>
+                  <input type="date" x-model="currentProject.shootDate" @change="saveProjects()" class="text-sm px-3 py-2 rounded-lg border border-line bg-bg">
+                </div>
+                <div>
+                  <label class="text-[11px] font-mono text-muted block mb-1">Début</label>
+                  <input type="time" x-model="currentProject.shootStartTime" @change="saveProjects()" class="text-sm px-2 py-2 rounded-lg border border-line bg-bg">
+                </div>
+                <div>
+                  <label class="text-[11px] font-mono text-muted block mb-1">Fin</label>
+                  <input type="time" x-model="currentProject.shootEndTime" @change="saveProjects()" class="text-sm px-2 py-2 rounded-lg border border-line bg-bg">
+                </div>
+              </div>
+              <p class="text-xs text-muted mt-2">Crée automatiquement un événement « Tournage » dans le calendrier, prêt à pousser vers Google Calendar. Heures optionnelles (sinon journée entière).</p>
+            </div>
+            <div class="bg-surface border border-line rounded-xl p-5">
+              <div class="flex items-center justify-between mb-3">
+                <p class="font-display font-bold text-sm">✉️ Relances programmées</p>
+                <button @click="(currentProject.relances||(currentProject.relances=[])).push({ date:'', done:false, note:'' }); saveProjects()" class="text-xs bg-bg border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition">+ Relance</button>
+              </div>
+              <div x-show="!(currentProject.relances||[]).length" class="text-muted text-sm">Aucune relance programmée. Ajoute une date pour ne pas oublier de relancer le client.</div>
+              <div class="space-y-2">
+                <template x-for="(r,i) in (currentProject.relances||[])" :key="i">
+                  <div class="flex items-center gap-2">
+                    <input type="checkbox" x-model="r.done" @change="saveProjects()" class="accent-accent shrink-0" title="Relance effectuée">
+                    <input type="date" x-model="r.date" @change="saveProjects()" class="text-sm px-2 py-1.5 rounded-lg border border-line bg-bg shrink-0" :class="r.done ? 'opacity-50' : ''">
+                    <input type="time" x-model="r.startTime" @change="saveProjects()" title="Heure de début" class="text-xs px-1.5 py-1.5 rounded-lg border border-line bg-bg shrink-0" :class="r.done ? 'opacity-50' : ''">
+                    <input type="time" x-model="r.endTime" @change="saveProjects()" title="Heure de fin" class="text-xs px-1.5 py-1.5 rounded-lg border border-line bg-bg shrink-0" :class="r.done ? 'opacity-50' : ''">
+                    <input x-model="r.note" @blur="saveProjects()" placeholder="Note (objet…)" class="flex-1 min-w-0 text-sm px-2 py-1.5 rounded-lg border border-line bg-bg" :class="r.done ? 'line-through text-muted' : ''">
+                    <button @click="currentProject.relances.splice(i,1); saveProjects()" class="text-muted hover:text-accent text-xs shrink-0">✕</button>
+                  </div>
+                </template>
+              </div>
+              <p x-show="(currentProject.relances||[]).length" class="text-xs text-muted mt-2">Chaque relance non cochée génère un événement « Relance » dans le calendrier ; cocher « effectuée » le retire.</p>
+            </div>
+            <div class="bg-surface border border-line rounded-xl p-5">
               <p class="font-display font-bold text-sm mb-3">Format de livraison</p>
               <div class="space-y-1.5">
                 <template x-for="f in ['Master 16:9 (YouTube / Vimeo)','Carré 1:1 (Instagram feed)','Vertical 9:16 (Reels / TikTok / Shorts)','Sous-titres inclus','Export audio séparé','Exports par séquence']" :key="f">
@@ -1169,27 +1211,45 @@ tailwind.config = {
       <template x-if="view==='calendrier'">
         <div class="max-w-4xl space-y-6" x-transition.opacity.duration.150ms>
           <div class="bg-surface border border-line rounded-xl p-5">
-            <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center justify-between mb-1">
               <button @click="calPrev()" class="px-3 py-1.5 rounded-lg border border-line text-sm hover:border-accent/50">←</button>
               <p class="font-display font-bold" x-text="calTitle()"></p>
               <button @click="calNext()" class="px-3 py-1.5 rounded-lg border border-line text-sm hover:border-accent/50">→</button>
+            </div>
+            <div class="flex items-center justify-between mb-4 gap-2">
+              <p class="text-[11px] font-mono text-muted">Clique sur un jour pour ajouter un événement</p>
+              <div class="flex items-center gap-2 shrink-0">
+                <button x-show="googleCal.connected" @click="syncCalendar()" :disabled="googleCal.syncing" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg flex items-center gap-2 disabled:opacity-50" title="Pousser tournages/relances/deadlines vers Google et importer tes dispos">
+                  <span x-show="googleCal.syncing" class="spinner"></span> Synchroniser
+                </button>
+                <button @click="openCalEventCreate(new Date().toISOString().slice(0,10))" class="text-xs bg-bg border border-line px-3 py-1.5 rounded-lg hover:border-accent/50 transition">+ Événement</button>
+              </div>
             </div>
             <div class="grid grid-cols-7 gap-1 text-center text-xs font-mono text-muted mb-1">
               <template x-for="d in ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']" :key="d"><div x-text="d"></div></template>
             </div>
             <div class="grid grid-cols-7 gap-1">
               <template x-for="(day,i) in calDays()" :key="i">
-                <div class="min-h-[72px] rounded-lg border p-1 text-left" :class="day ? (day.isToday ? 'border-accent bg-accent/5' : 'border-line bg-bg') : 'border-transparent'">
+                <div @click="day && openCalEventCreate(day.dateStr)" class="min-h-[72px] rounded-lg border p-1 text-left transition" :class="day ? (day.isToday ? 'border-accent bg-accent/5 cursor-pointer hover:border-accent' : 'border-line bg-bg cursor-pointer hover:border-accent/50') : 'border-transparent'">
                   <template x-if="day">
                     <div>
                       <p class="text-xs font-mono" :class="day.isToday ? 'text-accent font-bold' : 'text-muted'" x-text="day.n"></p>
                       <template x-for="(ev,j) in day.events.slice(0,3)" :key="j">
-                        <div @click="ev.projectId && openProjectById(ev.projectId)" class="text-[10px] leading-tight truncate rounded px-1 py-0.5 mt-0.5" :class="ev.cls + (ev.projectId ? ' cursor-pointer' : '')" :title="ev.label" x-text="ev.label"></div>
+                        <div @click.stop="onCalEventClick(ev)" class="text-[10px] leading-tight truncate rounded px-1 py-0.5 mt-0.5" :class="[ev.cls, ev.readonly ? 'cursor-default' : 'cursor-pointer']" :style="ev.style || ''" :title="ev.label + (ev.calendarSummary ? ' — '+ev.calendarSummary : '') + (ev.syncStatus==='error' ? ' — erreur de synchro' : '')" x-text="ev.label"></div>
                       </template>
                       <p x-show="day.events.length>3" class="text-[10px] text-muted" x-text="'+' + (day.events.length-3)"></p>
                     </div>
                   </template>
                 </div>
+              </template>
+            </div>
+            <div x-show="googleCalendarsLegend.length" class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-4 pt-3 border-t border-line">
+              <span class="text-[11px] font-mono text-muted">Agendas Google (lecture seule) :</span>
+              <template x-for="c in googleCalendarsLegend" :key="c.id">
+                <span class="inline-flex items-center gap-1.5 text-[11px] text-ink">
+                  <span class="w-2.5 h-2.5 rounded-full shrink-0" :style="'background-color:' + (c.backgroundColor || '#e2e8f0')"></span>
+                  <span x-text="c.summary"></span>
+                </span>
               </template>
             </div>
           </div>
@@ -1199,7 +1259,7 @@ tailwind.config = {
             <div x-show="!upcomingEvents().length" class="text-muted text-sm">Rien à l'horizon — profite pour prospecter ou tourner pour toi.</div>
             <div class="space-y-2">
               <template x-for="(ev,i) in upcomingEvents()" :key="i">
-                <div @click="ev.projectId && openProjectById(ev.projectId)" class="flex items-center justify-between p-3 bg-bg border border-line rounded-lg" :class="ev.projectId ? 'cursor-pointer hover:border-accent/50' : ''">
+                <div @click="onCalEventClick(ev)" class="flex items-center justify-between p-3 bg-bg border border-line rounded-lg cursor-pointer hover:border-accent/50">
                   <div class="flex items-center gap-3">
                     <span class="text-xs font-mono px-2 py-0.5 rounded" :class="ev.cls" x-text="ev.tag"></span>
                     <span class="text-sm" x-text="ev.label"></span>
@@ -1345,6 +1405,31 @@ tailwind.config = {
           </div>
 
           <div class="bg-surface border border-line rounded-xl p-5">
+            <div class="flex items-center justify-between gap-3 mb-1">
+              <h3 class="font-display font-bold">Google Calendar</h3>
+              <span x-show="googleCal.loading" class="spinner"></span>
+              <span x-show="!googleCal.loading && googleCal.connected" class="text-xs font-mono px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 shrink-0">● Connecté</span>
+              <span x-show="!googleCal.loading && !googleCal.connected" class="text-xs font-mono px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 shrink-0">○ Non connecté</span>
+            </div>
+            <p class="text-xs text-muted mb-3">Synchronise tes tournages, relances et deadlines vers Google Calendar (synchro manuelle depuis le calendrier). Nécessite les variables <span class="font-mono">GOOGLE_OAUTH_CLIENT_ID</span>, <span class="font-mono">GOOGLE_OAUTH_CLIENT_SECRET</span> et <span class="font-mono">GOOGLE_OAUTH_REDIRECT_URI</span> sur Vercel.</p>
+            <template x-if="googleCal.connected">
+              <p class="text-xs text-muted mb-3">
+                Agenda : <span class="font-mono text-ink" x-text="googleCal.calendarId"></span>
+                <template x-if="googleCal.connectedAt"><span> · connecté le <span x-text="new Date(googleCal.connectedAt).toLocaleDateString('fr-FR')"></span></span></template>
+                <template x-if="googleCal.lastSyncAt"><span> · dernière synchro <span x-text="new Date(googleCal.lastSyncAt).toLocaleString('fr-FR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})"></span></span></template>
+              </p>
+            </template>
+            <div class="flex gap-2">
+              <button x-show="!googleCal.connected" @click="connectGoogleCalendar()" :disabled="googleCal.busy" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg flex items-center gap-2 disabled:opacity-50">
+                <span x-show="googleCal.busy" class="spinner"></span> Connecter Google Calendar
+              </button>
+              <button x-show="googleCal.connected" @click="disconnectGoogleCalendar()" :disabled="googleCal.busy" class="text-xs bg-surface border border-red-200 text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-50 transition flex items-center gap-2 disabled:opacity-50">
+                <span x-show="googleCal.busy" class="spinner"></span> Déconnecter
+              </button>
+            </div>
+          </div>
+
+          <div class="bg-surface border border-line rounded-xl p-5">
             <h3 class="font-display font-bold mb-3">Identité (documents légaux)</h3>
             <p class="text-xs text-muted mb-3">Utilisée dans les autorisations de droit à l'image.</p>
             <div class="grid grid-cols-2 gap-2">
@@ -1428,6 +1513,59 @@ tailwind.config = {
     <div class="flex gap-3">
       <button @click="deleteProjectConfirmOpen=false; projectPendingDelete=null" class="flex-1 text-sm border border-line rounded-lg px-4 py-2 hover:bg-bg transition">Annuler</button>
       <button @click="deleteProject()" class="flex-1 text-sm bg-red-500 text-white rounded-lg px-4 py-2 hover:bg-red-600 transition">Supprimer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Création / édition d'un événement Studio manuel (T2) -->
+<div x-show="calEventModalOpen" x-cloak class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" @keydown.escape.window="calEventModalOpen=false">
+  <div class="modal-slide-enter bg-surface border border-line rounded-xl w-full max-w-md p-6" x-show="calEventModalOpen">
+    <h3 class="font-display font-bold text-lg mb-4" x-text="calEventForm.id ? 'Modifier l\'événement' : 'Nouvel événement'"></h3>
+    <div class="space-y-3">
+      <p x-show="calEventForm.auto" class="text-[11px] text-muted bg-bg border border-line rounded-lg px-3 py-2">Type, titre et notes sont gérés depuis la fiche projet. Ici tu modifies la date et les horaires ; la fiche projet sera mise à jour.</p>
+      <div>
+        <label class="text-muted font-mono text-xs uppercase block mb-1.5">Type</label>
+        <div class="grid grid-cols-3 gap-2">
+          <template x-for="t in ['tournage','deadline','relance']" :key="t">
+            <button type="button" @click="!calEventForm.auto && (calEventForm.type=t)" :disabled="calEventForm.auto"
+              :class="calEventForm.type===t ? calTypeStyle(t).cls + ' ring-2 ring-offset-1 ring-accent/40' : 'bg-bg border border-line text-muted hover:border-accent/50'"
+              class="text-xs font-medium px-2 py-2 rounded-lg transition capitalize disabled:opacity-60 disabled:cursor-not-allowed"
+              x-text="calTypeStyle(t).icon + ' ' + calTypeStyle(t).tag"></button>
+          </template>
+        </div>
+      </div>
+      <div>
+        <label class="text-muted font-mono text-xs uppercase block mb-1.5">Titre</label>
+        <input x-model="calEventForm.title" :disabled="calEventForm.auto" @keydown.enter="saveCalEvent()" placeholder="Ex : Tournage – Boulangerie Martin" class="w-full text-sm px-3 py-2 rounded-lg border border-line bg-bg disabled:opacity-60">
+      </div>
+      <div class="grid grid-cols-3 gap-2">
+        <div>
+          <label class="text-muted font-mono text-xs uppercase block mb-1.5">Date</label>
+          <input type="date" x-model="calEventForm.date" class="w-full text-sm px-3 py-2 rounded-lg border border-line bg-bg">
+        </div>
+        <div>
+          <label class="text-muted font-mono text-xs uppercase block mb-1.5">Début</label>
+          <input type="time" x-model="calEventForm.startTime" class="w-full text-sm px-2 py-2 rounded-lg border border-line bg-bg">
+        </div>
+        <div>
+          <label class="text-muted font-mono text-xs uppercase block mb-1.5">Fin</label>
+          <input type="time" x-model="calEventForm.endTime" class="w-full text-sm px-2 py-2 rounded-lg border border-line bg-bg">
+        </div>
+      </div>
+      <p class="text-[11px] text-muted">Laisse les heures vides pour un événement « journée entière ». Sans heure de fin, 1&nbsp;h par défaut.</p>
+      <div>
+        <label class="text-muted font-mono text-xs uppercase block mb-1.5">Notes</label>
+        <textarea x-model="calEventForm.notes" :disabled="calEventForm.auto" rows="3" placeholder="Notes libres…" class="w-full text-sm px-3 py-2 rounded-lg border border-line bg-bg disabled:opacity-60"></textarea>
+      </div>
+      <label x-show="calEventForm.id" class="flex items-center gap-2 text-sm text-ink cursor-pointer">
+        <input type="checkbox" x-model="calEventForm.done" class="accent-accent">
+        <span>Marquer comme <strong>fait</strong> <span class="text-muted">(retire l'alerte « en retard » ; sans effet sur Google)</span></span>
+      </label>
+    </div>
+    <div class="flex items-center gap-3 mt-6">
+      <button x-show="calEventForm.id" @click="deleteCalEvent()" class="text-sm text-red-500 hover:text-red-600 mr-auto">Supprimer</button>
+      <button @click="calEventModalOpen=false" class="text-sm border border-line rounded-lg px-4 py-2 hover:bg-bg transition" :class="calEventForm.id ? '' : 'ml-auto'">Annuler</button>
+      <button @click="saveCalEvent()" class="text-sm bg-accent text-white rounded-lg px-4 py-2 hover:opacity-90 transition" x-text="calEventForm.id ? 'Enregistrer' : 'Créer'"></button>
     </div>
   </div>
 </div>
@@ -1989,6 +2127,14 @@ function app() {
     // calendrier
     calMonth: new Date().getMonth(),
     calYear: new Date().getFullYear(),
+    // Événements du Studio matérialisés (collection users/{uid}/calendarEvents).
+    // Source unique de la vue calendrier pour les types tournage/relance/deadline,
+    // et base de la future synchro Google (chaque doc porte googleEventId/syncStatus).
+    calEvents: [],
+    // Modal de création/édition d'un événement Studio « manuel » (auto:false),
+    // ouvert au clic sur un jour du calendrier ou sur un événement manuel existant.
+    calEventModalOpen: false,
+    calEventForm: { id:null, type:'tournage', title:'', date:'', startTime:'', endTime:'', notes:'', auto:false, done:false },
 
     // settings
     settings: { profileName:'Moustikprod', billingInfo:'', prenom:'Romain', nom:'ANDRE', nomCommercial:'Moustikprod', siret:'89033460000040', ville:'Montpellier', emailPro:'contact@moustikprod.fr', scenarioInstructions:'' },
@@ -1999,11 +2145,22 @@ function app() {
     // toasts
     toasts: [],
 
+    // Google Calendar (T3) — état de connexion lu depuis /api/google/status.
+    // Ne contient JAMAIS le refresh token (serveur-only).
+    googleCal: { connected:false, calendarId:'primary', connectedAt:null, lastSyncAt:null, loading:false, busy:false, syncing:false },
+    // Événements Google (TOUS les agendas) remontés en LECTURE SEULE à chaque
+    // sync (T4/T5). Éphémères : jamais stockés en Firestore, re-lus à chaque
+    // synchro. Chaque event porte la couleur de son agenda. googleCalendarsLegend
+    // = liste des agendas lus (pour la légende couleur sous le calendrier).
+    googleReadEvents: [],
+    googleCalendarsLegend: [],
+
     init() {
       this.loadSettings();
       this.bindShortcuts();
       this.initFirebase();
       this.handleDeepLinkParams();
+      this.handleGcalReturn();
     },
     // Supporte les liens du type /nouveau-projet?titre=...&type=...&contexte=...
     // (utile pour des liens externes ou des intégrations qui veulent pré-remplir
@@ -2056,6 +2213,7 @@ function app() {
               await this.loadData();
               this.loadScenarioInstructionsDoc();
               this.loadSuggestions();
+              this.loadGoogleStatus();
             }
           });
         } else {
@@ -2168,6 +2326,12 @@ function app() {
         this.loadAutorisations();
         this.loadContrats();
         this.loadCatalogue();
+        // Charge les événements calendrier déjà matérialisés, puis réconcilie une
+        // fois pour rattraper les projets existants (deadline/tournage/relances
+        // saisis avant l'introduction de la collection). La réconciliation
+        // n'écrit que les deltas, donc c'est un no-op aux chargements suivants.
+        await this.loadCalEvents();
+        this.reconcileAllCalendarEvents();
         this.handleOpenProjectDeepLink();
         this.syncStatus = 'ok';
         this.lastSyncAt = new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
@@ -2268,6 +2432,14 @@ function app() {
         type: data.typeVideo || 'Autre',
         budget: data.budgetStudio || '',
         deadline: data.deadlineStudio || '',
+        shootDate: data.shootDate || '',
+        shootStartTime: data.shootStartTime || '',
+        shootEndTime: data.shootEndTime || '',
+        shootDone: !!data.shootDone,
+        deadlineStartTime: data.deadlineStartTime || '',
+        deadlineEndTime: data.deadlineEndTime || '',
+        deadlineDone: !!data.deadlineDone,
+        relances: Array.isArray(data.relances) ? data.relances : [],
         status: this.normalizeStatus(data.statutStudio || 'brief'),
         statusHistory: Array.isArray(data.statusHistory) ? data.statusHistory : [],
         progress: data.progress || 0,
@@ -2350,6 +2522,14 @@ function app() {
           secteurClient: project.secteurClient || '',
           budgetStudio: project.budget,
           deadlineStudio: project.deadline,
+          shootDate: project.shootDate || null,
+          shootStartTime: project.shootStartTime || '',
+          shootEndTime: project.shootEndTime || '',
+          shootDone: !!project.shootDone,
+          deadlineStartTime: project.deadlineStartTime || '',
+          deadlineEndTime: project.deadlineEndTime || '',
+          deadlineDone: !!project.deadlineDone,
+          relances: project.relances || [],
           progress: project.progress,
           pitch: project.pitch || '',
           idees: project.idees || '',
@@ -2380,6 +2560,10 @@ function app() {
           dateCreation: project.dateCreation || new Date().toISOString(),
         };
         await this.db.collection('users').doc(this.user.uid).collection('projets').doc(project.id).set(docData, { merge:true });
+        // Matérialise/rafraîchit les événements calendrier dérivés du projet
+        // (tournage, deadline, relances). Non bloquant et silencieux : un échec
+        // ne doit pas remonter comme une erreur de sauvegarde du projet lui-même.
+        this.syncProjectCalendarEvents(project).catch(e => console.error('syncProjectCalendarEvents error', e));
         this.syncStatus = 'ok';
         this.lastSyncAt = new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
       } catch(e) {
@@ -2451,6 +2635,111 @@ function app() {
         ...options,
         headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${idToken}`, ...(options.headers||{}) },
       });
+    },
+
+    // ---------- GOOGLE CALENDAR (T3) ----------
+    // Lit l'état de connexion (sans jamais recevoir le refresh token, qui reste
+    // serveur-only). Appelé après authentification et au retour du callback.
+    async loadGoogleStatus() {
+      if (!this.db || !this.user) return;
+      this.googleCal.loading = true;
+      try {
+        const res = await this.apiFetch('/api/google/status');
+        if (res.ok) {
+          const s = await res.json();
+          this.googleCal = { ...this.googleCal, connected: !!s.connected, calendarId: s.calendarId || 'primary', connectedAt: s.connectedAt || null, lastSyncAt: s.lastSyncAt || null };
+        }
+      } catch(e) {
+        console.error('loadGoogleStatus error', e);
+      } finally {
+        this.googleCal.loading = false;
+      }
+    },
+    // Démarre le flow : le serveur renvoie l'URL de consentement (avec le state),
+    // on redirige le navigateur. Le refresh token est capté côté serveur au callback.
+    async connectGoogleCalendar() {
+      this.googleCal.busy = true;
+      try {
+        const res = await this.apiFetch('/api/google/auth');
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.url) {
+          this.toast(data.error || 'Impossible de démarrer la connexion Google', 'error');
+          this.googleCal.busy = false;
+          return;
+        }
+        window.location.href = data.url; // redirection vers Google (pas de retour ici)
+      } catch(e) {
+        this.toast('Erreur réseau lors de la connexion Google', 'error');
+        this.googleCal.busy = false;
+      }
+    },
+    async disconnectGoogleCalendar() {
+      if (!confirm('Déconnecter Google Calendar ? Le refresh token sera révoqué et effacé côté serveur.')) return;
+      this.googleCal.busy = true;
+      try {
+        const res = await this.apiFetch('/api/google/disconnect', { method:'POST' });
+        if (res.ok) {
+          this.googleCal = { ...this.googleCal, connected:false, connectedAt:null, lastSyncAt:null };
+          this.toast('Google Calendar déconnecté');
+        } else {
+          const d = await res.json().catch(() => ({}));
+          this.toast(d.error || 'Erreur de déconnexion', 'error');
+        }
+      } catch(e) {
+        this.toast('Erreur réseau lors de la déconnexion', 'error');
+      } finally {
+        this.googleCal.busy = false;
+      }
+    },
+    // Toast au retour du callback (/?gcal=...), puis nettoie l'URL. Le rafraîchissement
+    // du statut connecté se fait via loadGoogleStatus une fois l'auth prête.
+    handleGcalReturn() {
+      const params = new URLSearchParams(location.search);
+      const g = params.get('gcal');
+      if (!g) return;
+      const map = {
+        connecte:     ['Google Calendar connecté ✓', 'success'],
+        refus:        ['Connexion Google annulée', 'error'],
+        sans_refresh: ['Google n\'a pas renvoyé de refresh token — déconnecte puis reconnecte', 'error'],
+        config:       ['Configuration OAuth Google incomplète (variables Vercel)', 'error'],
+        erreur:       ['Échec de la connexion Google — réessaie', 'error'],
+      };
+      const [msg, type] = map[g] || ['Retour Google Calendar', 'success'];
+      this.toast(msg, type);
+      params.delete('gcal');
+      const qs = params.toString();
+      history.replaceState({}, '', location.pathname + (qs ? '?' + qs : ''));
+    },
+    // Synchro manuelle Studio ↔ Google (T4). Pousse les calendarEvents non
+    // synchro vers l'agenda dédié + relit les dispos du primary sur 3 mois.
+    async syncCalendar() {
+      if (!this.googleCal.connected) { this.toast('Connecte d\'abord Google Calendar (Réglages)', 'error'); return; }
+      if (this.googleCal.syncing) return;
+      this.googleCal.syncing = true;
+      try {
+        const res = await this.apiFetch('/api/calendar/sync', { method:'POST' });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          // Token révoqué/expiré → l'UI repasse en déconnecté pour inviter à reconnecter.
+          if (d.error === 'reauth') { this.googleCal.connected = false; }
+          this.toast(d.message || 'Erreur de synchronisation', 'error');
+          return;
+        }
+        // Recharge les events locaux (googleEventId/syncStatus mis à jour côté serveur).
+        await this.loadCalEvents();
+        this.googleReadEvents = Array.isArray(d.googleEvents) ? d.googleEvents : [];
+        this.googleCalendarsLegend = Array.isArray(d.calendars) ? d.calendars : [];
+        this.googleCal.lastSyncAt = d.lastSyncAt || this.googleCal.lastSyncAt;
+        const parts = [`${(d.pushed||0) + (d.updated||0)} événement(s) synchronisé(s)`];
+        if (d.failed) parts.push(`${d.failed} en erreur`);
+        parts.push(`${d.imported||0} dispo(s) importée(s)`);
+        if (d.importError) parts.push('(lecture agenda perso indisponible)');
+        this.toast(parts.join(', '), d.failed ? 'error' : 'success');
+      } catch(e) {
+        this.toast('Erreur réseau lors de la synchro', 'error');
+      } finally {
+        this.googleCal.syncing = false;
+      }
     },
     // Avec le thinking activé, content[] contient un ou plusieurs blocs
     // 'thinking' AVANT le bloc 'text' final (parfois plusieurs blocs 'text'
@@ -2840,6 +3129,8 @@ Moustikprod`;
         secteurClient: this.newProject.secteurClient || '',
         budget: this.newProject.budget,
         deadline: this.newProject.deadline,
+        shootDate: '',
+        relances: [],
         status: 'devis-a-faire',
         statusHistory: [{ slug: 'devis-a-faire', at: new Date().toISOString() }],
         progress: 5,
@@ -4372,7 +4663,9 @@ FORMAT DE SORTIE :
       const in7 = new Date(now.getTime() + 7*24*60*60*1000);
       const todayStr = now.toISOString().slice(0,10);
       return this.calendarEvents()
-        .filter(e => !e.done)
+        // Volet 1 : QUE les événements Moustikprod (exclut les dispos Google
+        // lecture seule) ; et pas les événements « faits ».
+        .filter(e => !e.done && e.source !== 'google')
         .map(e => ({ ...e, overdue: e.date < todayStr, dateLabel: new Date(e.date+'T00:00:00').toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'}) + (e.date < todayStr ? ' — en retard' : '') }))
         .filter(e => e.overdue || new Date(e.date+'T00:00:00') <= in7)
         .sort((a,b) => a.date.localeCompare(b.date))
@@ -4665,27 +4958,402 @@ FORMAT DE SORTIE :
       this.saveSettings();
     },
 
+    // ---------- CALENDRIER : collection calendarEvents ----------
+    calEventsCol() {
+      return this.db.collection('users').doc(this.user.uid).collection('calendarEvents');
+    },
+    async loadCalEvents() {
+      if (!this.db || !this.user) return;
+      try {
+        const snap = await this.calEventsCol().get();
+        this.calEvents = snap.docs.map(d => d.data());
+      } catch(e) {
+        console.error('Firestore loadCalEvents error', e);
+      }
+    },
+    // Recalcule les événements « auto » (dérivés d'un projet) et les aligne sur
+    // la collection : upsert des désirés qui ont changé, suppression des périmés
+    // (tournage annulé, deadline livrée, relance faite/supprimée). Idempotent grâce
+    // à des IDs déterministes ; n'écrit que les deltas pour rester peu coûteux.
+    // Les événements créés à la main (auto !== true) ne sont jamais touchés ici.
+    async syncProjectCalendarEvents(project) {
+      if (!this.db || !this.user || !project) return;
+      // Garde : ne jamais (re)matérialiser un projet qui n'est plus dans la liste
+      // (ex. suppression en cours) — sinon on ressusciterait ses événements.
+      if (!this.projects.some(p => p.id === project.id)) return;
+      const done = ['livre','archive'].includes(project.status);
+      const desired = [];
+      if (project.shootDate) {
+        desired.push({ id:`evt_shoot_${project.id}`, type:'tournage', date:project.shootDate, startTime:project.shootStartTime||'', endTime:project.shootEndTime||'', title:`Tournage – ${project.title||'Projet'}`, notes:project.lieu||'', done: !!project.shootDone });
+      }
+      if (project.deadline && !done) {
+        desired.push({ id:`evt_deadline_${project.id}`, type:'deadline', date:project.deadline, startTime:project.deadlineStartTime||'', endTime:project.deadlineEndTime||'', title:`Deadline – ${project.title||'Projet'}`, notes:'', done: !!project.deadlineDone });
+      }
+      // Les relances « effectuées » (r.done) sont désormais MATÉRIALISÉES avec
+      // done:true (grisées, conservées dans Google) au lieu d'être retirées —
+      // « fait » est un état interne, pas une suppression.
+      (project.relances || []).forEach((r, i) => {
+        if (r && r.date) {
+          desired.push({ id:`evt_relance_${project.id}_${i}`, type:'relance', date:r.date, startTime:r.startTime||'', endTime:r.endTime||'', title:`Relance – ${project.title||'Projet'}`, notes:r.note||'', done: !!r.done });
+        }
+      });
+
+      const now = new Date().toISOString();
+      const desiredIds = new Set(desired.map(d => d.id));
+      const ops = [];
+
+      for (const d of desired) {
+        const existing = this.calEvents.find(e => e.id === d.id);
+        // On sépare « contenu » (date/heure/titre/notes → affecte Google, repasse
+        // syncStatus à local) de « done » (état interne : persisté SANS toucher la
+        // synchro Google — cf. Q3).
+        const contentChanged = !existing
+          || existing.date !== d.date
+          || (existing.startTime || '') !== (d.startTime || '')
+          || (existing.endTime || '') !== (d.endTime || '')
+          || existing.title !== d.title
+          || (existing.notes || '') !== (d.notes || '');
+        const doneChanged = !existing || (!!existing.done !== !!d.done);
+        if (existing && !contentChanged && !doneChanged) continue; // rien à écrire
+        const doc = {
+          id: d.id,
+          type: d.type,
+          projectId: project.id,
+          title: d.title,
+          date: d.date,
+          startTime: d.startTime || '',
+          endTime: d.endTime || '',
+          endDate: existing?.endDate || null,
+          notes: d.notes || '',
+          done: !!d.done,
+          auto: true,
+          // Une modif du CONTENU invalide la synchro Google (le doc devra être
+          // re-poussé) ; « done » seul ne la touche pas. googleEventId préservé.
+          googleEventId: existing?.googleEventId || null,
+          syncStatus: contentChanged ? 'local' : (existing?.syncStatus || 'local'),
+          createdAt: existing?.createdAt || now,
+          updatedAt: now,
+        };
+        ops.push(this.calEventsCol().doc(d.id).set(doc, { merge:true }).then(() => doc));
+      }
+
+      // Suppression des événements auto de ce projet qui ne sont plus désirés
+      // (T6) : Google d'abord (agenda dédié), puis Firestore. Si la suppression
+      // Google échoue (hors 404), on garde le doc en erreur au lieu d'orphelin.
+      const stale = this.calEvents.filter(e => e.auto && e.projectId === project.id && !desiredIds.has(e.id));
+      for (const e of stale) {
+        ops.push((async () => {
+          if (e.googleEventId) {
+            const r = await this.deleteGoogleEvent(e.googleEventId);
+            if (!r.ok) {
+              await this.calEventsCol().doc(e.id).set({ syncStatus:'error', syncError:r.error, updatedAt: now }, { merge:true }).catch(() => {});
+              return { _error: e.id, error: r.error };
+            }
+          }
+          await this.calEventsCol().doc(e.id).delete();
+          return { _deleted: e.id };
+        })());
+      }
+
+      const results = await Promise.all(ops);
+      // Reflète les changements en mémoire pour rafraîchir la vue sans reload.
+      for (const r of results) {
+        if (!r) continue;
+        if (r._deleted) { this.calEvents = this.calEvents.filter(e => e.id !== r._deleted); continue; }
+        if (r._error) { const j = this.calEvents.findIndex(e => e.id === r._error); if (j >= 0) { this.calEvents[j].syncStatus = 'error'; this.calEvents[j].syncError = r.error; } continue; }
+        const idx = this.calEvents.findIndex(e => e.id === r.id);
+        if (idx >= 0) this.calEvents[idx] = r; else this.calEvents.push(r);
+      }
+    },
+    async reconcileAllCalendarEvents() {
+      for (const p of this.projects) {
+        try { await this.syncProjectCalendarEvents(p); }
+        catch(e) { console.error('reconcile calEvents error', e); }
+      }
+    },
+    // Supprime les événements calendrier (auto ou manuels) rattachés à un projet
+    // effacé, pour ne pas laisser d'orphelins dans la collection.
+    async purgeProjectCalendarEvents(projectId) {
+      if (!this.db || !this.user) return;
+      const orphans = this.calEvents.filter(e => e.projectId === projectId);
+      let googleFails = 0;
+      for (const e of orphans) {
+        // T6 : suppression best-effort côté Google (le projet est de toute façon
+        // supprimé). On efface le doc local dans tous les cas, mais on compte les
+        // échecs Google pour prévenir l'utilisateur d'un éventuel orphelin.
+        if (e.googleEventId) { const r = await this.deleteGoogleEvent(e.googleEventId); if (!r.ok) googleFails++; }
+        try { await this.calEventsCol().doc(e.id).delete(); }
+        catch(err) { console.error('purge calEvent error', err); }
+      }
+      this.calEvents = this.calEvents.filter(e => e.projectId !== projectId);
+      if (googleFails) this.toast(`${googleFails} événement(s) Google non supprimé(s) (agenda Moustikprod)`, 'error');
+    },
+
+    // ---------- CALENDRIER : événements manuels (T2) ----------
+    // Un clic sur un jour ouvre le modal pré-rempli à cette date pour créer un
+    // événement Studio autonome (auto:false, projectId:null). Ces événements ne
+    // sont jamais touchés par syncProjectCalendarEvents (qui ne gère que auto:true).
+    // Marque un événement Moustikprod « fait » / « non fait ». Source-aware :
+    // écrit au MÊME endroit quel que soit l'appelant (Dashboard ou calendrier) —
+    // projet pour les events auto (shootDone/deadlineDone/relances[i].done), doc
+    // pour les manuels. N'affecte PAS Google (état interne, cf. Q3).
+    async setEventDone(ev, done) {
+      if (!this.db || !this.user || !ev) return;
+      if (ev.source === 'google' || ev.readonly) return; // jamais les lecture seule
+      try {
+        if (ev.auto) {
+          const p = this.projects.find(pr => pr.id === ev.projectId);
+          if (!p) return;
+          if (ev.type === 'tournage') p.shootDone = done;
+          else if (ev.type === 'deadline') p.deadlineDone = done;
+          else if (ev.type === 'relance') { const i = Number(ev.id.split('_').pop()); if (p.relances && p.relances[i]) p.relances[i].done = done; }
+          await this.saveProjectDoc(p);
+          await this.syncProjectCalendarEvents(p);
+        } else {
+          await this.calEventsCol().doc(ev.id).set({ done, updatedAt: new Date().toISOString() }, { merge:true });
+          const i = this.calEvents.findIndex(e => e.id === ev.id);
+          if (i >= 0) this.calEvents[i].done = done;
+        }
+        this.toast(done ? 'Marqué fait ✓' : 'Marqué non fait');
+      } catch(e) {
+        console.error('setEventDone error', e);
+        this.toast('Erreur', 'error');
+      }
+    },
+    openCalEventCreate(dateStr) {
+      this.calEventForm = { id:null, type:'tournage', title:'', date: dateStr || new Date().toISOString().slice(0,10), startTime:'', endTime:'', notes:'', auto:false, done:false };
+      this.calEventModalOpen = true;
+    },
+    openCalEventEdit(id) {
+      const e = this.calEvents.find(ev => ev.id === id);
+      if (!e) return;
+      this.calEventForm = { id: e.id, type: e.type || 'tournage', title: e.title || '', date: (e.date||'').slice(0,10), startTime: e.startTime || '', endTime: e.endTime || '', notes: e.notes || '', auto: !!e.auto, done: !!e.done };
+      this.calEventModalOpen = true;
+    },
+    // Routage du clic sur une pastille : tout événement Studio (auto OU manuel)
+    // ouvre le modal d'édition ; les événements Google/signature (lecture seule)
+    // ouvrent le projet lié le cas échéant, jamais le modal.
+    onCalEventClick(ev) {
+      if (ev.source === 'studio') this.openCalEventEdit(ev.id);
+      else if (ev.projectId) this.openProjectById(ev.projectId);
+    },
+    async saveCalEvent() {
+      if (!this.db || !this.user) { this.toast('Connexion requise', 'error'); return; }
+      const f = this.calEventForm;
+      // Titre requis seulement pour un event manuel (les auto ont un titre dérivé du projet).
+      if ((!f.auto && !f.title.trim()) || !f.date) { this.toast('Titre et date obligatoires', 'error'); return; }
+      // Validation des heures : fin strictement après début (si les deux saisies).
+      if (f.startTime && f.endTime && f.endTime <= f.startTime) {
+        this.toast('L\'heure de fin doit être après le début', 'error'); return;
+      }
+      const id = f.id || ('evt_manual_' + Date.now());
+      const existing = this.calEvents.find(e => e.id === id);
+
+      // Cas AUTO (tournage/deadline/relance) : la fiche projet est la source de
+      // vérité. On répercute date/heures sur le PROJET, puis on re-matérialise le
+      // doc calEvent (syncStatus->local, googleEventId conservé) → cohérence
+      // bidirectionnelle Studio-interne + push de la modif au prochain sync.
+      if (existing && existing.auto) {
+        const p = this.projects.find(pr => pr.id === existing.projectId);
+        if (!p) { this.toast('Projet lié introuvable', 'error'); return; }
+        if (existing.type === 'tournage') { p.shootDate = f.date; p.shootStartTime = f.startTime || ''; p.shootEndTime = f.endTime || ''; p.shootDone = !!f.done; }
+        else if (existing.type === 'deadline') { p.deadline = f.date; p.deadlineStartTime = f.startTime || ''; p.deadlineEndTime = f.endTime || ''; p.deadlineDone = !!f.done; }
+        else if (existing.type === 'relance') {
+          const i = Number(existing.id.split('_').pop());
+          if (p.relances && p.relances[i]) { p.relances[i].date = f.date; p.relances[i].startTime = f.startTime || ''; p.relances[i].endTime = f.endTime || ''; p.relances[i].done = !!f.done; }
+        }
+        try {
+          await this.saveProjectDoc(p);
+          await this.syncProjectCalendarEvents(p);
+          this.calEventModalOpen = false;
+          this.toast('Événement et fiche projet mis à jour');
+        } catch(e) {
+          console.error('saveCalEvent (auto) error', e);
+          this.toast('Erreur d\'enregistrement', 'error');
+        }
+        return;
+      }
+
+      // Cas MANUEL : mise à jour directe du doc calEvents (une modif du contenu
+      // repasse syncStatus à 'local' pour forcer un re-push Google).
+      const now = new Date().toISOString();
+      const changed = !existing
+        || existing.date !== f.date
+        || (existing.startTime || '') !== (f.startTime || '')
+        || (existing.endTime || '') !== (f.endTime || '')
+        || existing.title !== f.title.trim()
+        || existing.type !== f.type
+        || (existing.notes || '') !== (f.notes || '');
+      const doc = {
+        id,
+        type: f.type,
+        projectId: existing?.projectId ?? null,
+        title: f.title.trim(),
+        date: f.date,
+        startTime: f.startTime || '',
+        endTime: f.endTime || '',
+        endDate: existing?.endDate || null,
+        notes: f.notes || '',
+        done: !!f.done,
+        auto: false,
+        googleEventId: existing?.googleEventId || null,
+        syncStatus: changed ? 'local' : (existing?.syncStatus || 'local'),
+        createdAt: existing?.createdAt || now,
+        updatedAt: now,
+      };
+      try {
+        await this.calEventsCol().doc(id).set(doc, { merge:true });
+        const idx = this.calEvents.findIndex(e => e.id === id);
+        if (idx >= 0) this.calEvents[idx] = doc; else this.calEvents.push(doc);
+        this.calEventModalOpen = false;
+        this.toast(existing ? 'Événement mis à jour' : 'Événement créé');
+      } catch(e) {
+        console.error('saveCalEvent error', e);
+        this.toast('Erreur d\'enregistrement', 'error');
+      }
+    },
+    // Supprime l'événement côté Google (agenda dédié uniquement, côté serveur).
+    // Garde-fou 2 : sans googleEventId (ou Google non connecté) → rien à faire,
+    // suppression purement locale. Renvoie { ok, error }.
+    async deleteGoogleEvent(googleEventId) {
+      if (!googleEventId || !this.googleCal.connected) return { ok: true };
+      try {
+        const res = await this.apiFetch('/api/calendar/delete', { method:'POST', body: JSON.stringify({ googleEventId }) });
+        const d = await res.json().catch(() => ({}));
+        return res.ok ? { ok: true } : { ok: false, error: d.message || 'Erreur suppression Google' };
+      } catch(e) {
+        return { ok: false, error: 'Erreur réseau' };
+      }
+    },
+    // Suppression synchronisée d'un doc calEvent : Google D'ABORD (garde-fou 4),
+    // puis Firestore. Si Google échoue (hors 404, géré comme succès côté serveur),
+    // on N'EFFACE PAS le local — on le garde en syncStatus:'error' pour éviter un
+    // orphelin inversé. Renvoie true si l'événement a bien été supprimé.
+    async removeCalEvent(ev) {
+      const r = await this.deleteGoogleEvent(ev.googleEventId);
+      if (!r.ok) {
+        try {
+          await this.calEventsCol().doc(ev.id).set({ syncStatus:'error', syncError:r.error, updatedAt:new Date().toISOString() }, { merge:true });
+          const i = this.calEvents.findIndex(e => e.id === ev.id);
+          if (i >= 0) { this.calEvents[i].syncStatus = 'error'; this.calEvents[i].syncError = r.error; }
+        } catch(_) {}
+        this.toast('Suppression Google échouée — événement conservé : ' + r.error, 'error');
+        return false;
+      }
+      try {
+        await this.calEventsCol().doc(ev.id).delete();
+        this.calEvents = this.calEvents.filter(e => e.id !== ev.id);
+        return true;
+      } catch(e) {
+        console.error('removeCalEvent local error', e);
+        this.toast('Erreur de suppression locale', 'error');
+        return false;
+      }
+    },
+    async deleteCalEvent() {
+      const id = this.calEventForm.id;
+      if (!id) { this.calEventModalOpen = false; return; }
+      const ev = this.calEvents.find(e => e.id === id);
+      if (!ev) { this.calEventModalOpen = false; return; }
+      // Garde-fou 1 : jamais un événement en lecture seule (dispos Google).
+      if (ev.source === 'google' || ev.readonly) { this.toast('Événement en lecture seule', 'error'); return; }
+
+      // Cas AUTO : supprimer = retirer le champ correspondant de la fiche projet,
+      // sinon l'événement serait recréé au prochain enregistrement. On supprime
+      // d'abord l'événement (Google + Firestore), puis on aligne la fiche projet.
+      if (ev.auto) {
+        const p = this.projects.find(pr => pr.id === ev.projectId);
+        const quoi = ev.type === 'tournage' ? 'la date de tournage' : ev.type === 'deadline' ? 'la deadline' : 'cette relance';
+        if (!confirm(`Cela retirera ${quoi} de la fiche projet et supprimera l'événement dans Google Calendar. Continuer ?`)) return;
+        const ok = await this.removeCalEvent(ev);
+        if (!ok) return; // échec Google → conservé en erreur, message déjà affiché
+        if (p) {
+          if (ev.type === 'tournage') { p.shootDate = ''; p.shootStartTime = ''; p.shootEndTime = ''; }
+          else if (ev.type === 'deadline') { p.deadline = ''; p.deadlineStartTime = ''; p.deadlineEndTime = ''; }
+          else if (ev.type === 'relance') { const i = Number(ev.id.split('_').pop()); if (p.relances && p.relances[i]) p.relances.splice(i, 1); }
+          await this.saveProjectDoc(p);
+        }
+        this.calEventModalOpen = false;
+        this.toast('Événement supprimé (fiche projet mise à jour)');
+        return;
+      }
+
+      // Cas MANUEL : suppression synchronisée directe.
+      if (!confirm('Supprimer cet événement ?')) return;
+      const ok = await this.removeCalEvent(ev);
+      if (!ok) return;
+      this.calEventModalOpen = false;
+      this.toast('Événement supprimé');
+    },
+
     // ---------- CALENDRIER ----------
     calTitle() {
       return new Date(this.calYear, this.calMonth, 1).toLocaleDateString('fr-FR', { month:'long', year:'numeric' }).replace(/^./, c => c.toUpperCase());
     },
     calPrev() { this.calMonth--; if (this.calMonth < 0) { this.calMonth = 11; this.calYear--; } },
     calNext() { this.calMonth++; if (this.calMonth > 11) { this.calMonth = 0; this.calYear++; } },
+    // Style visuel par type d'événement Studio. Un syncStatus 'error' force un
+    // rendu d'alerte (encadré rouge) quel que soit le type — cf. section 5 du CDC.
+    calTypeStyle(type) {
+      const map = {
+        tournage: { tag:'Tournage', icon:'🎥', cls:'bg-emerald-100 text-emerald-700' },
+        deadline: { tag:'Deadline', icon:'🎬', cls:'bg-accent/15 text-accent' },
+        relance:  { tag:'Relance',  icon:'✉️', cls:'bg-violet-100 text-violet-700' },
+      };
+      return map[type] || { tag:'Événement', icon:'📌', cls:'bg-slate-100 text-slate-600' };
+    },
     calendarEvents() {
       const evs = [];
-      for (const p of this.projects) {
-        if (p.deadline && !['livre','archive'].includes(p.status)) {
-          evs.push({ date: p.deadline, label: '🎬 ' + p.title, tag:'Deadline', cls:'bg-accent/15 text-accent', projectId: p.id, done: ['livre','archive'].includes(p.status) });
-        }
-        if (p.status === 'en-production' && p.deadline) {
-          evs.push({ date: p.deadline, label: '📷 En production — ' + p.title, tag:'Production', cls:'bg-amber-100 text-amber-700', projectId: p.id });
-        }
+      // Source principale : la collection matérialisée (tournage/relance/deadline
+      // + événements créés à la main). Chaque doc porte son syncStatus.
+      for (const e of this.calEvents) {
+        const st = this.calTypeStyle(e.type);
+        // Un événement « fait » : grisé/barré (pas de rouge « en retard »).
+        let cls = e.syncStatus === 'error' ? 'bg-red-100 text-red-700 ring-1 ring-red-400' : st.cls;
+        if (e.done) cls = 'bg-slate-100 text-slate-400 line-through';
+        const t = e.startTime ? String(e.startTime).slice(0, 5) + ' ' : '';
+        evs.push({
+          id: e.id,
+          type: e.type,
+          date: (e.date || '').slice(0, 10),
+          label: `${e.done ? '✓ ' : ''}${st.icon} ${t}${e.title}`,
+          tag: st.tag,
+          cls,
+          projectId: e.projectId || null,
+          source: 'studio',
+          auto: !!e.auto,
+          syncStatus: e.syncStatus || 'local',
+          done: !!e.done,
+        });
       }
+      // Overlay dérivé, lecture seule et non matérialisé : expiration des demandes
+      // de signature (hors périmètre synchro Google, purement informatif).
       for (const a of this.autorisations) {
         if (a.statut === 'envoyé' && a.signatureEnvoyeLe) {
           const exp = new Date(new Date(a.signatureEnvoyeLe).getTime() + 30*24*60*60*1000).toISOString().slice(0,10);
-          evs.push({ date: exp, label: '✍️ Expiration signature — ' + (a.prenom+' '+a.nom).trim(), tag:'Signature', cls:'bg-red-100 text-red-600', projectId: a.projetId || null });
+          evs.push({ date: exp, label: '✍️ Expiration signature — ' + (a.prenom+' '+a.nom).trim(), tag:'Signature', cls:'bg-red-100 text-red-600', projectId: a.projetId || null, source:'derived', auto:false, done:false });
         }
+      }
+      // Dispos Google (TOUS les agendas, LECTURE SEULE) : non cliquables, jamais
+      // modifiées par le Studio. Couleur reprise de chaque agenda Google pour
+      // distinguer Keolis / perso / etc. d'un coup d'œil.
+      for (const g of this.googleReadEvents) {
+        const date = (g.start || '').slice(0, 10);
+        if (!date) continue;
+        const bg = g.backgroundColor || '#e2e8f0';
+        const fg = g.foregroundColor || '#1e293b';
+        // Heure affichée si l'event Google est « timed » (start.dateTime → contient
+        // un 'T', ex. « Bus 1255 » Illévia). All-day → pas d'heure.
+        const gt = (g.start && g.start.includes('T')) ? g.start.slice(11, 16) + ' ' : '';
+        evs.push({
+          date,
+          label: gt + (g.title || '(sans titre)'),
+          tag: 'Google',
+          cls: '',
+          style: `background-color:${bg};color:${fg};opacity:.9`,
+          calendarSummary: g.calendarSummary || '',
+          projectId: null, source:'google', auto:false, readonly:true, done:false,
+        });
       }
       return evs;
     },
@@ -4705,7 +5373,7 @@ FORMAT DE SORTIE :
     upcomingEvents() {
       const todayStr = new Date().toISOString().slice(0,10);
       return this.calendarEvents()
-        .filter(e => !e.done)
+        .filter(e => !e.done && e.source !== 'google')
         .map(e => ({ ...e, overdue: e.date < todayStr, dateLabel: new Date(e.date + 'T00:00:00').toLocaleDateString('fr-FR', { day:'numeric', month:'short' }) + (e.date < todayStr ? ' — en retard' : '') }))
         .filter(e => e.overdue || (new Date(e.date) - new Date()) < 60*24*60*60*1000)
         .sort((a,b) => a.date.localeCompare(b.date))
@@ -4722,6 +5390,7 @@ FORMAT DE SORTIE :
         } catch(e) { /* continue même si Firestore échoue */ }
       }
       this.projects = this.projects.filter(pr => pr.id !== p.id);
+      this.purgeProjectCalendarEvents(p.id);
       this.saveProjects();
       this.deleteProjectConfirmOpen = false;
       this.projectPendingDelete = null;

@@ -1,6 +1,18 @@
 {
   "rewrites": [
     {
+      "source": "/api/google/:action",
+      "destination": "/api/google?action=:action"
+    },
+    {
+      "source": "/api/submit-signature",
+      "destination": "/api/sign"
+    },
+    {
+      "source": "/api/calendar/:action",
+      "destination": "/api/calendar?action=:action"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
@@ -27,9 +39,6 @@
       "memory": 256
     },
     "api/sign.js": {
-      "memory": 256
-    },
-    "api/submit-signature.js": {
       "memory": 256
     },
     "api/send-email.js": {
