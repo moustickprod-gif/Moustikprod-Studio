@@ -1100,60 +1100,6 @@ tailwind.config = {
         </div>
       </template>
 
-      <!-- ============ IDÉES ============ -->
-      <template x-if="view==='idees'">
-        <div x-transition.opacity.duration.150ms class="max-w-3xl">
-          <div>
-            <div class="flex items-center justify-between mb-4">
-              <p class="text-muted text-sm">Alimenté automatiquement chaque semaine — ou à la demande.</p>
-              <div class="flex gap-2">
-                <button @click="generateCompetitiveAnalysis()" class="bg-surface border border-line text-sm font-medium px-3 py-1.5 rounded-lg flex items-center gap-2 hover:border-accent/50 transition">
-                  <span x-show="competitiveLoading" class="spinner"></span> Analyse concurrentielle
-                </button>
-                <button @click="generateManualIdea()" class="bg-accent text-white text-sm font-medium px-3 py-1.5 rounded-lg flex items-center gap-2">
-                  <span x-show="manualIdeaLoading" class="spinner"></span> Générer maintenant
-                </button>
-              </div>
-            </div>
-            <p x-show="manualIdeaError" class="text-xs text-accent mb-3" x-text="manualIdeaError"></p>
-            <p x-show="competitiveError" class="text-xs text-accent mb-3" x-text="competitiveError"></p>
-            <div x-show="ideasLoading" class="text-muted text-sm mb-4">Chargement…</div>
-            <div x-show="!ideasLoading && ideasList.length===0" class="text-center py-20 text-muted">
-              Aucune étude pour l'instant. La tâche hebdomadaire alimentera cet onglet automatiquement, ou clique "Générer maintenant".
-            </div>
-            <div class="space-y-2">
-              <template x-for="(entry,idx) in ideasList" :key="entry.id">
-                <div class="bg-surface border border-line rounded-xl card-slide-enter overflow-hidden">
-                  <button @click="expandedIdeaId = (expandedIdeaId===entry.id ? null : entry.id)" class="w-full flex items-center justify-between gap-3 p-4 text-left">
-                    <div class="flex items-center gap-2 min-w-0">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0 text-muted transition-transform" :style="expandedIdeaId===entry.id ? 'transform:rotate(90deg)' : ''"><path d="M9 6l6 6-6 6"/></svg>
-                      <p class="font-display font-bold text-sm text-accent shrink-0" x-text="entry.weekLabel"></p>
-                      <span x-show="entry.type==='concurrence'" class="text-xs font-mono px-1.5 py-0.5 rounded bg-accent2/20 text-accent2 shrink-0">Concurrence</span>
-                      <p x-show="expandedIdeaId!==entry.id" class="text-muted text-xs truncate" x-text="(entry.idees||[]).length + ' idée(s)'"></p>
-                    </div>
-                    <span @click.stop="deleteIdea(entry.id)" class="text-xs text-muted hover:text-accent shrink-0">Supprimer</span>
-                  </button>
-                  <div x-show="expandedIdeaId===entry.id" class="px-5 pb-5">
-                    <div x-show="entry.etude" class="text-sm whitespace-pre-wrap mb-3" x-text="entry.etude"></div>
-                    <div x-show="entry.idees && entry.idees.length">
-                      <p class="text-accent2 font-mono text-xs mb-1 uppercase">💡 Idées</p>
-                      <ul class="list-disc pl-5 space-y-1 text-sm">
-                        <template x-for="(idea,i) in (entry.idees||[])" :key="i">
-                          <li class="flex items-start justify-between gap-3">
-                            <span x-text="idea" class="flex-1"></span>
-                            <button @click.stop="createProjectFromIdea(idea)" class="text-xs text-accent hover:underline shrink-0 whitespace-nowrap">→ Créer un projet</button>
-                          </li>
-                        </template>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              </template>
-            </div>
-          </div>
-        </div>
-      </template>
-
       <!-- ============ CLIENTS ============ -->
       <template x-if="view==='clients'">
         <div x-transition.opacity.duration.150ms>
@@ -1473,6 +1419,60 @@ tailwind.config = {
             </div>
             <p class="text-xs text-muted mb-3">Style, approche et contraintes de tournage appliqués à chaque scénario. Le format de sortie, lui, s'adapte au type de vidéo du projet. Laisser vide pour utiliser le texte par défaut.</p>
             <textarea x-model="settings.scenarioInstructions" @blur="saveSettings()" rows="14" :placeholder="scenarioInstructionsPlaceholder" class="w-full text-sm px-3 py-2 rounded-lg border border-line font-mono leading-relaxed"></textarea>
+          </div>
+
+          <!-- ===== Modèle : Contrat type ===== -->
+          <div class="bg-surface border border-line rounded-xl p-5">
+            <div class="flex items-start justify-between gap-3 mb-1">
+              <h3 class="font-display font-bold">Contrat type</h3>
+              <button @click="resetContratArticles()" class="text-xs text-muted hover:text-accent underline shrink-0 mt-0.5">Réinitialiser</button>
+            </div>
+            <p class="text-xs text-muted mb-2">Texte des articles du contrat. C'est la source utilisée par l'onglet Contrats pour générer le PDF et le lien de signature. Un champ par article ; tu peux en ajouter, en supprimer, en réordonner via le contenu.</p>
+            <p class="text-xs text-muted mb-3">Placeholders disponibles (remplacés à la génération) : <code class="text-[11px]">{{prestataire}} {{nomCommercial}} {{siret}} {{emailPro}} {{ville}} {{date}} {{clientNom}} {{clientEntreprise}} {{clientSiret}} {{projetTitre}} {{typePrestation}} {{montantHT}} {{acomptePct}} {{acompteEur}} {{soldeEur}} {{nombreRevisions}} {{delaiPaiement}} {{cessionDuree}} {{cessionTerritoire}} {{cessionSupports}} {{cessionUsage}} {{deadline}}</code></p>
+            <div class="space-y-3">
+              <template x-for="(art, i) in settings.contratArticles" :key="i">
+                <div class="border border-line rounded-lg p-3 bg-bg">
+                  <div class="flex items-center gap-2 mb-2">
+                    <input x-model="art.titre" placeholder="Titre de l'article (ex : Article 1 — Objet)" class="flex-1 text-sm px-3 py-1.5 rounded-lg border border-line font-medium">
+                    <button @click="removeContratArticle(i)" class="text-xs text-muted hover:text-red-500 px-2 shrink-0" title="Supprimer cet article">✕</button>
+                  </div>
+                  <textarea x-model="art.corps" rows="4" placeholder="Corps de l'article…" class="w-full text-sm px-3 py-2 rounded-lg border border-line font-mono leading-relaxed"></textarea>
+                  <label class="flex items-center gap-2 mt-2 text-xs text-muted cursor-pointer">
+                    <input type="checkbox" x-model="art.b2cOnly" class="rounded border-line">
+                    Uniquement pour les contrats Particulier (B2C)
+                  </label>
+                </div>
+              </template>
+            </div>
+            <div class="flex items-center gap-2 mt-3">
+              <button @click="addContratArticle()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">+ Ajouter un article</button>
+              <button @click="saveTemplates()" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg ml-auto">Sauvegarder</button>
+            </div>
+          </div>
+
+          <!-- ===== Modèle : Autorisation de droit à l'image ===== -->
+          <div class="bg-surface border border-line rounded-xl p-5">
+            <div class="flex items-start justify-between gap-3 mb-1">
+              <h3 class="font-display font-bold">Autorisation de droit à l'image</h3>
+              <button @click="resetAutorisationArticles()" class="text-xs text-muted hover:text-accent underline shrink-0 mt-0.5">Réinitialiser</button>
+            </div>
+            <p class="text-xs text-muted mb-2">Texte de la clause d'autorisation. C'est la source utilisée par l'onglet Droit à l'image pour générer le document et le lien de signature.</p>
+            <p class="text-xs text-muted mb-3">Placeholders disponibles : <code class="text-[11px]">{{prestataire}} {{nomCommercial}} {{siret}} {{emailPro}} {{projetTitre}} {{usages}} {{territoire}} {{duree}} {{remuneration}} {{signataire}} {{lieu}} {{date}}</code></p>
+            <div class="space-y-3">
+              <template x-for="(art, i) in settings.autorisationArticles" :key="i">
+                <div class="border border-line rounded-lg p-3 bg-bg">
+                  <div class="flex items-center gap-2 mb-2">
+                    <input x-model="art.titre" placeholder="Titre (optionnel)" class="flex-1 text-sm px-3 py-1.5 rounded-lg border border-line font-medium">
+                    <button @click="removeAutorisationArticle(i)" class="text-xs text-muted hover:text-red-500 px-2 shrink-0" title="Supprimer">✕</button>
+                  </div>
+                  <textarea x-model="art.corps" rows="4" placeholder="Corps de la clause…" class="w-full text-sm px-3 py-2 rounded-lg border border-line font-mono leading-relaxed"></textarea>
+                </div>
+              </template>
+            </div>
+            <div class="flex items-center gap-2 mt-3">
+              <button @click="addAutorisationArticle()" class="text-xs bg-surface border border-line px-3 py-1.5 rounded-lg hover:border-accent/50">+ Ajouter un article</button>
+              <button @click="saveTemplates()" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg ml-auto">Sauvegarder</button>
+            </div>
           </div>
 
           <div class="bg-surface border border-line rounded-xl p-5">
@@ -1998,6 +1998,72 @@ CLIENTS : artisans, restaurateurs, acteurs culturels, startups tech. Des gens co
 
 CONTRAINTES DE PRODUCTION : tournage en solo, matériel léger (caméra de poche stabilisée + smartphone, micros sans fil), quelques heures sur place. Ne jamais proposer de plans nécessitant plusieurs opérateurs, du matériel lourd, des figurants, ou des conditions impossibles à réunir seul. Les scénarios doivent être tournables tels quels.`;
 
+// Corps des documents juridiques, éditable dans Réglages (settings.contratArticles /
+// settings.autorisationArticles). Ces tableaux sont la SOURCE UNIQUE du texte généré
+// dans les onglets Contrats et Droit à l'image : texteContratHtml / texteAutorisationHtml
+// bouclent dessus. Ces constantes ne servent que de repli / valeur de réinitialisation.
+// Les valeurs dynamiques (montant, parties, dates…) sont des placeholders {{clé}}
+// remplacés à la génération — voir applyTemplate() et les maps `vals` des deux fonctions.
+// b2cOnly:true => article affiché uniquement pour les contrats de type « b2c » (particulier).
+const CONTRAT_ARTICLES_DEFAUT = [
+  { titre:'Article 1 — Objet et description de la mission', b2cOnly:false, corps:
+`Le Prestataire s'engage à réaliser la prestation suivante : {{typePrestation}} pour le projet « {{projetTitre}} ».
+Montant total : {{montantHT}} € HT.
+TVA non applicable, art. 293 B du CGI.` },
+  { titre:'Article 2 — Livrables', b2cOnly:false, corps:
+`— Format de livraison : MP4 H.264
+— Résolution : 4K / 1080p selon plateforme
+— Nombre de révisions incluses : {{nombreRevisions}}
+— Livraison via lien de téléchargement sécurisé` },
+  { titre:'Article 3 — Planning', b2cOnly:false, corps:
+`— Date de livraison visée : {{deadline}}` },
+  { titre:'Article 4 — Rémunération et conditions de paiement', b2cOnly:false, corps:
+`— Montant total HT : {{montantHT}} €
+— Acompte à la signature ({{acomptePct}}%) : {{acompteEur}} €
+— Solde à la livraison : {{soldeEur}} €
+— Mode de paiement : virement bancaire
+— Délai de paiement : {{delaiPaiement}} jours
+— Pénalités de retard : taux légal BCE + 10 points + indemnité forfaitaire 40€` },
+  { titre:"Article 5 — Cession de droits d'auteur", b2cOnly:false, corps:
+`Le Prestataire cède au Client les droits d'exploitation de l'œuvre pour :
+— Durée : {{cessionDuree}}
+— Territoire : {{cessionTerritoire}}
+— Support(s) : {{cessionSupports}}
+— Usage : {{cessionUsage}}
+Les droits moraux restent la propriété exclusive du Prestataire.` },
+  { titre:'Article 6 — Obligations du Client', b2cOnly:false, corps:
+`Le Client s'engage à fournir tous les éléments nécessaires dans les délais convenus, à désigner un interlocuteur unique, et à régler les sommes dues aux échéances prévues.` },
+  { titre:'Article 7 — Confidentialité', b2cOnly:false, corps:
+`Les deux parties s'engagent à la confidentialité de toutes les informations échangées dans le cadre de ce contrat.` },
+  { titre:'Article 8 — Résiliation', b2cOnly:false, corps:
+`— Annulation après signature : l'acompte reste acquis au Prestataire
+— Annulation moins de 7 jours avant le tournage : 50% du montant total dû
+— Annulation le jour J : 100% du montant total dû` },
+  { titre:'Article 9 — Litiges', b2cOnly:false, corps:
+`Les parties s'engagent à rechercher une solution amiable avant tout recours judiciaire.
+Tribunal compétent : Tribunal de Commerce de {{ville}}.` },
+  { titre:'Article 10 — Droit de rétractation', b2cOnly:true, corps:
+`Conformément à l'article L221-18 du Code de la consommation, le Client dispose d'un délai de 14 jours à compter de la signature du présent contrat pour exercer son droit de rétractation, sauf si la prestation a commencé avec son accord exprès.` },
+  { titre:'Article 11 — Médiation consommation', b2cOnly:true, corps:
+`En cas de litige non résolu à l'amiable, le Client peut recourir gratuitement à un médiateur de la consommation conformément à l'article L616-1 du Code de la consommation.` },
+  { titre:'Article 12 — Données personnelles (RGPD)', b2cOnly:true, corps:
+`Les données personnelles du Client sont collectées et conservées pour la durée d'exécution du contrat, augmentée de 3 ans à des fins probatoires. Le Client dispose d'un droit d'accès, de rectification et de suppression en contactant : {{emailPro}}` },
+];
+
+const AUTORISATION_ARTICLES_DEFAUT = [
+  { titre:"Objet de l'autorisation", corps:
+`J'autorise {{prestataire}} ({{nomCommercial}}, SIRET {{siret}}) à :
+— Filmer, photographier et enregistrer mon image et ma voix
+— Utiliser ces enregistrements dans le cadre du projet : {{projetTitre}}
+— Diffuser sur : {{usages}}
+— Territoire : {{territoire}}
+— Durée : {{duree}}
+Autorisation accordée à titre {{remuneration}}.` },
+  { titre:'Droits', corps:
+`— Droit de retrait avant toute diffusion
+— Données traitées conformément au RGPD — contact : {{emailPro}}` },
+];
+
 function app() {
   return {
     // auth
@@ -2013,7 +2079,6 @@ function app() {
       { id:'dashboard', label:'Dashboard', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>' },
       { id:'projets', label:'Projets', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M2 10h20M6 6v4M11 6v4M16 6v4"/></svg>' },
       { id:'studio', label:'Studio IA', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.5 6.5L21 11l-6.5 2.5L12 20l-2.5-6.5L3 11l6.5-2.5z"/></svg>' },
-      { id:'idees', label:'Idées', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7V17h8v-2.3A7 7 0 0012 2z"/></svg>' },
       { id:'clients', label:'Clients', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0116 0v1"/></svg>' },
       { id:'calendrier', label:'Calendrier', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>' },
       { id:'contrats', label:'Contrats', icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>' },
@@ -2025,9 +2090,6 @@ function app() {
     // data
     projects: [],
     allClients: [],
-    ideasList: [], ideasLoading: false, expandedIdeaId: null,
-    manualIdeaLoading: false, manualIdeaError: '',
-    competitiveLoading: false, competitiveError: '',
     db: null,
     statusFilter: 'Tous',
     searchQuery: '',
@@ -2137,7 +2199,7 @@ function app() {
     calEventForm: { id:null, type:'tournage', title:'', date:'', startTime:'', endTime:'', notes:'', auto:false, done:false },
 
     // settings
-    settings: { profileName:'Moustikprod', billingInfo:'', prenom:'Romain', nom:'ANDRE', nomCommercial:'Moustikprod', siret:'89033460000040', ville:'Montpellier', emailPro:'contact@moustikprod.fr', scenarioInstructions:'' },
+    settings: { profileName:'Moustikprod', billingInfo:'', prenom:'Romain', nom:'ANDRE', nomCommercial:'Moustikprod', siret:'89033460000040', ville:'Montpellier', emailPro:'contact@moustikprod.fr', scenarioInstructions:'', contratArticles:[], autorisationArticles:[] },
 
     // Aperçu du texte par défaut dans le champ Réglages tant qu'il est vide.
     scenarioInstructionsPlaceholder: SCENARIO_INSTRUCTIONS_DEFAUT,
@@ -2157,6 +2219,7 @@ function app() {
 
     init() {
       this.loadSettings();
+      this.seedTemplatesIfEmpty();
       this.bindShortcuts();
       this.initFirebase();
       this.handleDeepLinkParams();
@@ -2283,8 +2346,13 @@ function app() {
     async saveScenarioInstructionsDoc() {
       if (!this.db || !this.user) return;
       try {
+        // Même doc de config : instructions scénario + modèles contrat/autorisation.
         await this.db.collection('users').doc(this.user.uid).collection('data').doc('settings')
-          .set({ scenarioInstructions: this.settings.scenarioInstructions || '' }, { merge:true });
+          .set({
+            scenarioInstructions: this.settings.scenarioInstructions || '',
+            contratArticles: Array.isArray(this.settings.contratArticles) ? this.settings.contratArticles : [],
+            autorisationArticles: Array.isArray(this.settings.autorisationArticles) ? this.settings.autorisationArticles : [],
+          }, { merge:true });
       } catch(e) {
         console.error('Firestore saveScenarioInstructions error', e);
       }
@@ -2295,11 +2363,14 @@ function app() {
       if (!this.db || !this.user) return;
       try {
         const snap = await this.db.collection('users').doc(this.user.uid).collection('data').doc('settings').get();
-        const remote = snap.exists ? (snap.data() || {}).scenarioInstructions : '';
-        if (typeof remote === 'string' && remote.trim()) {
-          this.settings.scenarioInstructions = remote;
-          localStorage.setItem('mp_studio_settings', JSON.stringify(this.settings));
-        }
+        const data = snap.exists ? (snap.data() || {}) : {};
+        const remote = data.scenarioInstructions;
+        if (typeof remote === 'string' && remote.trim()) this.settings.scenarioInstructions = remote;
+        if (Array.isArray(data.contratArticles) && data.contratArticles.length) this.settings.contratArticles = data.contratArticles;
+        if (Array.isArray(data.autorisationArticles) && data.autorisationArticles.length) this.settings.autorisationArticles = data.autorisationArticles;
+        // Amorce l'éditeur avec les défauts si rien côté Firestore ni local.
+        this.seedTemplatesIfEmpty();
+        localStorage.setItem('mp_studio_settings', JSON.stringify(this.settings));
       } catch(e) {
         console.error('Firestore loadScenarioInstructions error', e);
       }
@@ -2322,7 +2393,6 @@ function app() {
         this.projects = projetsSnap.docs.map(d => this.projetDocToStudio(d.data()));
         const h = localStorage.getItem('mp_studio_history');
         if (h) this.studioHistory = JSON.parse(h);
-        this.loadIdeas();
         this.loadAutorisations();
         this.loadContrats();
         this.loadCatalogue();
@@ -2339,87 +2409,6 @@ function app() {
         console.error('Firestore loadData error', e);
         this.syncStatus = 'error';
         this.toast('Erreur de chargement des données', 'error');
-      }
-    },
-    // Études + idées générées chaque semaine par la tâche Cowork, via
-    // /api/ideas-ingest.js (écrit directement dans Firestore côté serveur).
-    async loadIdeas() {
-      this.ideasLoading = true;
-      try {
-        const snap = await this.db.collection('users').doc(this.user.uid).collection('idees').orderBy('weekStart', 'desc').get();
-        this.ideasList = snap.docs.map(d => d.data());
-        if (this.ideasList.length) this.expandedIdeaId = this.ideasList[0].id;
-      } catch(e) {
-        console.error('Firestore loadIdeas error', e);
-      } finally {
-        this.ideasLoading = false;
-      }
-    },
-    async deleteIdea(id) {
-      if (!confirm('Supprimer cette étude ?')) return;
-      try {
-        await this.db.collection('users').doc(this.user.uid).collection('idees').doc(id).delete();
-        this.ideasList = this.ideasList.filter(e => e.id !== id);
-        this.toast('Étude supprimée');
-      } catch(e) {
-        this.toast('Erreur de suppression', 'error');
-      }
-    },
-    weekLabelNow() {
-      const now = new Date();
-      const monday = new Date(now);
-      monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
-      const fmt = (d) => d.toLocaleDateString('fr-FR', { day:'numeric', month:'long' });
-      return { weekStart: monday.toISOString().slice(0,10), weekLabel: `Semaine du ${fmt(monday)} au ${fmt(sunday)}` };
-    },
-    // Génère à la demande la même étude + idées que la tâche Cowork hebdomadaire,
-    // en se basant sur les projets et clients actuels, écrit directement dans Firestore.
-    async generateManualIdea() {
-      this.manualIdeaLoading = true; this.manualIdeaError = '';
-      try {
-        const ctx = this.projects.map(p => `${p.title} (${p.client}) — ${p.type}, statut: ${p.status}`).join('\n') || 'Aucun projet en cours.';
-        const text = await this.callClaude(
-          `Tu es analyste stratégique pour Moustikprod, agence vidéo freelance. Fais une courte étude (tendances du moment, opportunités pour les projets en cours) et propose 3 à 5 idées concrètes de contenu ou de prospection.\nRéponds UNIQUEMENT avec un objet JSON valide, sans texte avant ni après, sans balises markdown. Clés exactes : etude (string, 4-6 phrases), idees (array de strings).`,
-          `Projets en cours:\n${ctx}`
-        );
-        const j = this.parseEtudeIdees(text);
-        const { weekStart, weekLabel } = this.weekLabelNow();
-        const id = 'idea_' + Date.now();
-        const entry = { id, weekStart, weekLabel, etude: j.etude || '', idees: j.idees || [], createdAt: new Date().toISOString() };
-        await this.db.collection('users').doc(this.user.uid).collection('idees').doc(id).set(entry);
-        this.ideasList.unshift(entry);
-        this.expandedIdeaId = entry.id;
-        this.toast('Étude générée');
-      } catch(e) {
-        this.manualIdeaError = (e && e.code === 'permission-denied') ? 'Accès refusé par Firestore : publie les règles (collection idees).' : ('Erreur : ' + ((e && e.message) || 'réessaie.'));
-      } finally {
-        this.manualIdeaLoading = false;
-      }
-    },
-    // Analyse de veille concurrentielle ciblée vidéo/réseaux sociaux pour
-    // freelances en production vidéo — distincte de l'étude hebdo généraliste.
-    async generateCompetitiveAnalysis() {
-      this.competitiveLoading = true; this.competitiveError = '';
-      try {
-        const ctx = this.projects.map(p => `${p.title} (${p.type})`).join('\n') || 'Aucun projet en cours.';
-        const text = await this.callClaude(
-          `Tu es consultant en veille concurrentielle pour Moustikprod, agence vidéo freelance (Film de marque, réseaux sociaux, storytelling). Analyse les tendances actuelles du marché de la production vidéo freelance/agence en France : formats qui montent, ce que font les concurrents (agences et freelances similaires), positionnement et tarifs observés, opportunités de différenciation. Propose ensuite 3 à 5 idées d'action concrètes (offre, contenu, prospection) basées sur cette analyse.\nRéponds UNIQUEMENT avec un objet JSON valide, sans texte avant ni après, sans balises markdown. Clés exactes : etude (string, 5-8 phrases d'analyse concurrentielle), idees (array de strings, idées d'action concrètes).`,
-          `Types de projets actuels chez Moustikprod:\n${ctx}`
-        );
-        const j = this.parseEtudeIdees(text);
-        const { weekStart, weekLabel } = this.weekLabelNow();
-        const id = 'idea_' + Date.now();
-        const entry = { id, weekStart, weekLabel, etude: j.etude || '', idees: j.idees || [], type: 'concurrence', createdAt: new Date().toISOString() };
-        await this.db.collection('users').doc(this.user.uid).collection('idees').doc(id).set(entry);
-        this.ideasList.unshift(entry);
-        this.expandedIdeaId = entry.id;
-        this.toast('Analyse concurrentielle générée');
-      } catch(e) {
-        this.competitiveError = (e && e.code === 'permission-denied') ? 'Accès refusé par Firestore : publie les règles (collection idees).' : ('Erreur : ' + ((e && e.message) || 'réessaie.'));
-      } finally {
-        this.competitiveLoading = false;
       }
     },
     projetDocToStudio(data) {
@@ -2774,25 +2763,6 @@ function app() {
         return JSON.parse(candidate.replace(/[\u0000-\u001F]+/g, ' '));
       }
     },
-    // Robuste : tente le JSON, sinon reconstruit etude + idees depuis du texte libre.
-    parseEtudeIdees(text) {
-      try {
-        const j = this.extractJson(text);
-        if (j && (j.etude || j.idees)) {
-          return { etude: j.etude || '', idees: Array.isArray(j.idees) ? j.idees : [] };
-        }
-      } catch (e) { /* fallback texte */ }
-      const lines = (text || '').split('\n').map(l => l.trim());
-      const isBullet = l => /^([-•*]|\d+[.)])\s+/.test(l);
-      const idees = lines.filter(isBullet)
-        .map(l => l.replace(/^([-•*]|\d+[.)])\s+/, '').replace(/\*\*/g, '').trim())
-        .filter(Boolean);
-      const etude = lines
-        .filter(l => l && !isBullet(l) && !/^#{1,6}\s/.test(l) && !/^```/.test(l))
-        .join(' ').replace(/\*\*/g, '').trim();
-      return { etude, idees };
-    },
-
     // ---------- DASHBOARD AI ----------
     async loadSuggestions() {
       this.aiSuggestLoading = true; this.aiSuggestError='';
@@ -3082,15 +3052,6 @@ Moustikprod`;
       if (/vlog|van|nomade|aventure/.test(lower)) return 'Vlog';
       if (/corporate|entreprise|marque/.test(lower)) return 'Film de marque';
       return '';
-    },
-    createProjectFromIdea(ideaText) {
-      const detectedType = this.detectVideoTypeFromText(ideaText);
-      const title = ideaText.split(/\s—\s|\s-\s|:/)[0].trim().slice(0, 80) || ideaText.slice(0, 80);
-      this.goToNewProject();
-      this.newProject.title = title;
-      this.newProject.type = detectedType;
-      this.newProject.briefOpen = true;
-      this.newProject.briefContext = ideaText;
     },
     deadlineLabel(dateStr) {
       if (!dateStr) return '';
@@ -3476,6 +3437,65 @@ FORMAT DE SORTIE :
     resetScenarioInstructions() {
       this.settings.scenarioInstructions = SCENARIO_INSTRUCTIONS_DEFAUT;
       this.saveSettings();
+    },
+
+    // ---------- MODÈLES DE DOCUMENTS (contrat / autorisation) ----------
+    // Source unique du texte généré : la génération boucle sur ces getters, donc
+    // toute édition dans Réglages alimente directement les documents produits.
+    // Repli sur le défaut si l'utilisateur a tout supprimé.
+    contratArticlesEffectifs() {
+      const a = this.settings.contratArticles;
+      return (Array.isArray(a) && a.length) ? a : CONTRAT_ARTICLES_DEFAUT;
+    },
+    autorisationArticlesEffectifs() {
+      const a = this.settings.autorisationArticles;
+      return (Array.isArray(a) && a.length) ? a : AUTORISATION_ARTICLES_DEFAUT;
+    },
+    // Remplace les placeholders {{clé}} par la valeur correspondante. Le texte
+    // saisi ET les valeurs sont échappés HTML (documents rendus via x-html).
+    applyTemplate(str, vals) {
+      const esc = t => String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      return esc(str).replace(/\{\{\s*(\w+)\s*\}\}/g, (m, k) => esc(k in vals ? vals[k] : ''));
+    },
+    // Rend le corps d'un article (multi-lignes) : une ligne non vide = un <p>.
+    renderArticleCorps(corps, vals, style) {
+      return String(corps || '').split(/\n/).map(line => {
+        const t = this.applyTemplate(line, vals);
+        return t.trim() ? `<p style="${style}">${t}</p>` : '';
+      }).join('');
+    },
+    // Amorce l'éditeur avec le texte réel par défaut tant que rien n'a été saisi,
+    // pour que l'utilisateur voie et retouche le contenu (idempotent, non destructif).
+    seedTemplatesIfEmpty() {
+      if (!Array.isArray(this.settings.contratArticles) || !this.settings.contratArticles.length)
+        this.settings.contratArticles = JSON.parse(JSON.stringify(CONTRAT_ARTICLES_DEFAUT));
+      if (!Array.isArray(this.settings.autorisationArticles) || !this.settings.autorisationArticles.length)
+        this.settings.autorisationArticles = JSON.parse(JSON.stringify(AUTORISATION_ARTICLES_DEFAUT));
+    },
+    addContratArticle() {
+      if (!Array.isArray(this.settings.contratArticles)) this.settings.contratArticles = [];
+      this.settings.contratArticles.push({ titre:'', corps:'', b2cOnly:false });
+    },
+    removeContratArticle(i) { this.settings.contratArticles.splice(i, 1); },
+    resetContratArticles() {
+      this.settings.contratArticles = JSON.parse(JSON.stringify(CONTRAT_ARTICLES_DEFAUT));
+      this.saveTemplates();
+    },
+    addAutorisationArticle() {
+      if (!Array.isArray(this.settings.autorisationArticles)) this.settings.autorisationArticles = [];
+      this.settings.autorisationArticles.push({ titre:'', corps:'' });
+    },
+    removeAutorisationArticle(i) { this.settings.autorisationArticles.splice(i, 1); },
+    resetAutorisationArticles() {
+      this.settings.autorisationArticles = JSON.parse(JSON.stringify(AUTORISATION_ARTICLES_DEFAUT));
+      this.saveTemplates();
+    },
+    // Sauvegarde explicite des modèles (bouton Sauvegarder) : miroir localStorage
+    // + persistance Firestore, même doc que les instructions de scénario.
+    saveTemplates() {
+      localStorage.setItem('mp_studio_settings', JSON.stringify(this.settings));
+      this.saveScenarioInstructionsDoc();
+      this.toast('Modèles enregistrés');
     },
     async generateScenario() {
       this.scenarioLoading = true; this.scenarioError='';
@@ -3874,7 +3894,7 @@ FORMAT DE SORTIE :
           for (const d of snap.docs) { await d.ref.delete(); total++; }
         }
         localStorage.removeItem('mp_studio_history');
-        this.projects = []; this.allClients = []; this.ideasList = []; this.autorisations = []; this.contrats = [];
+        this.projects = []; this.allClients = []; this.autorisations = []; this.contrats = [];
         this.currentProject = null; this.currentClient = null; this.studioHistory = [];
         this.view = 'dashboard';
         this.toast(`App remise à zéro (${total} document(s) supprimé(s))`);
@@ -4284,6 +4304,25 @@ FORMAT DE SORTIE :
       const lieu = a.lieuSignature || s.ville || 'Montpellier';
       const dateStr = new Date().toLocaleDateString('fr-FR', {day:'numeric',month:'long',year:'numeric'});
       const usages = (a.usages||[]).join(', ') || 'À définir';
+      // Valeurs injectées dans les placeholders {{clé}} du modèle éditable (Réglages).
+      const vals = {
+        prestataire,
+        nomCommercial: s.nomCommercial || 'Moustikprod',
+        siret: s.siret || '',
+        emailPro: s.emailPro || 'contact@moustikprod.fr',
+        projetTitre: projet.title || '—',
+        usages,
+        territoire: a.territoire || 'France',
+        duree: a.duree || '1 an',
+        remuneration: a.remuneration === 'cachets' ? 'onéreux (avec cachets)' : 'gratuit',
+        signataire: `${a.prenom || ''} ${a.nom || ''}`.trim(),
+        lieu,
+        date: dateStr,
+      };
+      // Corps de l'autorisation = modèle éditable (Réglages), source unique du texte.
+      const autorisationHtml = this.autorisationArticlesEffectifs()
+        .map(art => (art.titre ? `<p style="margin:16px 0 6px;font-weight:bold">${esc(art.titre)}</p>` : '') + this.renderArticleCorps(art.corps, vals, 'margin:4px 0'))
+        .join('');
       const sigImg = (data, label) => data
         ? `<div style="margin-bottom:4px;font-size:9pt;color:#555">${label}</div><img src="${data}" style="max-height:80px;border:1px solid #eee;border-radius:4px;display:block">`
         : `<div style="height:70px;border:1px solid #ccc;border-radius:4px;margin-bottom:4px"></div><div style="font-size:9pt;color:#aaa">${label}</div>`;
@@ -4306,20 +4345,7 @@ FORMAT DE SORTIE :
           ${a.email?`<tr style="border-bottom:1px solid #eee"><td style="padding:5px 16px 5px 0;color:#555">Email</td><td>${esc(a.email)}</td></tr>`:''}
           ${a.telephone?`<tr style="border-bottom:1px solid #eee"><td style="padding:5px 16px 5px 0;color:#555">Téléphone</td><td>${esc(a.telephone)}</td></tr>`:''}
         </table>
-        <p style="margin-bottom:10px">Autorise <strong>${esc(prestataire)} (${esc(s.nomCommercial||'Moustikprod')}, SIRET ${esc(s.siret||'')})</strong> à :</p>
-        <ul style="margin:0 0 16px 20px;line-height:2">
-          <li>Filmer, photographier et enregistrer mon image et ma voix</li>
-          <li>Utiliser ces enregistrements dans le cadre du projet : <strong>${esc(projet.title||'—')}</strong></li>
-          <li>Diffuser sur : <strong>${esc(usages)}</strong></li>
-          <li>Territoire : <strong>${esc(a.territoire||'France')}</strong></li>
-          <li>Durée : <strong>${esc(a.duree||'1 an')}</strong></li>
-        </ul>
-        <p style="margin-bottom:16px">Autorisation accordée à titre <strong>${esc(a.remuneration==='cachets'?'onéreux (avec cachets)':'gratuit')}</strong>.</p>
-        <p style="margin-bottom:6px"><strong>Droits :</strong></p>
-        <ul style="margin:0 0 20px 20px;line-height:1.8;font-size:10pt">
-          <li>Droit de retrait avant toute diffusion</li>
-          <li>Données traitées conformément au RGPD — contact : ${esc(s.emailPro||'contact@moustikprod.fr')}</li>
-        </ul>
+        ${autorisationHtml}
         ${mineur&&a.tuteurLegal?`<div style="border:1px solid #fcd34d;border-radius:6px;padding:12px;margin-bottom:20px;background:#fffbeb"><p style="margin:0 0 6px;font-weight:bold;color:#b45309">Représentant légal</p><p style="margin:0">Le/la soussigné(e) <strong>${esc(a.tuteurLegal)}</strong>, représentant légal du mineur, autorise en son nom la présente cession.</p></div>`:''}
         ${a.notes?`<p style="margin-bottom:20px;padding:10px 12px;background:#f8f8f8;border-left:3px solid #3CD6D1;border-radius:4px;font-size:10pt"><strong>Notes :</strong> ${esc(a.notes)}</p>`:''}
         <div style="margin-top:32px;padding-top:20px;border-top:1px solid #ddd">
@@ -4527,14 +4553,37 @@ FORMAT DE SORTIE :
       const cd = contrat.cessionDroits || {};
       const signaturePrestataire = contrat.signaturePrestataire || s.signaturePrestataire || '';
 
-      const b2cArticles = contrat.type === 'b2c' ? `
-        ${h1('Article 10 — Droit de rétractation')}
-        ${p("Conformément à l'article L221-18 du Code de la consommation, le Client dispose d'un délai de 14 jours à compter de la signature du présent contrat pour exercer son droit de rétractation, sauf si la prestation a commencé avec son accord exprès.")}
-        ${h1('Article 11 — Médiation consommation')}
-        ${p("En cas de litige non résolu à l'amiable, le Client peut recourir gratuitement à un médiateur de la consommation conformément à l'article L616-1 du Code de la consommation.")}
-        ${h1('Article 12 — Données personnelles (RGPD)')}
-        ${p("Les données personnelles du Client sont collectées et conservées pour la durée d'exécution du contrat, augmentée de 3 ans à des fins probatoires. Le Client dispose d'un droit d'accès, de rectification et de suppression en contactant : " + (s.emailPro || 'contact@moustikprod.fr'))}
-      ` : '';
+      // Valeurs injectées dans les placeholders {{clé}} du modèle éditable (Réglages).
+      const vals = {
+        prestataire,
+        nomCommercial: s.nomCommercial || 'Moustikprod',
+        siret: s.siret || '',
+        emailPro: s.emailPro || 'contact@moustikprod.fr',
+        ville,
+        date: dateStr,
+        clientNom: (client.entreprise && contrat.type === 'b2b') ? ((client.nom || '') + ' — ' + client.entreprise) : (client.nom || '—'),
+        clientEntreprise: client.entreprise || '',
+        clientSiret: client.siret || '',
+        projetTitre: projet.title || '—',
+        typePrestation: contrat.typePrestation || projet.type || 'Production vidéo',
+        montantHT: totalHT ? totalHT.toLocaleString('fr-FR') : '—',
+        acomptePct: contrat.acompte || 30,
+        acompteEur: acompteEur.toLocaleString('fr-FR'),
+        soldeEur: soldeEur.toLocaleString('fr-FR'),
+        nombreRevisions: contrat.nombreRevisions ?? 2,
+        delaiPaiement: contrat.delaiPaiement ?? 30,
+        cessionDuree: cd.duree || '1 an',
+        cessionTerritoire: cd.territoire || 'France',
+        cessionSupports: (cd.support || []).join(', ') || 'À définir',
+        cessionUsage: cd.usage || 'commercial',
+        deadline: projet.deadline ? new Date(projet.deadline).toLocaleDateString('fr-FR') : "à définir d'un commun accord",
+      };
+      // Corps du contrat = modèle éditable (Réglages). Les articles marqués b2cOnly
+      // n'apparaissent que pour les contrats de type « b2c » (particulier).
+      const articlesHtml = this.contratArticlesEffectifs()
+        .filter(a => contrat.type === 'b2c' ? true : !a.b2cOnly)
+        .map(a => (a.titre ? h1(a.titre) : '') + this.renderArticleCorps(a.corps, vals, 'margin:3px 0'))
+        .join('');
 
       return `
         <div style="font-family:Georgia,serif;font-size:10.5pt;line-height:1.55;color:#000">
@@ -4578,43 +4627,7 @@ FORMAT DE SORTIE :
           ${totalHT ? `<tr><td style="padding:2px 12px 2px 0;color:#666">Montant</td><td style="font-weight:bold">${totalHT.toLocaleString('fr-FR')} € HT</td></tr>` : ''}
         </table>
 
-        ${h1('Article 1 — Objet et description de la mission')}
-        ${p('Le Prestataire s\'engage à réaliser la prestation suivante : ' + (contrat.typePrestation || projet.type || 'Production vidéo') + (projet.title ? ' pour le projet « ' + projet.title + ' »' : '') + '.')}
-        ${totalHT ? p('Montant total : ' + totalHT.toLocaleString('fr-FR') + ' € HT.') : ''}
-        ${pi('TVA non applicable, art. 293 B du CGI')}
-        ${h1('Article 2 — Livrables')}
-        ${p('— Format de livraison : MP4 H.264')}
-        ${p('— Résolution : 4K / 1080p selon plateforme')}
-        ${p('— Nombre de révisions incluses : ' + (contrat.nombreRevisions ?? 2))}
-        ${p('— Livraison via lien de téléchargement sécurisé')}
-        ${h1('Article 3 — Planning')}
-        ${projet.deadline ? p('— Date de livraison visée : ' + new Date(projet.deadline).toLocaleDateString('fr-FR')) : pi('Dates à définir d\'un commun accord')}
-        ${h1('Article 4 — Rémunération et conditions de paiement')}
-        ${totalHT ? p('— Montant total HT : ' + totalHT.toLocaleString('fr-FR') + '€') : p('— Montant : selon devis accepté')}
-        ${totalHT ? p('— Acompte à la signature (' + (contrat.acompte||30) + '%) : ' + acompteEur.toLocaleString('fr-FR') + '€') : ''}
-        ${totalHT ? p('— Solde à la livraison : ' + soldeEur.toLocaleString('fr-FR') + '€') : ''}
-        ${p('— Mode de paiement : virement bancaire')}
-        ${p('— Délai de paiement : ' + (contrat.delaiPaiement ?? 30) + ' jours')}
-        ${p('— Pénalités de retard : taux légal BCE + 10 points + indemnité forfaitaire 40€')}
-        ${h1('Article 5 — Cession de droits d\'auteur')}
-        ${p('Le Prestataire cède au Client les droits d\'exploitation de l\'œuvre pour :')}
-        ${p('— Durée : ' + (cd.duree || '1 an'))}
-        ${p('— Territoire : ' + (cd.territoire || 'France'))}
-        ${p('— Support(s) : ' + ((cd.support||[]).join(', ') || 'À définir'))}
-        ${p('— Usage : ' + (cd.usage || 'commercial'))}
-        ${p('Les droits moraux restent la propriété exclusive du Prestataire.')}
-        ${h1('Article 6 — Obligations du Client')}
-        ${p('Le Client s\'engage à fournir tous les éléments nécessaires dans les délais convenus, à désigner un interlocuteur unique, et à régler les sommes dues aux échéances prévues.')}
-        ${h1('Article 7 — Confidentialité')}
-        ${p('Les deux parties s\'engagent à la confidentialité de toutes les informations échangées dans le cadre de ce contrat.')}
-        ${h1('Article 8 — Résiliation')}
-        ${p('— Annulation après signature : l\'acompte reste acquis au Prestataire')}
-        ${p('— Annulation moins de 7 jours avant le tournage : 50% du montant total dû')}
-        ${p('— Annulation le jour J : 100% du montant total dû')}
-        ${h1('Article 9 — Litiges')}
-        ${p('Les parties s\'engagent à rechercher une solution amiable avant tout recours judiciaire.')}
-        ${p('Tribunal compétent : Tribunal de Commerce de ' + ville + '.')}
-        ${b2cArticles}
+        ${articlesHtml}
         ${contrat.notes ? `${h1('Clauses particulières')}${p(contrat.notes)}` : ''}
 
         ${totalHT ? `
